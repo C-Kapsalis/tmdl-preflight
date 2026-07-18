@@ -1,0 +1,31 @@
+/// One row per retail store.
+table Stores
+	lineageTag: 3bdeaebf-ae3f-4071-9692-9daebfc0d1e2
+
+	column store_id
+		dataType: int64
+		isKey
+		lineageTag: 4cefbfc0-bf40-4182-a7a3-aebfc0d1e2f3
+		summarizeBy: none
+		sourceColumn: store_id
+
+	column store_name
+		dataType: string
+		lineageTag: 5d00c0d1-c051-4293-88b4-bfc0d1e2f304
+		summarizeBy: none
+		sourceColumn: store_name
+
+	column region
+		dataType: string
+		lineageTag: 6e11d1e2-d162-43a4-99c5-c0d1e2f30415
+		summarizeBy: none
+		sourceColumn: region
+
+	partition Stores = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("stores.csv"), [Delimiter = ",", Encoding = 65001]),
+				    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true])
+				in
+				    Promoted

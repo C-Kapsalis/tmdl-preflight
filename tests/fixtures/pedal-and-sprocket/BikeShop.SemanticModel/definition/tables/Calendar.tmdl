@@ -1,0 +1,15 @@
+/// Standard date table, generated as a calculated table.
+table Calendar
+	lineageTag: 7f22e2f3-e273-44b5-8ad6-d1e2f3041526
+
+	column Date
+		dataType: dateTime
+		isKey
+		formatString: Long Date
+		lineageTag: 8033f304-f384-45c6-9be7-e2f304152637
+		summarizeBy: none
+		sourceColumn: [Date]
+
+	partition Calendar = calculated
+		mode: import
+		source = CALENDAR(DATE(2024, 1, 1), DATE(2026, 12, 31))

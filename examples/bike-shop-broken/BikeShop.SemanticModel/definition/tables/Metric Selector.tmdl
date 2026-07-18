@@ -1,0 +1,48 @@
+/// Field parameter that lets report users swap the plotted measure.
+table 'Metric Selector'
+	lineageTag: f7aa6a7b-6afb-4c3d-925e-596071829304
+
+	column 'Metric Selector'
+		lineageTag: 08bb7b8c-7b0c-4d4e-a36f-607182930415
+		summarizeBy: none
+		sourceColumn: [Value1]
+		sortByColumn: 'Metric Selector Order'
+
+		relatedColumnDetails
+			groupByColumn: 'Metric Selector Fields'
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Metric Selector Fields'
+		isHidden
+		lineageTag: 19cc8c9d-8c1d-4e5f-b470-718293041526
+		summarizeBy: none
+		sourceColumn: [Value2]
+		sortByColumn: 'Metric Selector Order'
+
+		extendedProperty ParameterMetadata =
+				{
+				  "version": 3,
+				  "kind": 2
+				}
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Metric Selector Order'
+		isHidden
+		formatString: 0
+		lineageTag: 2add9dae-9d2e-4f60-8581-829304152637
+		summarizeBy: sum
+		sourceColumn: [Value3]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Metric Selector' = calculated
+		mode: import
+		source =
+				{
+				    ( "Revenue", NAMEOF ( [Revenue] ), 0 ),
+				    ( "Orders #", NAMEOF ( [Orders #] ), 1 ),
+				    ,
+				    ( "Units Sold", NAMEOF ( [Units Sold] ), 3 )
+				}

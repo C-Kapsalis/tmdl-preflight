@@ -1,0 +1,38 @@
+/// Product catalog: bikes, helmets, locks and accessories.
+table Products
+	lineageTag: e689596a-59ea-4b2c-a14d-48596a7b8c9d
+
+	column product_id
+		dataType: int64
+		isKey
+		lineageTag: f79a6a7b-6afb-4c3d-825e-596a7b8c9dae
+		summarizeBy: none
+		sourceColumn: product_id
+
+	column product_name
+		dataType: string
+		lineageTag: 08ab7b8c-7b0c-4d4e-936f-6a7b8c9daebf
+		summarizeBy: none
+		sourceColumn: product_name
+
+	column category
+		dataType: string
+		lineageTag: 19bc8c9d-8c1d-4e5f-a470-7b8c9daebfc0
+		summarizeBy: none
+		sourceColumn: category
+
+	column unit_price
+		dataType: double
+		formatString: $ #,0.00
+		lineageTag: 2acd9dae-9d2e-4f60-8581-8c9daebfc0d1
+		summarizeBy: none
+		sourceColumn: unit_price
+
+	partition Products = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("products.csv"), [Delimiter = ",", Encoding = 65001]),
+				    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true])
+				in
+				    Promoted

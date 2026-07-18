@@ -1,0 +1,27 @@
+/// Measure home table: all user-facing measures live here.
+table 'Sales Measures'
+	lineageTag: 91440415-0495-46d7-acf8-f30415263748
+
+	measure Revenue = SUM(Sales[net_amount])
+		formatString: $ #,0.00
+		lineageTag: a2551526-15a6-47e8-bd09-041526374859
+
+	measure 'Orders #' = DISTINCTCOUNT(Sales[order_id])
+		formatString: #,0
+		lineageTag: b3662637-26b7-48f9-8e1a-152637485960
+
+	measure 'Average Order Value' = DIVIDE([Revenue], [Orders #])
+		formatString: $ #,0.00
+		lineageTag: c4773748-37c8-490a-9f2b-263748596071
+
+	measure 'Units Sold' = SUM(Sales[quantity])
+		lineageTag: d5884859-48d9-4a1b-a03c-374859607182
+
+	measure 'Revenue per Store' = ```
+			VAR store_count =
+			    DISTINCTCOUNT(Sales[store_id]) -- stores that actually sold
+			RETURN
+			    DIVIDE([Revenue], store_count)
+			```
+		formatString: $ #,0.00
+		lineageTag: e699596a-59ea-4b2c-b14d-485960718293

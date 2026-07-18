@@ -1,0 +1,25 @@
+{
+  "name": "bm-spotlight-orders",
+  "displayName": "Spotlight orders",
+  "howCreated": 0,
+  "explorationState": {
+    "activeSection": "overview",
+    "visualContainers": {
+      "b7c8d9e0f1a2": {
+        "filters": {
+          "byExpr": [
+            {
+              "filter": {
+                "Version": 2,
+                "ComparisonKind": 2,
+                "Values": [
+                  1
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
