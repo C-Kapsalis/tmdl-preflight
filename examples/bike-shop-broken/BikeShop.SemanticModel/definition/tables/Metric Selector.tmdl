@@ -46,3 +46,4 @@ table 'Metric Selector'
 				    ,
 				    ( "Units Sold", NAMEOF ( [Units Sold] ), 3 )
 				}
+

@@ -8,9 +8,13 @@ import uuid
 from tmdl_preflight.rules.base import Context, Severity
 from tmdl_preflight.rules.structural import (
     ColumnDataTypeRule,
+    EntityQuerySourceRule,
     LineageTagFormatRule,
     LineageTagUniquenessRule,
     ModelStructureRule,
+    ModelTableReferencesRule,
+    ReservedTableNameRule,
+    TablePartitionPresenceRule,
     TmdlWellFormedRule,
 )
 
@@ -147,3 +151,86 @@ class TestColumnDataTypes:
         assert len(violations) == 1
         assert "'text'" in violations[0].message
         assert violations[0].severity == Severity.WARNING
+
+
+class TestModelTableReferences:
+    """M006: every tables/*.tmdl must be linked via ``ref table`` in model.tmdl.
+    A missing ref means Power BI Desktop refuses to open the project."""
+
+    def test_clean_passes(self, project):
+        assert ModelTableReferencesRule().check(Context(project)) == []
+
+    def test_missing_ref_detected_and_fixed(self, project, definition):
+        model = definition / "model.tmdl"
+        model.write_text(
+            model.read_text(encoding="utf-8").replace("ref table Stores\n", ""),
+            encoding="utf-8",
+        )
+        ctx = Context(project)
+        rule = ModelTableReferencesRule()
+        violations = rule.check(ctx)
+        assert len(violations) == 1
+        assert "Stores" in violations[0].message
+        assert violations[0].fixable
+
+        rule.fix(ctx)
+        ctx.reload()
+        assert rule.check(ctx) == []
+
+
+class TestTablePartitions:
+    """M007: every table (including measures-only tables) needs a partition,
+    or Power BI crashes on open in GetLinkedQuery."""
+
+    def test_clean_passes(self, project):
+        assert TablePartitionPresenceRule().check(Context(project)) == []
+
+    def test_missing_partition_detected(self, project, definition):
+        sm = definition / "tables" / "Sales Measures.tmdl"
+        text = sm.read_text(encoding="utf-8")
+        sm.write_text(text[: text.index("\tpartition ")].rstrip() + "\n", encoding="utf-8")
+        violations = TablePartitionPresenceRule().check(Context(project))
+        assert len(violations) == 1
+        assert violations[0].obj == "Sales Measures"
+        assert violations[0].severity == Severity.ERROR
+
+
+class TestEntityQuerySource:
+    """M008: inline ``#table(type table [...])`` entity sources force a
+    composite model and block open."""
+
+    def test_clean_passes(self, project):
+        assert EntityQuerySourceRule().check(Context(project)) == []
+
+    def test_entity_source_detected(self, project, definition):
+        stores = definition / "tables" / "Stores.tmdl"
+        stores.write_text(
+            stores.read_text(encoding="utf-8").replace(
+                'Csv.Document(File.Contents("stores.csv"), [Delimiter = ",", Encoding = 65001])',
+                "#table(type table [store_id = Int64.Type], {{1}})",
+            ),
+            encoding="utf-8",
+        )
+        violations = EntityQuerySourceRule().check(Context(project))
+        assert len(violations) == 1
+        assert violations[0].obj == "Stores"
+        assert violations[0].severity == Severity.ERROR
+
+
+class TestReservedTableNames:
+    """M009: a table named with a Power BI reserved name (e.g. 'Measures')
+    makes Power BI Desktop refuse to open the project."""
+
+    def test_clean_passes(self, project):
+        assert ReservedTableNameRule().check(Context(project)) == []
+
+    def test_reserved_name_detected(self, project, definition):
+        f = definition / "tables" / "Products.tmdl"
+        f.write_text(
+            f.read_text(encoding="utf-8").replace("table Products", "table Measures", 1),
+            encoding="utf-8",
+        )
+        violations = ReservedTableNameRule().check(Context(project))
+        assert len(violations) == 1
+        assert violations[0].obj == "Measures"
+        assert violations[0].severity == Severity.ERROR

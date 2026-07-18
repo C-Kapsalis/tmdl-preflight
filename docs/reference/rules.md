@@ -72,6 +72,56 @@ Value must be one of `string`, `int64`, `double`, `decimal`, `dateTime`,
 `boolean`, `binary`, `variant`, `currency`, `rowNumber`.
 [Explanation](../explanation/column-data-types.md)
 
+## M006 — model-table-refs
+
+| | |
+|---|---|
+| Severity | error |
+| Auto-fix | **yes** — appends the missing `ref table` line to `model.tmdl` |
+| Scope | every `tables/*.tmdl` vs the `ref table` lines in `model.tmdl` |
+
+Every table must be linked to the model with a `ref table <name>` line in
+`model.tmdl`. A table file with no matching ref is not attached to the model,
+so Power BI Desktop refuses to open the project.
+
+## M007 — table-partitions
+
+| | |
+|---|---|
+| Severity | error |
+| Auto-fix | no |
+| Scope | every table |
+
+Every table must declare at least one partition — a measures-only table still
+needs one (a calculated partition, or a dummy entered-data partition). Without
+one Power BI crashes on open while resolving the table's query.
+
+## M008 — entity-query-source
+
+| | |
+|---|---|
+| Severity | error |
+| Auto-fix | no |
+| Scope | every M partition source |
+
+An inline `#table(type table [...])` source is entity-typed; combined with any
+calculated table Power BI treats the model as composite and refuses to open it.
+Re-encode manual data as entered data
+(`Table.FromRows(Json.Document(Binary.Decompress(...)))`) or use a calculated table.
+
+## M009 — reserved-table-name
+
+| | |
+|---|---|
+| Severity | error |
+| Auto-fix | no |
+| Scope | every table name |
+
+Power BI reserves certain table names and refuses to open a model that uses
+one — most notably a table literally named `Measures` (it collides with the
+implicit measures container: *"Unsupported Table name … found in data model
+schema"*). Rename it, e.g. `Key Measures` or `<Domain> Measures`.
+
 ## D001 — dax-delimiters
 
 | | |

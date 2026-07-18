@@ -134,6 +134,6 @@ class TestRulesCommand:
     def test_rules_json(self, capsys):
         assert main(["rules", "--json"]) == 0
         payload = json.loads(capsys.readouterr().out)
-        assert len(payload) == 17
+        assert len(payload) == 21
         fixable = {r["id"] for r in payload if r["fixable"]}
-        assert fixable == {"M003", "M004", "F001", "B001"}
+        assert fixable == {"M003", "M004", "M006", "F001", "B001"}

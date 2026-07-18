@@ -1,0 +1,51 @@
+{
+  "config": "{\"version\":\"5.73\",\"themeCollection\":{\"baseTheme\":{\"name\":\"CY26SU05\",\"version\":{\"visual\":\"2.9.0\",\"report\":\"3.3.0\",\"page\":\"2.3.1\"},\"type\":2}},\"activeSectionIndex\":0,\"defaultDrillFilterOtherVisuals\":true,\"linguisticSchemaSyncVersion\":2,\"settings\":{\"useNewFilterPaneExperience\":true,\"allowChangeFilterTypes\":true,\"useStylableVisualContainerHeader\":true,\"queryLimitOption\":6,\"useEnhancedTooltips\":true,\"exportDataMode\":1,\"useDefaultAggregateDisplayName\":true},\"objects\":{\"section\":[{\"properties\":{\"verticalAlignment\":{\"expr\":{\"Literal\":{\"Value\":\"'Top'\"}}}}}]}}",
+  "layoutOptimization": 0,
+  "resourcePackages": [
+    {
+      "resourcePackage": {
+        "disabled": false,
+        "items": [
+          {
+            "name": "CY26SU05",
+            "path": "BaseThemes/CY26SU05.json",
+            "type": 202
+          }
+        ],
+        "name": "SharedResources",
+        "type": 2
+      }
+    }
+  ],
+  "sections": [
+    {
+      "config": "{}",
+      "displayName": "Page 1",
+      "displayOption": 1,
+      "filters": "[]",
+      "height": 720.00,
+      "name": "090ddc6d17b4e188abe0",
+      "visualContainers": [
+        {
+          "config": "{\"name\":\"3b5c57e5498a2e1f5d49\",\"layouts\":[{\"id\":0,\"position\":{\"x\":224,\"y\":264,\"z\":0,\"width\":592,\"height\":280,\"tabOrder\":0}}],\"singleVisual\":{\"visualType\":\"pivotTable\",\"projections\":{\"Rows\":[{\"queryRef\":\"__Calendar.Date Hierarchy.Calendar Year\",\"active\":true},{\"queryRef\":\"__Calendar.Date Hierarchy.Calendar Quarter\",\"active\":true},{\"queryRef\":\"__Calendar.Date Hierarchy.Date\"}],\"Values\":[{\"queryRef\":\"Sales Measures.Revenue\"},{\"queryRef\":\"Sales Measures.Orders #\"},{\"queryRef\":\"Sales Measures.Average Order Value\"},{\"queryRef\":\"Sales Measures.Units Sold\"}]},\"prototypeQuery\":{\"Version\":2,\"From\":[{\"Name\":\"_\",\"Entity\":\"__Calendar\",\"Type\":0},{\"Name\":\"s\",\"Entity\":\"Sales Measures\",\"Type\":0}],\"Select\":[{\"HierarchyLevel\":{\"Expression\":{\"Hierarchy\":{\"Expression\":{\"SourceRef\":{\"Source\":\"_\"}},\"Hierarchy\":\"Date Hierarchy\"}},\"Level\":\"Calendar Year\"},\"Name\":\"__Calendar.Date Hierarchy.Calendar Year\",\"NativeReferenceName\":\"Date Hierarchy Calendar Year\"},{\"HierarchyLevel\":{\"Expression\":{\"Hierarchy\":{\"Expression\":{\"SourceRef\":{\"Source\":\"_\"}},\"Hierarchy\":\"Date Hierarchy\"}},\"Level\":\"Calendar Quarter\"},\"Name\":\"__Calendar.Date Hierarchy.Calendar Quarter\",\"NativeReferenceName\":\"Date Hierarchy Calendar Quarter\"},{\"HierarchyLevel\":{\"Expression\":{\"Hierarchy\":{\"Expression\":{\"SourceRef\":{\"Source\":\"_\"}},\"Hierarchy\":\"Date Hierarchy\"}},\"Level\":\"Date\"},\"Name\":\"__Calendar.Date Hierarchy.Date\",\"NativeReferenceName\":\"Date Hierarchy Date\"},{\"Measure\":{\"Expression\":{\"SourceRef\":{\"Source\":\"s\"}},\"Property\":\"Revenue\"},\"Name\":\"Sales Measures.Revenue\",\"NativeReferenceName\":\"Revenue\"},{\"Measure\":{\"Expression\":{\"SourceRef\":{\"Source\":\"s\"}},\"Property\":\"Orders #\"},\"Name\":\"Sales Measures.Orders #\",\"NativeReferenceName\":\"Orders #\"},{\"Measure\":{\"Expression\":{\"SourceRef\":{\"Source\":\"s\"}},\"Property\":\"Average Order Value\"},\"Name\":\"Sales Measures.Average Order Value\",\"NativeReferenceName\":\"Average Order Value\"},{\"Measure\":{\"Expression\":{\"SourceRef\":{\"Source\":\"s\"}},\"Property\":\"Units Sold\"},\"Name\":\"Sales Measures.Units Sold\",\"NativeReferenceName\":\"Units Sold\"}],\"OrderBy\":[{\"Direction\":1,\"Expression\":{\"HierarchyLevel\":{\"Expression\":{\"Hierarchy\":{\"Expression\":{\"SourceRef\":{\"Source\":\"_\"}},\"Hierarchy\":\"Date Hierarchy\"}},\"Level\":\"Calendar Year\"}}}]},\"queryFieldParametersByRole\":{\"Values\":[{\"index\":0,\"length\":4,\"expr\":{\"Column\":{\"Expression\":{\"SourceRef\":{\"Entity\":\"Metric Selector\"}},\"Property\":\"Metric Selector\"}}}]},\"expansionStates\":[{\"roles\":[\"Rows\"],\"levels\":[{\"queryRefs\":[\"__Calendar.Date Hierarchy.Calendar Year\"],\"isCollapsed\":true,\"identityKeys\":[{\"Column\":{\"Expression\":{\"SourceRef\":{\"Entity\":\"__Calendar\"}},\"Property\":\"Calendar Year\"}}],\"isPinned\":true},{\"queryRefs\":[\"__Calendar.Date Hierarchy.Calendar Quarter\"],\"isCollapsed\":true,\"isPinned\":true},{\"queryRefs\":[\"__Calendar.Date Hierarchy.Date\"],\"isCollapsed\":true}],\"root\":{\"identityValues\":null,\"children\":[{\"identityValues\":[{\"Literal\":{\"Value\":\"2024L\"}}],\"isToggled\":true}]}}],\"columnProperties\":{\"Sales Measures.Revenue\":{\"displayName\":\"Revenue\"},\"Sales Measures.Orders #\":{\"displayName\":\"Orders #\"},\"Sales Measures.Average Order Value\":{\"displayName\":\"Average Order Value\"},\"Sales Measures.Units Sold\":{\"displayName\":\"Units Sold\"}},\"drillFilterOtherVisuals\":true,\"hasDefaultSort\":true,\"objects\":{\"general\":[{\"properties\":{}}]}}}",
+          "filters": "[]",
+          "height": 280.00,
+          "width": 592.00,
+          "x": 224.00,
+          "y": 264.00,
+          "z": 0.00
+        },
+        {
+          "config": "{\"name\":\"ade519c24f5c5421b299\",\"layouts\":[{\"id\":0,\"position\":{\"x\":888,\"y\":264,\"z\":1,\"width\":248,\"height\":216,\"tabOrder\":1}}],\"singleVisual\":{\"visualType\":\"slicer\",\"projections\":{\"Values\":[{\"queryRef\":\"Metric Selector.Metric Selector\",\"active\":true}]},\"prototypeQuery\":{\"Version\":2,\"From\":[{\"Name\":\"m\",\"Entity\":\"Metric Selector\",\"Type\":0}],\"Select\":[{\"Column\":{\"Expression\":{\"SourceRef\":{\"Source\":\"m\"}},\"Property\":\"Metric Selector\"},\"Name\":\"Metric Selector.Metric Selector\",\"NativeReferenceName\":\"Metric Selector\"}]},\"drillFilterOtherVisuals\":true,\"objects\":{\"data\":[{\"properties\":{\"mode\":{\"expr\":{\"Literal\":{\"Value\":\"'Basic'\"}}},\"isInvertedSelectionMode\":{\"expr\":{\"Literal\":{\"Value\":\"true\"}}}}}],\"selection\":[{\"properties\":{\"singleSelect\":{\"expr\":{\"Literal\":{\"Value\":\"false\"}}},\"selectAllCheckboxEnabled\":{\"expr\":{\"Literal\":{\"Value\":\"true\"}}}}}]}}}",
+          "filters": "[]",
+          "height": 216.00,
+          "width": 248.00,
+          "x": 888.00,
+          "y": 264.00,
+          "z": 1.00
+        }
+      ],
+      "width": 1280.00
+    }
+  ]
+}

@@ -32,7 +32,12 @@ table Products
 		mode: import
 		source =
 				let
-				    Source = Csv.Document(File.Contents("products.csv"), [Delimiter = ",", Encoding = 65001]),
-				    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true])
+				    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText("i45WMlTSUQrKT0xRcMrMTgWyQVQxkDY0MjBQitWJVjICcjxSc3JTS4AMx+Tk1OLi/KJMsBoLiApjIDNU1yc/ORtDhbEpWIUJkOmbX5pXkpiZh2GRKciiWAA=", BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type nullable text) meta [Serialized.Text = true]) in type table [#"product_id" = _t, #"product_name" = _t, #"category" = _t, #"unit_price" = _t]),
+				    #"Changed Type" = Table.TransformColumnTypes(Source, {{"product_id", Int64.Type}, {"product_name", type text}, {"category", type text}, {"unit_price", type number}})
 				in
-				    Promoted
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

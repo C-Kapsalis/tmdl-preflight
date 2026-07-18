@@ -6,11 +6,11 @@ First public release.
 
 ### Highlights
 
-- **17 rules** covering the TMDL/PBIP failure modes that reject imports or
-  silently corrupt results: model structure (M001–M005), DAX integrity
+- **21 rules** covering the TMDL/PBIP failure modes that reject imports or
+  silently corrupt results: model structure (M001–M009), DAX integrity
   (D001–D003), relationship topology (R001–R005), field-parameter sources
   (F001), bookmark JSON (B001–B002), and formatting hygiene (S001).
-- **4 auto-fixers** (M003, M004, F001, B001) applied through a
+- **5 auto-fixers** (M003, M004, M006, F001, B001) applied through a
   check → fix → re-check loop: a run only counts as clean when the re-check
   from disk is clean, so a fixer never vouches for itself.
 - **Three entry points**: the `tmdl-preflight` CLI (`check`, `fix`,

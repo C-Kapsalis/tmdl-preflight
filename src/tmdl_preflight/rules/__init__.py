@@ -19,9 +19,13 @@ from .relationships import (
 from .report import BookmarkIntegerTypesRule, BookmarkVisualRefsRule
 from .structural import (
     ColumnDataTypeRule,
+    EntityQuerySourceRule,
     LineageTagFormatRule,
     LineageTagUniquenessRule,
     ModelStructureRule,
+    ModelTableReferencesRule,
+    ReservedTableNameRule,
+    TablePartitionPresenceRule,
     TmdlWellFormedRule,
 )
 from .style import FormatStringPresenceRule
@@ -29,6 +33,10 @@ from .style import FormatStringPresenceRule
 ALL_RULES: list[type[Rule]] = [
     ModelStructureRule,
     TmdlWellFormedRule,
+    ModelTableReferencesRule,
+    TablePartitionPresenceRule,
+    EntityQuerySourceRule,
+    ReservedTableNameRule,
     LineageTagUniquenessRule,
     LineageTagFormatRule,
     ColumnDataTypeRule,

@@ -43,7 +43,7 @@ worse:
 
 ## What earns a fixer — the safety contract
 
-Only four of the seventeen rules ship a fixer, and that is deliberate. A
+Only five of the twenty-one rules ship a fixer, and that is deliberate. A
 repair qualifies only if it satisfies all of:
 
 1. **The failure mode fully determines the repair.** No intent needs to be

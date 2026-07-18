@@ -17,11 +17,24 @@ table 'Sales Measures'
 	measure 'Units Sold' = SUM(Sales[quantity])
 		lineageTag: d5884859-48d9-4a1b-a03c-374859607182
 
-	measure 'Revenue per Store' = ```
+	measure 'Revenue per Store' =
 			VAR store_count =
 			    DISTINCTCOUNT(Sales[store_id]) -- stores that actually sold
 			RETURN
 			    DIVIDE([Revenue], store_count)
-			```
 		formatString: $ #,0.00
 		lineageTag: e699596a-59ea-4b2c-b14d-485960718293
+
+	partition 'Sales Measures' = m
+		mode: import
+		source =
+				let
+				    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText("i45WUlCKjQUA", BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type nullable text) meta [Serialized.Text = true]) in type table [z = _t]),
+				    #"Removed Columns" = Table.RemoveColumns(Source,{"z"})
+				in
+				    #"Removed Columns"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

@@ -1,9 +1,22 @@
 model Model
 	culture: en-US
 	defaultPowerBIDataSourceVersion: powerBI_V3
+	discourageImplicitMeasures
 	sourceQueryCulture: en-US
 	dataAccessOptions
 		legacyRedirects
 		returnErrorValuesAsNull
 
-annotation PBI_QueryOrder = ["Sales","Products","Stores"]
+annotation PBI_QueryOrder = ["Products","Stores","Sales","Sales Measures"]
+
+annotation __PBI_TimeIntelligenceEnabled = 0
+
+annotation PBI_ProTooling = ["DevMode"]
+
+ref table __Calendar
+ref table Products
+ref table Stores
+ref table Sales
+ref table 'Sales Measures'
+ref table 'Metric Selector'
+

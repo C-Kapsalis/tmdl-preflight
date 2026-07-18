@@ -7,3 +7,10 @@ model Model
 		returnErrorValuesAsNull
 
 annotation PBI_QueryOrder = ["Sales","Products","Stores"]
+
+ref table Calendar
+ref table Products
+ref table Stores
+ref table Sales
+ref table 'Sales Measures'
+ref table 'Metric Selector'

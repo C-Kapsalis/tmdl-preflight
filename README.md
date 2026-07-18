@@ -14,11 +14,12 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 
 ## Features
 
-- **17 rules** over the failure modes that reject imports or silently corrupt
-  results: duplicate lineage tags, unbalanced DAX delimiters, dangling
+- **21 rules** over the failure modes that reject imports or silently corrupt
+  results: tables missing their `ref table` line, tables with no partition,
+  inline `#table` entity sources that force a composite model, duplicate lineage tags, unbalanced DAX delimiters, dangling
   `NAMEOF()` references, broken relationship endpoints, stray commas in
   field-parameter sources, string-typed bookmark fields, and more.
-- **4 auto-fixers** for the defects whose repair is fully mechanical —
+- **5 auto-fixers** for the defects whose repair is fully mechanical —
   applied via a check → fix → re-check loop that never lets a fixer vouch
   for itself.
 - **Three entry points:** a CLI (`check`, `fix`, `rules`), a pytest fixture
@@ -43,44 +44,42 @@ package's own suite.
 Point `check` at any PBIP folder — a project root, a `*.SemanticModel`
 folder, a `definition` folder, or a `*.Report` folder. The repo ships a
 small fictional bike-shop project you can try it on — [`examples/`](examples/)
-has a clean copy and a pre-broken one, so you can also skip the breaking
-step below with `tmdl-preflight check examples/bike-shop-broken`:
+has a clean copy and a pre-broken one. `bike-shop-broken` **will not open in
+Power BI Desktop**: `Stores` lost its `ref table` line, its `lineageTag` is
+copy-pasted from `Products`, `__Calendar`'s tag is a placeholder, and a
+field-parameter row was deleted without its comma. `check` names each one,
+with file, line, severity, and whether the fixer can handle it:
 
 ```console
-$ cp -r tests/fixtures/pedal-and-sprocket ~/bike-shop
-$ tmdl-preflight check ~/bike-shop
-
-tmdl-preflight: 0 error(s), 0 warning(s), 0 info(s)
-```
-
-Introduce three classic defects — duplicate a table file's `lineageTag`,
-delete a field-parameter row but not its comma, quote a bookmark's
-`howCreated` — and `check` names each one, with file, line, and whether the
-fixer can handle it:
-
-```console
-$ tmdl-preflight check ~/bike-shop
-BikeShop.Report\definition\bookmarks\spotlight-revenue.bookmark.json  B001 error: howCreated at howCreated is the string 'User' (must be a JSON integer) [spotlight-revenue.bookmark] (auto-fixable)
-BikeShop.SemanticModel\definition\tables\Metric Selector.tmdl:44  F001 error: stray comma run (1 orphan comma(s)) in calculated partition source [Metric Selector (partition source)] (auto-fixable)
+$ tmdl-preflight check examples/bike-shop-broken
+BikeShop.SemanticModel\definition\tables\Metric Selector.tmdl:45  F001 error: stray comma run (1 orphan comma(s)) in calculated partition source [Metric Selector (partition source)] (auto-fixable)
+BikeShop.SemanticModel\definition\tables\Sales Measures.tmdl:17  S001 info: visible measure has no formatString, so it renders with the engine's default formatting. Add a formatString, or run with --ignore S001 if your formatting strategy lives elsewhere. [Sales Measures[Units Sold]]
+BikeShop.SemanticModel\definition\tables\Stores.tmdl  M006 error: table 'Stores' is defined in tables/ but has no 'ref table' line in model.tmdl, so it is not part of the model and Power BI will not open the project. Add: ref table Stores [Stores] (auto-fixable)
 BikeShop.SemanticModel\definition\tables\Stores.tmdl:3  M003 error: lineageTag 'e689596a-59ea-4b2c-a14d-48596a7b8c9d' duplicates the one on table Products (Products.tmdl:3) [table Stores] (auto-fixable)
+BikeShop.SemanticModel\definition\tables\__Calendar.tmdl:4  M004 warning: lineageTag 'calendar-tag-TODO' is not a canonical UUID [table __Calendar] (auto-fixable)
 
-tmdl-preflight: 3 error(s), 0 warning(s), 0 info(s)
+tmdl-preflight: 3 error(s), 1 warning(s), 1 info(s)
 ```
 
-Exit code 1. `check` is strictly read-only. `fix` repairs what it safely
-can, then re-checks from disk:
+Exit code 1. The four blockers carry the `(auto-fixable)` marker; the S001
+style nudge does not (info never blocks). `check` is strictly read-only.
+`fix` repairs what it safely can, then re-checks from disk:
 
 ```console
-$ tmdl-preflight fix ~/bike-shop
-fixed  M003: Stores.tmdl:3 (table Stores): 'e689596a-...' -> 'd4eb7567-a919-4e53-8856-d1ed3891366d'
+$ cp -r examples/bike-shop-broken /tmp/bike-shop
+$ tmdl-preflight fix /tmp/bike-shop
+fixed  M006: model.tmdl: + ref table Stores
+fixed  M003: Stores.tmdl:3 (table Stores): 'e689596a-...' -> '1556d6dd-6012-4be4-8d04-6383081d6e02'
+fixed  M004: __Calendar.tmdl:4 (table __Calendar): 'calendar-tag-TODO' -> '1e41940d-23a7-4d0f-b260-4c40ecdd16fa'
 fixed  F001: Metric Selector.tmdl: removed 1 orphan comma(s) from 'Metric Selector' partition source
-fixed  B001: spotlight-revenue.bookmark.json: howCreated: 'User' -> 0
 
-tmdl-preflight: 0 error(s), 0 warning(s), 0 info(s), 3 fix(es) applied
+tmdl-preflight: 0 error(s), 0 warning(s), 1 info(s), 4 fix(es) applied
 ```
 
-Exit code 0 — because the *re-check* came back clean, not because fixers
-ran. Diff, review, commit.
+Exit code 0 — because the *re-check* came back clean of blockers, not
+because fixers ran. The four blockers are gone and the project now opens in
+Power BI Desktop; the S001 info line is yours to act on or ignore. Diff,
+review, commit.
 
 ## Rules
 

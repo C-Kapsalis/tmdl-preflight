@@ -46,3 +46,4 @@ table 'Metric Selector'
 				    ( "Average Order Value", NAMEOF ( [Average Order Value] ), 2 ),
 				    ( "Units Sold", NAMEOF ( [Units Sold] ), 3 )
 				}
+
