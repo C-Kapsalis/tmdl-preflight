@@ -29,31 +29,39 @@ registers the `tmdl_preflight` pytest plugin. Verify with:
 
 ```console
 $ tmdl-preflight --version
-tmdl-preflight 0.1.0
+tmdl-preflight 1.1.0
 ```
 
 ## Project layout
 
 ```
 src/tmdl_preflight/
-├── cli.py            # the `tmdl-preflight` command (check, fix, rules)
-├── engine.py         # the check → fix → re-check loop
+├── cli.py            # the `tmdl-preflight` command (check, fix, baseline, stats, rules)
+├── engine.py         # check → fix → re-check loop, scanned counts, apply_policy()
+├── config.py         # config discovery + validation, profiles, excludes, exemptions
+├── baseline.py       # baseline files: record, apply, update
+├── output.py         # text / json / github / sarif / markdown renderers
+├── stats.py          # the `stats` inventory
 ├── model.py          # parsed SemanticModel: tables, columns, measures, …
 ├── parser.py         # TMDL / PBIP folder parsing, path resolution
-├── dax.py            # DAX lexing helpers used by the D-series rules
+├── dax.py            # DAX region classifier + lexing helpers (references,
+│                     #   VARs, table constructors, comma runs)
+├── recognizers.py    # line-level TMDL recognizers shared by checks and fixers
+├── edits.py          # read_text_file() / verified_write() for every fixer
 ├── pytest_plugin.py  # the `tmdl_preflight` fixture
 └── rules/
-    ├── base.py           # Rule, Violation, Severity, Context, RuleSet
-    ├── structural.py     # M001–M009
-    ├── dax_rules.py      # D001–D003
-    ├── relationships.py  # R001–R005
-    ├── field_parameters.py # F001
-    ├── report.py         # B001–B002
-    ├── style.py          # S001
-    └── __init__.py       # ALL_RULES registry + default_ruleset()
+    ├── base.py             # Rule, Violation, Severity, Context, RuleSet
+    ├── structural.py       # M001–M015
+    ├── dax_rules.py        # D001–D005
+    ├── relationships.py    # R001–R007
+    ├── field_parameters.py # F001–F004
+    ├── report.py           # B001–B004
+    ├── style.py            # S001–S002
+    └── __init__.py         # ALL_RULES registry + default_ruleset()
 
 tests/                # pytest suite; fixtures/ holds the clean example model
-examples/             # bike-shop-clean and bike-shop-broken PBIP projects
+examples/             # bike-shop-clean and bike-shop-broken PBIP projects,
+                      #   plus ci/ (GitHub Actions, pre-commit, config examples)
 ```
 
 The full Diátaxis documentation (tutorials, how-to guides, reference,
@@ -64,7 +72,32 @@ repository, published on Read the Docs at
 Each rule has an `id` (`M003`), a `name` (`lineage-duplicates`), a
 `Severity` (`ERROR` / `WARNING` / `INFO`), and a one-paragraph `description`.
 A rule's `check()` returns `Violation`s; a rule that can repair its own
-violation class sets `fixable = True` and implements `fix()`.
+violation class sets `fixable = True` and implements `fix()`. Two optional
+class attributes complete the picture: `baselinable = False` for defects
+that must never be accepted into a baseline (the model would not open or
+deploy at all), and `option_defaults = {...}` for per-rule options that
+users can set in the config file (`[tool.tmdl-preflight.rules.<ID>]`).
+
+## Design principles
+
+- **The detector and the fixer share one recognizer.** A fixable rule's
+  `check()` and `fix()` both call the same function (for example
+  `recognizers.find_dangling_descriptions` or `dax.scan_table_constructors`),
+  so they can never disagree about what counts as a defect.
+- **Every edit is surgical and verified.** Fixers change the file text in
+  place (never re-serialize a parsed object) and write through
+  `edits.verified_write()`, whose `verify(old, new)` callback proves the edit
+  (for JSON: parse both versions and compare). If the proof fails, nothing
+  is written and the violation stays on the report.
+- **Nothing is dropped silently.** The parser keeps duplicates, keeps
+  malformed relationships for R001, and compares a raw count of declaration
+  lines with what it parsed (M002).
+- **Every rule test plants a defect.** Each rule has a clean-case test and
+  at least one test that breaks a copy of the clean fixture in exactly one
+  way and asserts the rule fires.
+- **New rules that can fire on clean, Desktop-generated models are
+  `warning` or `info`, never `error`.** Errors are reserved for defects that
+  stop a model from opening, deploying or evaluating.
 
 ## Adding a new rule
 
@@ -106,7 +139,8 @@ violation class sets `fixable = True` and implements `fix()`.
    itself.
 
 3. **Register it** in `src/tmdl_preflight/rules/__init__.py`: import the
-   class and add it to the `ALL_RULES` list.
+   class and add it to the `ALL_RULES` list. If it has a fixer, route the
+   write through `edits.verified_write()`.
 
 4. **Add a test** in `tests/` (see below).
 
@@ -128,7 +162,9 @@ shared fixtures in `tests/conftest.py` give you a pristine copy of the
 - `definition` / `report_dir`, the model and report folders inside it;
 - `clean_project`, the pristine fixture (never mutate it).
 
-Follow the built-in pattern: copy the clean fixture, break **exactly one**
+Follow the built-in pattern (the `replace_in` fixture plants a defect by
+replacing one exact snippet and fails loudly if the snippet is missing):
+copy the clean fixture, break **exactly one**
 thing to trigger your failure mode, assert the violation is detected, and,
 for a fixer, assert that fix → re-check comes back clean and that a second
 fix is a no-op (idempotent). For example:
@@ -148,6 +184,8 @@ Run both of these; both must pass:
 ```console
 $ pytest
 $ tmdl-preflight check examples/bike-shop-clean
+
+scanned: 1 model, 6 tables, 22 columns, 6 measures, 4 relationships, 8 DAX expressions, 1 report
 tmdl-preflight: 0 error(s), 0 warning(s), 0 info(s)
 ```
 
@@ -158,7 +196,7 @@ blockers and leaves only the S001 info finding.
 
 ## Commit and PR conventions
 
-- Branch off `main`; keep each PR focused on one rule, fix, or topic.
+- Branch off `master`; keep each PR focused on one rule, fix, or topic.
 - Write imperative, present-tense commit subjects ("Add M009 partition-mode
   rule", not "Added…"); keep the subject under ~72 characters and explain
   the *why* in the body when it isn't obvious.

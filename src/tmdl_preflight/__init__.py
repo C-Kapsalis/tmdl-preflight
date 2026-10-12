@@ -3,7 +3,7 @@ models saved in TMDL format (PBIP folders)."""
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "1.1.0"
 
 from .engine import PreflightReport, apply_policy, check, fix
 from .parser import parse_model
