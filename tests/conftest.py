@@ -34,3 +34,16 @@ def definition(project: Path) -> Path:
 @pytest.fixture
 def report_dir(project: Path) -> Path:
     return project / "BikeShop.Report"
+
+
+def _replace_once(path: Path, old: str, new: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    assert text.count(old) == 1, f"expected exactly one {old!r} in {path.name}"
+    path.write_text(text.replace(old, new), encoding="utf-8")
+
+
+@pytest.fixture
+def replace_in():
+    """``replace_in(path, old, new)``: plant a defect by replacing one exact
+    snippet (the test fails loudly if the snippet is missing or ambiguous)."""
+    return _replace_once

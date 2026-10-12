@@ -10,6 +10,10 @@ just enough of it to power the preflight rules:
 * calculation items and dynamic format-string definitions
 * relationships (``relationships.tmdl``)
 * every ``lineageTag:`` occurrence, with file/line/context
+* ``///`` descriptions, display folders, measure-level format-string
+  definitions and ``refreshPolicy`` placement
+* ``expressions.tmdl`` (names and ``meta`` records) and the model-level
+  facts in ``model.tmdl`` (``ref table`` lines, ``discourageImplicitMeasures``)
 
 Design notes
 ------------
@@ -23,6 +27,12 @@ Design notes
 * **This is not a validator of TMDL itself.** Anything unrecognized is
   skipped; unreadable files are surfaced as ``ParseError`` so the
   well-formedness rule can report them.
+* **Nothing is dropped silently.** Duplicate declarations are kept (the
+  name-keyed dicts hold the first, the lists hold all), relationships with
+  a missing endpoint are kept for R001, and a raw count of declaration lines
+  is compared with what was parsed so a structural miss surfaces as M002.
+* Files are read as ``utf-8-sig``, so a byte-order mark never hides the
+  first declaration.
 """
 
 from __future__ import annotations
@@ -33,10 +43,13 @@ from typing import Optional
 
 from .model import (
     Column,
+    Expression,
     LineageTagOccurrence,
     Measure,
+    ModelInfo,
     ParseError,
     Partition,
+    RefreshPolicy,
     Relationship,
     SemanticModel,
     Table,
@@ -150,26 +163,85 @@ def _collect_expression(
 
 _PROPERTY_RE = re.compile(r"^\s*(?P<key>[A-Za-z][A-Za-z0-9]*)\s*:\s*(?P<value>.*)$")
 _FLAG_RE = re.compile(r"^\s*(?P<flag>isHidden|isKey|isActive)\s*$")
+_DESC_RE = re.compile(r"^\s*///(?P<text>.*)$")
+
+# Raw declaration lines, counted independently of the structural walk so the
+# parser can notice when it failed to attach a declaration to its table (for
+# example a mis-indented measure swallowed by the previous expression).
+_RAW_TABLE_MEMBER_RE = re.compile(r"^[\t ]*(?:measure|column)[\t ]+\S")
+_RAW_RELATIONSHIP_RE = re.compile(r"^[\t ]*relationship[\t ]+\S")
+
+
+def read_tmdl_text(path: Path) -> str:
+    """Read a TMDL file as UTF-8, tolerating a byte-order mark."""
+    return path.read_text(encoding="utf-8-sig")
+
+
+def _expression_start(decl_line: int, inline: str) -> int:
+    """1-based line on which an expression's text starts."""
+    inline = inline.strip()
+    if inline and not inline.startswith("```"):
+        return decl_line
+    return decl_line + 1
+
+
+def count_raw_declarations(text: str, pattern: "re.Pattern[str]") -> int:
+    """Count lines matching ``pattern`` outside ``` fences."""
+    count = 0
+    in_fence = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if in_fence:
+            if stripped.startswith("```"):
+                in_fence = False
+            continue
+        if pattern.match(line):
+            count += 1
+        if stripped.endswith("```") and stripped.count("```") % 2 == 1:
+            in_fence = True
+    return count
 
 
 def parse_table_file(path: Path) -> tuple[Optional[Table], list[ParseError]]:
     """Parse one ``tables/*.tmdl`` file into a Table (or None on failure)."""
     errors: list[ParseError] = []
     try:
-        text = path.read_text(encoding="utf-8")
+        text = read_tmdl_text(path)
     except (UnicodeDecodeError, OSError) as exc:
         return None, [ParseError(path, f"cannot read file: {exc}")]
 
     lines = text.splitlines()
     table: Optional[Table] = None
-    current: Optional[object] = None  # Column | Measure | Partition
-    current_level = 0
+    # owners[level] is the object whose properties sit at level + 1; None
+    # marks a block the parser does not model (hierarchy, calculationGroup...)
+    owners: dict[int, object] = {}
     in_calc_group = False
+    calc_item_level: Optional[int] = None
+    pending_desc: list[str] = []
+
+    def set_owner(level: int, obj: object) -> None:
+        for lvl in [k for k in owners if k >= level]:
+            del owners[lvl]
+        owners[level] = obj
+
+    def take_description() -> Optional[str]:
+        nonlocal pending_desc
+        if not pending_desc:
+            return None
+        desc = "\n".join(d.strip() for d in pending_desc).strip()
+        pending_desc = []
+        return desc
 
     i = 0
     while i < len(lines):
         line = lines[i]
         if not line.strip():
+            pending_desc = []
+            i += 1
+            continue
+        dm = _DESC_RE.match(line)
+        if dm:
+            pending_desc.append(dm.group("text"))
             i += 1
             continue
         m = _DECL_RE.match(line)
@@ -178,11 +250,11 @@ def parse_table_file(path: Path) -> tuple[Optional[Table], list[ParseError]]:
         if m:
             kw = m.group("kw")
             rest = m.group("rest")
+            desc = take_description()
             if kw == "table" and level == 0:
                 name, _ = parse_object_name(rest)
-                table = Table(name=name, file=path, line=i + 1)
-                current = table
-                current_level = 0
+                table = Table(name=name, file=path, line=i + 1, description=desc)
+                set_owner(0, table)
                 i += 1
                 continue
             if table is None:
@@ -191,28 +263,34 @@ def parse_table_file(path: Path) -> tuple[Optional[Table], list[ParseError]]:
 
             if kw == "column" and level == 1:
                 name, remainder = parse_object_name(rest)
-                col = Column(name=name, table=table.name, file=path, line=i + 1)
+                col = Column(
+                    name=name, table=table.name, file=path, line=i + 1, description=desc
+                )
                 if remainder.startswith("="):
                     expr, i2, _s, _e = _collect_expression(lines, i + 1, level, remainder[1:])
                     col.expression = expr
+                    col.expression_line = _expression_start(i + 1, remainder[1:])
                     i = i2
                 else:
                     i += 1
-                table.columns[name] = col
-                current, current_level = col, level
+                table.add_column(col)
+                set_owner(level, col)
                 continue
 
             if kw == "measure" and level == 1:
                 name, remainder = parse_object_name(rest)
-                meas = Measure(name=name, table=table.name, file=path, line=i + 1)
+                meas = Measure(
+                    name=name, table=table.name, file=path, line=i + 1, description=desc
+                )
                 if remainder.startswith("="):
                     expr, i2, _s, _e = _collect_expression(lines, i + 1, level, remainder[1:])
                     meas.expression = expr
+                    meas.expression_line = _expression_start(i + 1, remainder[1:])
                     i = i2
                 else:
                     i += 1
-                table.measures[name] = meas
-                current, current_level = meas, level
+                table.add_measure(meas)
+                set_owner(level, meas)
                 continue
 
             if kw == "partition" and level == 1:
@@ -222,13 +300,14 @@ def parse_table_file(path: Path) -> tuple[Optional[Table], list[ParseError]]:
                     name=name, table=table.name, file=path, line=i + 1, kind=kind.lower()
                 )
                 table.partitions.append(part)
-                current, current_level = part, level
+                set_owner(level, part)
                 i += 1
                 continue
 
             if kw == "calculationGroup" and level == 1:
                 in_calc_group = True
-                current, current_level = table, level
+                table.is_calculation_group = True
+                set_owner(level, None)
                 i += 1
                 continue
 
@@ -242,30 +321,55 @@ def parse_table_file(path: Path) -> tuple[Optional[Table], list[ParseError]]:
                     expr = ""
                     i += 1
                 table.calculation_items.append((name, expr, decl_line))
-                current, current_level = table, level
+                table.calculation_item_starts.append(
+                    _expression_start(decl_line, remainder[1:] if remainder.startswith("=") else "")
+                )
+                calc_item_level = level
+                set_owner(level, None)
                 continue
 
             if kw == "formatStringDefinition":
                 _name, remainder = parse_object_name(rest)
                 decl_line = i + 1
-                owner = table.calculation_items[-1][0] if table.calculation_items else table.name
+                parent = owners.get(level - 1)
+                if isinstance(parent, Measure):
+                    owner = parent.name
+                elif (
+                    calc_item_level is not None
+                    and level == calc_item_level + 1
+                    and table.calculation_items
+                ):
+                    owner = table.calculation_items[-1][0]
+                    table.dynamic_format_items.append(owner)
+                else:
+                    owner = table.name
+                inline = remainder[1:] if remainder.startswith("=") else ""
                 if remainder.startswith("="):
-                    expr, i2, _s, _e = _collect_expression(lines, i + 1, level, remainder[1:])
+                    expr, i2, _s, _e = _collect_expression(lines, i + 1, level, inline)
                     i = i2
                 else:
                     expr = ""
                     i += 1
+                if isinstance(parent, Measure):
+                    parent.format_string_definition = expr
                 table.format_string_definitions.append((owner, expr, decl_line))
+                table.format_string_definition_starts.append(
+                    _expression_start(decl_line, inline)
+                )
                 continue
 
             # hierarchies, levels, nested relationships: skip declaration line
+            set_owner(level, None)
             i += 1
             continue
 
-        # Non-declaration lines: properties of the current object.
+        pending_desc = []
+        # Non-declaration lines: properties of the object one level up.
         stripped = line.strip()
         if table is not None and "ParameterMetadata" in stripped:
             table.is_field_parameter = True
+
+        current = owners.get(level - 1)
 
         if isinstance(current, Partition) and stripped.startswith("source"):
             after = stripped[len("source") :].lstrip()
@@ -278,6 +382,22 @@ def parse_table_file(path: Path) -> tuple[Optional[Table], list[ParseError]]:
                 current.source_end_line = e
                 i = i2
                 continue
+
+        if table is not None and stripped == "refreshPolicy" and level == 1:
+            policy = RefreshPolicy(file=path, line=i + 1, level=level)
+            table.refresh_policy = policy
+            set_owner(level, policy)
+            i += 1
+            continue
+
+        if isinstance(current, RefreshPolicy):
+            key, sep, value = stripped.partition(":")
+            if not sep:
+                key, sep, value = stripped.partition("=")
+            if sep:
+                current.properties[key.strip()] = value.strip()
+            i += 1
+            continue
 
         flag = _FLAG_RE.match(line)
         if flag and current is not None:
@@ -300,6 +420,11 @@ def parse_table_file(path: Path) -> tuple[Optional[Table], list[ParseError]]:
                 current.source_column = value
             elif key == "formatString" and hasattr(current, "format_string"):
                 current.format_string = value
+            elif key == "displayFolder" and hasattr(current, "display_folder"):
+                current.display_folder = value
+        if stripped.split(" ", 1)[0] in ("annotation", "extendedProperty", "changedProperty"):
+            # child blocks: their own (deeper) lines are not object properties
+            set_owner(level, None)
         i += 1
 
     if table is None:
@@ -312,7 +437,127 @@ def parse_table_file(path: Path) -> tuple[Optional[Table], list[ParseError]]:
                 "move it out of the tables/ folder.",
             )
         )
+    else:
+        declared = count_raw_declarations(text, _RAW_TABLE_MEMBER_RE)
+        parsed = len(table.column_list) + len(table.measure_list)
+        if declared > parsed:
+            errors.append(
+                ParseError(
+                    path,
+                    f"parser dropped {declared - parsed} object(s): the file "
+                    f"has {declared} 'column'/'measure' declaration lines but "
+                    f"only {parsed} could be attached to table '{table.name}'. "
+                    f"A declaration is usually mis-indented (one tab per "
+                    f"level: columns and measures sit one level under the "
+                    f"table) or buried inside the previous expression; fix "
+                    f"the indentation so every object is visible to the model.",
+                )
+            )
     return table, errors
+
+
+# ---------------------------------------------------------------------------
+# expressions.tmdl and model.tmdl
+# ---------------------------------------------------------------------------
+
+_EXPRESSION_DECL_RE = re.compile(r"^expression\b(?P<rest>.*)$")
+_META_RE = re.compile(r"\bmeta\s*\[(?P<body>.*)\]\s*$", re.DOTALL)
+
+
+def _parse_meta(expression: str) -> dict[str, str]:
+    """Parse the trailing ``meta [Key = value, ...]`` record of an M
+    expression into a dict of raw values (quotes removed)."""
+    m = _META_RE.search(expression.strip())
+    if not m:
+        return {}
+    body = m.group("body")
+    parts: list[str] = []
+    buf: list[str] = []
+    in_str = False
+    for ch in body:
+        if ch == '"':
+            in_str = not in_str
+        if ch == "," and not in_str:
+            parts.append("".join(buf))
+            buf = []
+            continue
+        buf.append(ch)
+    if buf:
+        parts.append("".join(buf))
+    meta: dict[str, str] = {}
+    for part in parts:
+        key, sep, value = part.partition("=")
+        if not sep:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] == '"':
+            value = value[1:-1].replace('""', '"')
+        meta[key.strip()] = value
+    return meta
+
+
+def parse_expressions_file(path: Path) -> tuple[list[Expression], list[ParseError]]:
+    """Parse ``expressions.tmdl``: shared expressions and parameters."""
+    if not path.exists():
+        return [], []
+    try:
+        lines = read_tmdl_text(path).splitlines()
+    except (UnicodeDecodeError, OSError) as exc:
+        return [], [ParseError(path, f"cannot read file: {exc}")]
+    out: list[Expression] = []
+    current: Optional[Expression] = None
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = _EXPRESSION_DECL_RE.match(line)
+        if m:
+            name, remainder = parse_object_name(m.group("rest"))
+            current = Expression(name=name, file=path, line=i + 1)
+            if remainder.startswith("="):
+                expr, i2, _s, _e = _collect_expression(lines, i + 1, 0, remainder[1:])
+                current.expression = expr
+                current.meta = _parse_meta(expr)
+                i = i2
+            else:
+                i += 1
+            out.append(current)
+            continue
+        if current is not None and indent_level(line) == 1:
+            lm = _LINEAGE_RE.match(line)
+            if lm:
+                current.lineage_tag = lm.group(1)
+        i += 1
+    return out, []
+
+
+_REF_TABLE_LINE_RE = re.compile(r"^\s*ref\s+table\s+(?P<rest>.+?)\s*$")
+
+
+def parse_model_file(path: Path) -> ModelInfo:
+    """Read the model-level facts the rules need from ``model.tmdl``."""
+    info = ModelInfo(file=path)
+    try:
+        lines = read_tmdl_text(path).splitlines()
+    except (UnicodeDecodeError, OSError):
+        return info
+    in_model = False
+    for idx, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        level = indent_level(line)
+        stripped = line.strip()
+        if level == 0:
+            in_model = stripped.startswith("model ")
+            if in_model:
+                info.name, _ = parse_object_name(stripped[len("model "):])
+            rm = _REF_TABLE_LINE_RE.match(line)
+            if rm:
+                name, _ = parse_object_name(rm.group("rest"))
+                info.ref_tables.append((name, idx))
+            continue
+        if in_model and level == 1 and stripped == "discourageImplicitMeasures":
+            info.discourage_implicit_measures = True
+    return info
 
 
 # ---------------------------------------------------------------------------
@@ -346,10 +591,21 @@ def parse_endpoint(ref: str) -> tuple[str, str]:
     return table.strip(), column.strip()
 
 
-def parse_relationships_file(path: Path) -> list[Relationship]:
+def parse_relationships(
+    path: Path,
+) -> tuple[list[Relationship], list[Relationship], list[ParseError]]:
+    """Parse ``relationships.tmdl``.
+
+    Returns ``(relationships, malformed, errors)``: well-formed relationships,
+    the ones missing an endpoint (reported by R001, never dropped silently),
+    and read/sanity errors (reported by M002).
+    """
     if not path.exists():
-        return []
-    text = path.read_text(encoding="utf-8")
+        return [], [], []
+    try:
+        text = read_tmdl_text(path)
+    except (UnicodeDecodeError, OSError) as exc:
+        return [], [], [ParseError(path, f"cannot read file: {exc}")]
     lines = text.splitlines()
     rels: list[Relationship] = []
     current: Optional[Relationship] = None
@@ -382,8 +638,27 @@ def parse_relationships_file(path: Path) -> list[Relationship]:
         elif key == "isActive":
             current.is_active = value.lower() == "true"
 
-    # keep only relationships with both endpoints parsed
-    return [r for r in rels if r.from_table and r.to_table]
+    good = [r for r in rels if r.from_table and r.to_table and r.from_column and r.to_column]
+    malformed = [r for r in rels if r not in good]
+    errors: list[ParseError] = []
+    declared = count_raw_declarations(text, _RAW_RELATIONSHIP_RE)
+    if declared > len(rels):
+        errors.append(
+            ParseError(
+                path,
+                f"parser dropped {declared - len(rels)} object(s): the file has "
+                f"{declared} 'relationship' declaration lines but only "
+                f"{len(rels)} start at the top level. Relationship "
+                f"declarations must not be indented; fix the indentation so "
+                f"every relationship is part of the model.",
+            )
+        )
+    return good, malformed, errors
+
+
+def parse_relationships_file(path: Path) -> list[Relationship]:
+    """Well-formed relationships only (kept for API compatibility)."""
+    return parse_relationships(path)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -398,7 +673,7 @@ _CONTEXT_RE = re.compile(
 def collect_lineage_tags(path: Path) -> list[LineageTagOccurrence]:
     """All ``lineageTag:`` lines in a file, with nearest-declaration context."""
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = read_tmdl_text(path).splitlines()
     except (UnicodeDecodeError, OSError):
         return []
     occurrences = []
@@ -435,9 +710,20 @@ def parse_model(definition_path: Path) -> SemanticModel:
             table, errors = parse_table_file(tmdl_file)
             model.parse_errors.extend(errors)
             if table is not None:
-                model.tables[table.name] = table
+                model.add_table(table)
 
-    model.relationships = parse_relationships_file(definition_path / "relationships.tmdl")
+    rels, malformed, rel_errors = parse_relationships(
+        definition_path / "relationships.tmdl"
+    )
+    model.relationships = rels
+    model.malformed_relationships = malformed
+    model.parse_errors.extend(rel_errors)
+
+    expressions, expr_errors = parse_expressions_file(definition_path / "expressions.tmdl")
+    model.expressions = expressions
+    model.parse_errors.extend(expr_errors)
+
+    model.info = parse_model_file(definition_path / "model.tmdl")
 
     for tmdl_file in model.tmdl_files:
         model.lineage_tags.extend(collect_lineage_tags(tmdl_file))
