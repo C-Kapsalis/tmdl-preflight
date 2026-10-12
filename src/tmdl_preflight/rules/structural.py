@@ -8,7 +8,16 @@ import uuid
 from pathlib import Path
 
 from .base import Context, Rule, Severity, Violation
-from ..parser import parse_object_name
+from ..dax import CODE, classify
+from ..edits import EditRefused, read_text_file, verified_write
+from ..parser import indent_level, parse_object_name
+from ..recognizers import (
+    find_dangling_descriptions,
+    find_properties_after_child_blocks,
+    leaked_property,
+    move_properties_before_child_blocks,
+    remove_dangling_descriptions,
+)
 
 _REF_TABLE_RE = re.compile(r"^\s*ref\s+table\s+(?P<rest>.+?)\s*$")
 
@@ -100,8 +109,12 @@ class TmdlWellFormedRule(Rule):
     name = "tmdl-well-formed"
     severity = Severity.ERROR
     description = (
-        "Every .tmdl file must be readable UTF-8, contain no null bytes, "
-        "have paired ``` expression fences, and (for table files) declare a table."
+        "Every .tmdl file must be readable UTF-8 (a byte-order mark is fine), "
+        "contain no null bytes, have paired ``` expression fences, and (for "
+        "table files) declare a table. Every column, measure and relationship "
+        "declaration line must also be attached to the model; a mis-indented "
+        "declaration the parser cannot place is reported here instead of "
+        "being dropped silently."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -109,7 +122,7 @@ class TmdlWellFormedRule(Rule):
         for model in ctx.models:
             for f in model.tmdl_files:
                 try:
-                    text = f.read_text(encoding="utf-8")
+                    text = f.read_text(encoding="utf-8-sig")
                 except (UnicodeDecodeError, OSError) as exc:
                     out.append(
                         self.violation(
@@ -156,10 +169,8 @@ class _LineageRuleBase(Rule):
     def _rewrite_tag(file: Path, line_no: int) -> str | None:
         """Replace the lineageTag value on ``line_no`` (1-based) with a fresh
         UUID. Returns the new tag, or None if the line no longer matches."""
-        text = file.read_text(encoding="utf-8")
-        # Preserve the file's newline style.
-        newline = "\r\n" if "\r\n" in text else "\n"
-        lines = text.split(newline) if newline in text else text.split("\n")
+        original = read_text_file(file)
+        lines = original.lines()
         if line_no - 1 >= len(lines):
             return None
         m = _LINEAGE_LINE_RE.match(lines[line_no - 1])
@@ -167,7 +178,17 @@ class _LineageRuleBase(Rule):
             return None
         new_tag = str(uuid.uuid4())
         lines[line_no - 1] = f"{m.group(1)}{new_tag}{m.group(3)}"
-        file.write_text(newline.join(lines), encoding="utf-8", newline="")
+
+        def verify(old: str, new: str) -> None:
+            old_l, new_l = old.split(original.newline), new.split(original.newline)
+            changed = [k for k, (a, b) in enumerate(zip(old_l, new_l)) if a != b]
+            if len(old_l) != len(new_l) or changed != [line_no - 1]:
+                raise EditRefused("lineage tag rewrite touched other lines")
+
+        try:
+            verified_write(original, original.join(lines), verify)
+        except EditRefused:
+            return None
         return new_tag
 
 
@@ -176,6 +197,7 @@ class LineageTagUniquenessRule(_LineageRuleBase):
     name = "lineage-duplicates"
     severity = Severity.ERROR
     fixable = True
+    baselinable = False
     description = (
         "Every lineageTag in a model must be unique. Duplicates make the "
         "deployment target reject the model ('an object with that lineage "
@@ -302,7 +324,7 @@ def _model_file(model) -> Path:
 def _referenced_tables(model_file: Path) -> set[str] | None:
     """Names declared with ``ref table`` in model.tmdl, or None if unreadable."""
     try:
-        text = model_file.read_text(encoding="utf-8")
+        text = model_file.read_text(encoding="utf-8-sig")
     except (UnicodeDecodeError, OSError):
         return None
     refs: set[str] = set()
@@ -319,6 +341,7 @@ class ModelTableReferencesRule(Rule):
     name = "model-table-refs"
     severity = Severity.ERROR
     fixable = True
+    baselinable = False
     description = (
         "Every table defined under tables/ must be linked to the model with a "
         "'ref table <name>' line in model.tmdl. A table file with no matching "
@@ -361,13 +384,16 @@ class ModelTableReferencesRule(Rule):
             if not missing:
                 continue
             mf = _model_file(model)
-            text = mf.read_text(encoding="utf-8")
-            newline = "\r\n" if "\r\n" in text else "\n"
-            body = text.rstrip("\n").rstrip("\r")
+            original = read_text_file(mf)
+            newline = original.newline
+            body = original.text.rstrip("\r\n")
             additions = newline.join(
                 f"ref table {_render_table_ref(name)}" for name in missing
             )
-            mf.write_text(body + newline + newline + additions + newline, encoding="utf-8")
+            try:
+                verified_write(original, body + newline + newline + additions + newline)
+            except EditRefused:
+                continue
             applied.extend(f"model.tmdl: + ref table {_render_table_ref(n)}" for n in missing)
         return applied
 
@@ -376,6 +402,7 @@ class TablePartitionPresenceRule(Rule):
     id = "M007"
     name = "table-partitions"
     severity = Severity.ERROR
+    baselinable = False
     description = (
         "Every table must declare at least one partition. A measures-only "
         "table ('measures table') still needs one: without a partition Power "
@@ -451,7 +478,7 @@ class ReservedTableNameRule(Rule):
     severity = Severity.ERROR
     description = (
         "Power BI reserves certain table names and refuses to open a model "
-        "that uses one — most notably a table literally named 'Measures', "
+        "that uses one, most notably a table literally named 'Measures', "
         "which collides with the implicit measures container ('Unsupported "
         "Table name ... found in data model schema'). Rename the table, for "
         "example to 'Key Measures' or '<Domain> Measures'."
@@ -474,3 +501,410 @@ class ReservedTableNameRule(Rule):
                     )
         return out
 
+
+
+# ---------------------------------------------------------------------------
+# M010-M015
+# ---------------------------------------------------------------------------
+
+
+def _file_lines(cache: dict, path: Path) -> list[str]:
+    if path not in cache:
+        try:
+            cache[path] = path.read_text(encoding="utf-8-sig").splitlines()
+        except (UnicodeDecodeError, OSError):
+            cache[path] = []
+    return cache[path]
+
+
+def _expression_owners(model):
+    """(label, obj, file, decl_line, expression, start_line) for every object
+    that carries an expression, DAX or M."""
+    for t in model.table_list:
+        for m in t.measure_list:
+            yield f"{t.name}[{m.name}] (measure)", m, m.file, m.line, m.expression, m.expression_line
+        for c in t.column_list:
+            if c.expression is not None:
+                yield (
+                    f"{t.name}[{c.name}] (calculated_column)", c, c.file, c.line,
+                    c.expression, c.expression_line,
+                )
+        for p in t.partitions:
+            if p.source:
+                yield (
+                    f"{t.name} (partition {p.name})", p, p.file, p.line, p.source,
+                    p.source_start_line,
+                )
+        for k, (name, expr, line) in enumerate(t.calculation_items):
+            start = t.calculation_item_starts[k] if k < len(t.calculation_item_starts) else None
+            yield f"{t.name}[{name}] (calculation_item)", None, t.file, line, expr, start
+
+
+class MetadataInExpressionRule(Rule):
+    id = "M010"
+    name = "metadata-in-expression"
+    severity = Severity.ERROR
+    baselinable = False
+    description = (
+        "A TMDL property line (lineageTag:, formatString:, displayFolder:, "
+        "isHidden, annotation ...) must never sit inside an expression body. "
+        "It happens when a script or a merge inserts a property at the wrong "
+        "indentation, or inside a ``` fence: the property becomes part of the "
+        "DAX or M text and Power BI rejects the file ('... is neither a "
+        "property nor an object in the current context'). Move the line out "
+        "of the expression, one level under the object's declaration."
+    )
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        cache: dict = {}
+        for model in ctx.models:
+            for label, obj, file, decl_line, expr, start in _expression_owners(model):
+                if expr:
+                    tags = classify(expr)
+                    offset = 0
+                    for rel, ln in enumerate(expr.split("\n")):
+                        body = ln.lstrip()
+                        first = offset + (len(ln) - len(body))
+                        offset += len(ln) + 1
+                        if not body or body.startswith("```"):
+                            continue
+                        if first < len(tags) and tags[first] != CODE:
+                            continue  # inside a string or comment
+                        token = leaked_property(body)
+                        if token:
+                            out.append(
+                                self.violation(
+                                    f"TMDL property '{token}' is inside the "
+                                    f"expression body, so it is read as part "
+                                    f"of the expression and Power BI rejects "
+                                    f"the file. Move it out of the expression, "
+                                    f"one level under the declaration.",
+                                    file=file,
+                                    line=(start or decl_line) + rel,
+                                    obj=label,
+                                )
+                            )
+                    continue
+                # empty expression after '=': is a property sitting where the
+                # expression should be?
+                lines = _file_lines(cache, file)
+                if not lines or decl_line - 1 >= len(lines):
+                    continue
+                decl = lines[decl_line - 1]
+                if not decl.rstrip().endswith("="):
+                    continue
+                for j in range(decl_line, len(lines)):
+                    nxt = lines[j]
+                    if not nxt.strip():
+                        continue
+                    token = leaked_property(nxt)
+                    if token and indent_level(nxt) <= indent_level(decl) + 1:
+                        out.append(
+                            self.violation(
+                                f"the expression after '=' is missing and the "
+                                f"TMDL property '{token}' sits where it should "
+                                f"be, so Power BI rejects the file. Put the "
+                                f"expression back right after '=' and keep "
+                                f"properties below it.",
+                                file=file,
+                                line=j + 1,
+                                obj=label,
+                            )
+                        )
+                    break
+        return out
+
+
+class PropertyAfterChildBlockRule(Rule):
+    id = "M011"
+    name = "property-after-child-block"
+    severity = Severity.WARNING
+    fixable = True
+    description = (
+        "An object's simple properties (isHidden, displayFolder, "
+        "formatString, lineageTag ...) must come before its child blocks "
+        "(annotation, changedProperty, extendedProperty). Power BI Desktop "
+        "always writes them in that order; a property appended after an "
+        "annotation, usually by a script, is at best ignored and at worst "
+        "rejected when the file is opened. Auto-fix moves the line up into "
+        "the object's property section."
+    )
+
+    def _files(self, ctx: Context):
+        for model in ctx.models:
+            yield from model.tmdl_files
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        for f in self._files(ctx):
+            try:
+                lines = f.read_text(encoding="utf-8-sig").splitlines()
+            except (UnicodeDecodeError, OSError):
+                continue
+            for finding in find_properties_after_child_blocks(lines):
+                out.append(
+                    self.violation(
+                        f"property '{finding.token}' comes after a child block "
+                        f"(annotation, changedProperty or extendedProperty) of "
+                        f"'{finding.owner}'. Properties must precede child "
+                        f"blocks; move the line up (the auto-fix does this).",
+                        file=f,
+                        line=finding.line + 1,
+                        obj=finding.owner,
+                    )
+                )
+        return out
+
+    def fix(self, ctx: Context) -> list[str]:
+        applied: list[str] = []
+        for f in self._files(ctx):
+            try:
+                original = read_text_file(f)
+            except (UnicodeDecodeError, OSError):
+                continue
+            lines = original.lines()
+            new_lines, moved = move_properties_before_child_blocks(lines)
+            if not moved:
+                continue
+
+            def verify(old: str, new: str) -> None:
+                old_l = [ln for ln in old.split(original.newline) if ln.strip()]
+                new_l = [ln for ln in new.split(original.newline) if ln.strip()]
+                if sorted(old_l) != sorted(new_l):
+                    raise EditRefused("moving properties changed other lines")
+                if find_properties_after_child_blocks(new.split(original.newline)):
+                    raise EditRefused("properties are still out of order")
+
+            try:
+                if verified_write(original, original.join(new_lines), verify):
+                    applied.append(f"{f.name}: moved {moved} property line(s) above child blocks")
+            except EditRefused:
+                continue
+        return applied
+
+
+class DuplicateObjectNamesRule(Rule):
+    id = "M012"
+    name = "duplicate-object-names"
+    severity = Severity.ERROR
+    description = (
+        "Object names are compared case-insensitively by the tabular engine. "
+        "Two tables whose names differ only by case, two columns or two "
+        "measures with the same name in one table, or a measure named like a "
+        "column of its own table all make the model fail to load. Rename one "
+        "of the pair."
+    )
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        for model in ctx.models:
+            seen_tables: dict[str, object] = {}
+            for t in model.table_list:
+                key = t.name.lower()
+                if key in seen_tables:
+                    first = seen_tables[key]
+                    out.append(
+                        self.violation(
+                            f"table '{t.name}' duplicates table '{first.name}' "
+                            f"({first.file.name}); table names are "
+                            f"case-insensitive, so the model cannot load. "
+                            f"Rename or remove one of the two files.",
+                            file=t.file,
+                            line=t.line,
+                            obj=t.name,
+                        )
+                    )
+                else:
+                    seen_tables[key] = t
+            for t in model.table_list:
+                for kind, items in (("column", t.column_list), ("measure", t.measure_list)):
+                    seen: dict[str, object] = {}
+                    for item in items:
+                        key = item.name.lower()
+                        if key in seen:
+                            first = seen[key]
+                            out.append(
+                                self.violation(
+                                    f"{kind} '{item.name}' is declared twice in "
+                                    f"table '{t.name}' (first at line "
+                                    f"{first.line}); names are case-insensitive, "
+                                    f"so the model cannot load. Rename or remove "
+                                    f"one of the two.",
+                                    file=item.file,
+                                    line=item.line,
+                                    obj=item.full_name,
+                                )
+                            )
+                        else:
+                            seen[key] = item
+                columns = {c.name.lower(): c for c in t.column_list}
+                for meas in t.measure_list:
+                    col = columns.get(meas.name.lower())
+                    if col is not None:
+                        out.append(
+                            self.violation(
+                                f"measure '{meas.name}' has the same name as "
+                                f"column '{col.name}' of its own table (line "
+                                f"{col.line}), so references to it are "
+                                f"ambiguous and the model cannot load. Rename "
+                                f"the measure or the column.",
+                                file=meas.file,
+                                line=meas.line,
+                                obj=meas.full_name,
+                            )
+                        )
+        return out
+
+
+class DanglingDescriptionRule(Rule):
+    id = "M013"
+    name = "dangling-description"
+    severity = Severity.ERROR
+    fixable = True
+    description = (
+        "A /// description must sit directly on top of the declaration it "
+        "describes. A /// run followed by a blank line documents nothing, and "
+        "Power BI rejects the file once any declaration follows it "
+        "('Unexpected line type: Empty'). At the end of a file it is harmless "
+        "until something is appended, so it is reported as a warning there. "
+        "Auto-fix deletes the orphaned run and the blank line next to it."
+    )
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        for model in ctx.models:
+            for f in model.tmdl_files:
+                try:
+                    lines = f.read_text(encoding="utf-8-sig").splitlines()
+                except (UnicodeDecodeError, OSError):
+                    continue
+                for d in find_dangling_descriptions(lines):
+                    if d.at_eof:
+                        out.append(
+                            self.violation(
+                                "/// description at the end of the file "
+                                "describes nothing. It is harmless today, but "
+                                "anything appended after it turns it into an "
+                                "import error; delete it (the auto-fix does).",
+                                file=f,
+                                line=d.end + 1,
+                                severity=Severity.WARNING,
+                            )
+                        )
+                    else:
+                        out.append(
+                            self.violation(
+                                "/// description is followed by a blank line "
+                                "instead of the declaration it describes, so "
+                                "Power BI rejects the file ('Unexpected line "
+                                "type: Empty'). Remove the blank line to "
+                                "attach it, or delete the description.",
+                                file=f,
+                                line=d.end + 1,
+                            )
+                        )
+        return out
+
+    def fix(self, ctx: Context) -> list[str]:
+        applied: list[str] = []
+        for model in ctx.models:
+            for f in model.tmdl_files:
+                try:
+                    original = read_text_file(f)
+                except (UnicodeDecodeError, OSError):
+                    continue
+                lines = original.lines()
+                new_lines, removed = remove_dangling_descriptions(lines)
+                if not removed:
+                    continue
+
+                def verify(old: str, new: str) -> None:
+                    old_l = old.split(original.newline)
+                    new_l = new.split(original.newline)
+                    if find_dangling_descriptions(new_l):
+                        raise EditRefused("dangling descriptions remain")
+                    # every surviving line must come from the original, in order
+                    it = iter(old_l)
+                    if not all(any(ln == o for o in it) for ln in new_l):
+                        raise EditRefused("edit changed lines it should only delete")
+                    gone = [ln for ln in old_l if ln.strip() and ln not in new_l]
+                    if any(not ln.lstrip().startswith("///") for ln in gone):
+                        raise EditRefused("edit deleted a non-description line")
+
+                try:
+                    if verified_write(original, original.join(new_lines), verify):
+                        applied.append(
+                            f"{f.name}: removed {removed} dangling /// description run(s)"
+                        )
+                except EditRefused:
+                    continue
+        return applied
+
+
+class CalcGroupImplicitMeasuresRule(Rule):
+    id = "M014"
+    name = "calc-group-implicit-measures"
+    severity = Severity.ERROR
+    description = (
+        "A model with a calculation group must set discourageImplicitMeasures "
+        "in model.tmdl. Calculation groups only apply to explicit measures, "
+        "so Power BI refuses to save or deploy a model that has both a "
+        "calculation group and implicit measures enabled. Add a "
+        "'discourageImplicitMeasures' line under 'model Model'."
+    )
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        for model in ctx.models:
+            groups = [t for t in model.table_list if t.is_calculation_group]
+            if not groups or model.info.discourage_implicit_measures:
+                continue
+            mf = _model_file(model)
+            if not mf.is_file():
+                continue  # M001 reports it
+            names = ", ".join(sorted(t.name for t in groups))
+            out.append(
+                self.violation(
+                    f"the model has calculation group(s) ({names}) but "
+                    f"model.tmdl does not set discourageImplicitMeasures, so "
+                    f"the model cannot be saved or deployed. Add a "
+                    f"'discourageImplicitMeasures' line under 'model'.",
+                    file=mf,
+                    obj=names,
+                )
+            )
+        return out
+
+
+class RefTableTargetRule(Rule):
+    id = "M015"
+    name = "ref-table-target-missing"
+    severity = Severity.ERROR
+    baselinable = False
+    description = (
+        "Every 'ref table <name>' line in model.tmdl must name a table that "
+        "is defined under tables/. A ref to a missing table (a deleted or "
+        "renamed table file) stops Power BI Desktop from opening the project. "
+        "Restore the table file or delete the ref line."
+    )
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        for model in ctx.models:
+            mf = model.info.file
+            for name, line in model.info.ref_tables:
+                if model.find_table(name) is None:
+                    out.append(
+                        self.violation(
+                            f"'ref table {_render_table_ref(name)}' names a table "
+                            f"that no file under tables/ defines, so Power BI "
+                            f"Desktop will not open the project. Restore the "
+                            f"table file, or delete this line if the table was "
+                            f"removed on purpose.",
+                            file=mf,
+                            line=line,
+                            obj=name,
+                        )
+                    )
+        return out

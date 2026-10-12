@@ -14,18 +14,40 @@ class RelationshipEndpointsRule(Rule):
     severity = Severity.ERROR
     description = (
         "Both endpoints of every relationship must exist: the from/to tables "
-        "must be declared, and the referenced columns must exist on them."
+        "must be declared, and the referenced columns must exist on them "
+        "(names compare case-insensitively). A relationship whose fromColumn "
+        "or toColumn is missing or unreadable is reported too, never dropped."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for model in ctx.models:
+            for rel in model.malformed_relationships:
+                missing = [
+                    side
+                    for side, table, column in (
+                        ("fromColumn", rel.from_table, rel.from_column),
+                        ("toColumn", rel.to_table, rel.to_column),
+                    )
+                    if not (table and column)
+                ]
+                out.append(
+                    self.violation(
+                        f"relationship has no usable {' or '.join(missing)} "
+                        f"(expected 'Table.Column' or 'Table'.'Column'), so it "
+                        f"cannot deploy. Restore the missing endpoint line or "
+                        f"delete the relationship.",
+                        file=rel.file,
+                        line=rel.line,
+                        obj=f"relationship {rel.rel_id[:8]}",
+                    )
+                )
             for rel in model.relationships:
                 for side, table, column in (
                     ("from", rel.from_table, rel.from_column),
                     ("to", rel.to_table, rel.to_column),
                 ):
-                    t = model.get_table(table)
+                    t = model.find_table(table)
                     if t is None:
                         out.append(
                             self.violation(
@@ -38,7 +60,7 @@ class RelationshipEndpointsRule(Rule):
                                 obj=f"relationship {rel.rel_id[:8]}",
                             )
                         )
-                    elif column not in t.columns:
+                    elif t.find_column(column) is None:
                         out.append(
                             self.violation(
                                 f"{side}-column '{table}'[{column}] does not "
@@ -59,7 +81,7 @@ class RelationshipCardinalityRule(Rule):
     severity = Severity.ERROR
     description = (
         "Declared fromCardinality/toCardinality values must be 'one' or "
-        "'many' — anything else is not a cardinality the engine accepts."
+        "'many'; anything else is not a cardinality the engine accepts."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -194,4 +216,76 @@ class OrphanTablesRule(Rule):
                         obj=table.name,
                     )
                 )
+        return out
+
+
+class AmbiguousActivePairRule(Rule):
+    id = "R006"
+    name = "ambiguous-active-pair"
+    severity = Severity.ERROR
+    baselinable = False
+    description = (
+        "At most one relationship between the same two tables may be active. "
+        "A second active relationship makes the filter path ambiguous and the "
+        "engine refuses to load the model. Mark all but one as "
+        "'isActive: false' and use USERELATIONSHIP() where the other path is "
+        "needed."
+    )
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        for model in ctx.models:
+            seen: dict[frozenset, object] = {}
+            for rel in model.relationships:
+                if not rel.is_active:
+                    continue
+                key = frozenset((rel.from_table.lower(), rel.to_table.lower()))
+                if key in seen:
+                    first = seen[key]
+                    out.append(
+                        self.violation(
+                            f"second active relationship between "
+                            f"'{rel.from_table}' and '{rel.to_table}' (the "
+                            f"first is {first.rel_id[:8]} on line {first.line}). "
+                            f"Two active paths between the same tables are "
+                            f"ambiguous and the model cannot load; set "
+                            f"'isActive: false' on one of them.",
+                            file=rel.file,
+                            line=rel.line,
+                            obj=f"relationship {rel.rel_id[:8]}",
+                        )
+                    )
+                else:
+                    seen[key] = rel
+        return out
+
+
+class AutodetectedRelationshipsRule(Rule):
+    id = "R007"
+    name = "autodetected-relationships"
+    severity = Severity.WARNING
+    description = (
+        "Relationships whose id starts with 'AutoDetected_' were created by "
+        "Power BI Desktop's relationship autodetection, not by a modeler. "
+        "They often join on columns that merely share a name. Review each "
+        "one; keep it (Desktop then keeps the id, so ignore this rule or "
+        "baseline it) or delete it and turn autodetection off."
+    )
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        for model in ctx.models:
+            for rel in model.relationships + model.malformed_relationships:
+                if rel.rel_id.startswith("AutoDetected_"):
+                    out.append(
+                        self.violation(
+                            f"relationship {rel.from_table}[{rel.from_column}] "
+                            f"-> {rel.to_table}[{rel.to_column}] was "
+                            f"autodetected by Power BI Desktop. Confirm it "
+                            f"joins the right columns, or delete it.",
+                            file=rel.file,
+                            line=rel.line,
+                            obj=f"relationship {rel.rel_id}",
+                        )
+                    )
         return out

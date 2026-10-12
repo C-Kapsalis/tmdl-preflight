@@ -118,3 +118,21 @@ class TestFixImposition:
         payload = report.to_dict()
         assert payload["summary"]["fixes_applied"] == len(report.fixes_applied)
         assert payload["summary"]["errors"] == 0
+
+
+def test_fixers_preserve_crlf_line_endings(project, definition, report_dir):
+    """Every fixer keeps a CRLF file CRLF (Windows checkouts)."""
+    _seed_fixable_violations(definition, report_dir)
+    model_file = definition / "model.tmdl"
+    model_file.write_text(
+        model_file.read_text(encoding="utf-8").replace("ref table Stores\n", ""),
+        encoding="utf-8",
+    )
+    for f in definition.rglob("*.tmdl"):
+        f.write_bytes(f.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    report = fix(Context(project), default_ruleset())
+    assert {"M003", "M004", "M006", "F001"} <= set(report.fixed_rule_ids)
+    assert report.violations == []
+    for f in definition.rglob("*.tmdl"):
+        raw = f.read_bytes()
+        assert b"\n" not in raw.replace(b"\r\n", b""), f.name

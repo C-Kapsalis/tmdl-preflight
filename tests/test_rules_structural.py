@@ -234,3 +234,270 @@ class TestReservedTableNames:
         assert len(violations) == 1
         assert violations[0].obj == "Measures"
         assert violations[0].severity == Severity.ERROR
+
+
+# ---------------------------------------------------------------------------
+# M010-M015
+# ---------------------------------------------------------------------------
+
+from tmdl_preflight.engine import fix as run_fix  # noqa: E402
+from tmdl_preflight.rules import default_ruleset  # noqa: E402
+from tmdl_preflight.rules.structural import (  # noqa: E402
+    CalcGroupImplicitMeasuresRule,
+    DanglingDescriptionRule,
+    DuplicateObjectNamesRule,
+    MetadataInExpressionRule,
+    PropertyAfterChildBlockRule,
+    RefTableTargetRule,
+)
+
+
+def _measures(definition):
+    return definition / "tables" / "Sales Measures.tmdl"
+
+
+class TestMetadataInExpression:
+    def test_clean_passes(self, project):
+        assert MetadataInExpressionRule().check(Context(project)) == []
+
+    def test_property_buried_in_expression_body(self, project, definition, replace_in):
+        replace_in(
+            definition / "tables" / "Calendar.tmdl",
+            "\t\tsource = CALENDAR(DATE(2024, 1, 1), DATE(2026, 12, 31))",
+            "\t\tsource =\n\t\t\t\tCALENDAR(DATE(2024, 1, 1), DATE(2026, 12, 31))\n"
+            "\t\t\t\tlineageTag: 11111111-2222-4333-8444-555555555555",
+        )
+        violations = MetadataInExpressionRule().check(Context(project))
+        assert len(violations) == 1
+        assert "lineageTag" in violations[0].message
+        assert violations[0].severity == Severity.ERROR
+
+    def test_property_inside_fence(self, project, definition, replace_in):
+        replace_in(
+            _measures(definition),
+            "\t\t\t    DIVIDE([Revenue], store_count)\n\t\t\t```",
+            "\t\t\t    DIVIDE([Revenue], store_count)\n\t\tisHidden\n\t\t\t```",
+        )
+        violations = MetadataInExpressionRule().check(Context(project))
+        assert [v.line for v in violations] and "isHidden" in violations[0].message
+        assert violations[0].line == 31
+
+    def test_property_right_after_equals(self, project, definition, replace_in):
+        replace_in(
+            _measures(definition),
+            "\tmeasure 'Units Sold' = SUM(Sales[quantity])\n\t\tformatString: #,0\n",
+            "\tmeasure 'Units Sold' =\n\t\tformatString: #,0\n",
+        )
+        violations = MetadataInExpressionRule().check(Context(project))
+        assert len(violations) == 1
+        assert "expression after '=' is missing" in violations[0].message
+
+    def test_keyword_inside_string_or_comment_is_fine(self, project, definition, replace_in):
+        replace_in(
+            _measures(definition),
+            "\t\t\t    DIVIDE([Revenue], store_count)\n\t\t\t```",
+            "\t\t\t    DIVIDE([Revenue], store_count)\n"
+            "\t\t\t    -- displayFolder: not a property here\n\t\t\t```",
+        )
+        assert MetadataInExpressionRule().check(Context(project)) == []
+
+    def test_not_baselinable(self):
+        assert MetadataInExpressionRule.baselinable is False
+
+
+class TestPropertyAfterChildBlock:
+    def _plant(self, definition, replace_in):
+        f = definition / "tables" / "Metric Selector.tmdl"
+        replace_in(
+            f,
+            "\t\tsourceColumn: [Value3]\n\n\t\tannotation SummarizationSetBy = Automatic\n",
+            "\t\tsourceColumn: [Value3]\n\n\t\tannotation SummarizationSetBy = Automatic\n"
+            "\n\t\tdisplayFolder: Hidden helpers\n",
+        )
+        return f
+
+    def test_clean_passes(self, project):
+        assert PropertyAfterChildBlockRule().check(Context(project)) == []
+
+    def test_detected(self, project, definition, replace_in):
+        self._plant(definition, replace_in)
+        violations = PropertyAfterChildBlockRule().check(Context(project))
+        assert len(violations) == 1
+        v = violations[0]
+        assert v.severity == Severity.WARNING and v.fixable
+        assert "displayFolder" in v.message and "Metric Selector Order" in v.obj
+
+    def test_fix_moves_line_and_is_idempotent(self, project, definition, replace_in):
+        f = self._plant(definition, replace_in)
+        rule = PropertyAfterChildBlockRule()
+        applied = rule.fix(Context(project))
+        assert applied and "moved 1" in applied[0]
+        text = f.read_text(encoding="utf-8")
+        assert (
+            "\t\tsourceColumn: [Value3]\n\t\tdisplayFolder: Hidden helpers\n\n"
+            "\t\tannotation SummarizationSetBy = Automatic\n" in text
+        )
+        assert "\n\n\n" not in text
+        assert rule.check(Context(project)) == []
+        assert rule.fix(Context(project)) == []
+
+    def test_annotation_values_are_not_properties(self, project, definition, replace_in):
+        replace_in(
+            _measures(definition),
+            "\tannotation PBI_ResultType = Table",
+            "\tannotation PBI_ResultType = Table\n\n\tannotation Note = ```\n"
+            "\t\tisHidden\n\t\t```",
+        )
+        assert PropertyAfterChildBlockRule().check(Context(project)) == []
+
+
+class TestDuplicateObjectNames:
+    def test_clean_passes(self, project):
+        assert DuplicateObjectNamesRule().check(Context(project)) == []
+
+    def test_tables_differing_by_case(self, project, definition):
+        src = definition / "tables" / "Stores.tmdl"
+        text = src.read_text(encoding="utf-8").replace("table Stores", "table STORES", 1)
+        text = re.sub(r"lineageTag: \S+", lambda m: f"lineageTag: {uuid.uuid4()}", text)
+        (definition / "tables" / "STORES copy.tmdl").write_text(text, encoding="utf-8")
+        violations = DuplicateObjectNamesRule().check(Context(project))
+        # files are read in sorted order, so "STORES copy.tmdl" comes first
+        assert [v.obj for v in violations] == ["Stores"]
+        assert "duplicates table 'STORES'" in violations[0].message
+
+    def test_duplicate_measure_in_one_table(self, project, definition, replace_in):
+        replace_in(
+            _measures(definition),
+            "\tpartition 'Sales Measures' = m",
+            "\tmeasure 'units sold' = 1\n\t\tlineageTag: 0e0e0e0e-0000-4000-8000-000000000001\n\n"
+            "\tpartition 'Sales Measures' = m",
+        )
+        violations = DuplicateObjectNamesRule().check(Context(project))
+        assert len(violations) == 1 and "declared twice" in violations[0].message
+
+    def test_duplicate_column_in_one_table(self, project, definition, replace_in):
+        replace_in(
+            definition / "tables" / "Sales.tmdl",
+            "\tcolumn quantity\n",
+            "\tcolumn Quantity\n\t\tdataType: int64\n\t\tsourceColumn: quantity\n\n"
+            "\tcolumn quantity\n",
+        )
+        violations = DuplicateObjectNamesRule().check(Context(project))
+        assert len(violations) == 1 and "column 'quantity'" in violations[0].message
+
+    def test_measure_named_like_its_column(self, project, definition, replace_in):
+        replace_in(
+            definition / "tables" / "Sales.tmdl",
+            "\tmeasure 'countrows sales' = COUNTROWS(Sales)",
+            "\tmeasure Net_Amount = SUM(Sales[net_amount])\n\n"
+            "\tmeasure 'countrows sales' = COUNTROWS(Sales)",
+        )
+        violations = DuplicateObjectNamesRule().check(Context(project))
+        assert len(violations) == 1 and "same name as column" in violations[0].message
+
+
+class TestDanglingDescription:
+    def test_clean_passes(self, project):
+        assert DanglingDescriptionRule().check(Context(project)) == []
+
+    def test_blank_line_before_declaration_is_error(self, project, definition, replace_in):
+        replace_in(
+            _measures(definition),
+            "\t/// Number of distinct orders placed.\n",
+            "\t/// Number of distinct orders placed.\n\n",
+        )
+        violations = DanglingDescriptionRule().check(Context(project))
+        assert len(violations) == 1
+        assert violations[0].severity == Severity.ERROR and violations[0].fixable
+
+    def test_at_end_of_file_is_warning(self, project, definition):
+        f = definition / "tables" / "Stores.tmdl"
+        f.write_text(f.read_text(encoding="utf-8").rstrip("\n") + "\n\n/// orphan\n",
+                     encoding="utf-8")
+        violations = DanglingDescriptionRule().check(Context(project))
+        assert len(violations) == 1 and violations[0].severity == Severity.WARNING
+
+    def test_fix_preserves_crlf_and_is_idempotent(self, project, definition):
+        f = _measures(definition)
+        text = f.read_text(encoding="utf-8").replace(
+            "\t/// Number of distinct orders placed.\n",
+            "\t/// Number of distinct orders placed.\n\n",
+        )
+        f.write_bytes(text.replace("\n", "\r\n").encode("utf-8"))
+        rule = DanglingDescriptionRule()
+        assert rule.fix(Context(project))
+        raw = f.read_bytes().decode("utf-8")
+        assert "\r\n" in raw and "\n" not in raw.replace("\r\n", "")
+        assert "Number of distinct orders placed" not in raw
+        assert "\tmeasure 'Orders #' = DISTINCTCOUNT" in raw
+        assert rule.check(Context(project)) == []
+        assert rule.fix(Context(project)) == []
+
+    def test_fix_at_eof_keeps_single_trailing_newline(self, project, definition):
+        f = definition / "tables" / "Stores.tmdl"
+        original = f.read_text(encoding="utf-8")
+        f.write_text(original.rstrip("\n") + "\n\n/// orphan\n", encoding="utf-8")
+        DanglingDescriptionRule().fix(Context(project))
+        assert f.read_text(encoding="utf-8") == original.rstrip("\n") + "\n"
+
+
+class TestCalcGroupImplicitMeasures:
+    def _add_calc_group(self, definition):
+        (definition / "tables" / "Time Intelligence.tmdl").write_text(
+            "table 'Time Intelligence'\n"
+            "\tlineageTag: 0f0f0f0f-0000-4000-8000-000000000001\n\n"
+            "\tcalculationGroup\n"
+            "\t\tprecedence: 1\n\n"
+            "\t\tcalculationItem Current = SELECTEDMEASURE()\n\n"
+            "\tcolumn Name\n"
+            "\t\tdataType: string\n"
+            "\t\tlineageTag: 0f0f0f0f-0000-4000-8000-000000000002\n"
+            "\t\tsummarizeBy: none\n"
+            "\t\tsourceColumn: Name\n\n"
+            "\tpartition 'Time Intelligence' = calculationGroup\n"
+            "\t\tmode: import\n",
+            encoding="utf-8",
+        )
+        mf = definition / "model.tmdl"
+        mf.write_text(mf.read_text(encoding="utf-8") + "ref table 'Time Intelligence'\n",
+                      encoding="utf-8")
+
+    def test_clean_passes(self, project):
+        assert CalcGroupImplicitMeasuresRule().check(Context(project)) == []
+
+    def test_calc_group_without_flag(self, project, definition):
+        self._add_calc_group(definition)
+        violations = CalcGroupImplicitMeasuresRule().check(Context(project))
+        assert len(violations) == 1 and "Time Intelligence" in violations[0].message
+
+    def test_flag_set(self, project, definition, replace_in):
+        self._add_calc_group(definition)
+        replace_in(
+            definition / "model.tmdl",
+            "\tculture: en-US\n",
+            "\tculture: en-US\n\tdiscourageImplicitMeasures\n",
+        )
+        assert CalcGroupImplicitMeasuresRule().check(Context(project)) == []
+
+
+class TestRefTableTarget:
+    def test_clean_passes(self, project):
+        assert RefTableTargetRule().check(Context(project)) == []
+
+    def test_ref_without_table(self, project, definition):
+        (definition / "tables" / "Stores.tmdl").unlink()
+        violations = RefTableTargetRule().check(Context(project))
+        assert len(violations) == 1
+        assert violations[0].obj == "Stores" and violations[0].line == 13
+        assert RefTableTargetRule.baselinable is False
+
+    def test_case_difference_still_resolves(self, project, definition, replace_in):
+        replace_in(definition / "model.tmdl", "ref table Stores\n", "ref table stores\n")
+        assert RefTableTargetRule().check(Context(project)) == []
+
+
+def test_new_fixers_leave_clean_model_untouched(project):
+    before = {f: f.read_bytes() for f in sorted(project.rglob("*")) if f.is_file()}
+    report = run_fix(Context(project), default_ruleset())
+    assert report.fixes_applied == []
+    assert before == {f: f.read_bytes() for f in sorted(project.rglob("*")) if f.is_file()}

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Optional
+from pathlib import Path, PurePosixPath
+from typing import Any, Optional
 
 from ..model import SemanticModel
 from ..parser import find_definition_dirs, find_report_dirs, parse_model
@@ -20,6 +20,25 @@ class Severity(enum.Enum):
         return self.value
 
 
+def item_relative_path(file: Optional[Path]) -> Optional[str]:
+    """A stable, project-relative identity for a file.
+
+    The path is taken relative to the folder that holds the file's
+    ``*.SemanticModel`` or ``*.Report`` item, so it never includes absolute
+    or ancestor directories: ``BikeShop.SemanticModel/definition/tables/
+    Sales.tmdl`` no matter where the project is checked out. Files outside
+    any item folder fall back to their name.
+    """
+    if file is None:
+        return None
+    p = Path(file)
+    parts = p.parts
+    for idx in range(len(parts) - 1, -1, -1):
+        if parts[idx].endswith((".SemanticModel", ".Report")):
+            return PurePosixPath(*parts[idx:]).as_posix()
+    return p.name
+
+
 @dataclass
 class Violation:
     rule_id: str
@@ -29,6 +48,15 @@ class Violation:
     line: Optional[int] = None
     obj: Optional[str] = None
     fixable: bool = False
+
+    @property
+    def path(self) -> Optional[str]:
+        """Project-relative path of ``file`` (see ``item_relative_path``)."""
+        return item_relative_path(self.file)
+
+    def identity(self) -> tuple[str, str, str]:
+        """Line-independent identity used by baselines and exemptions."""
+        return (self.rule_id, self.path or "", self.obj or "")
 
     def location(self) -> str:
         if self.file is None:
@@ -47,6 +75,7 @@ class Violation:
             "line": self.line,
             "object": self.obj,
             "fixable": self.fixable,
+            "path": self.path,
         }
 
 
@@ -56,7 +85,7 @@ class Context:
     A Context is built from a user-supplied path (a PBIP project root, a
     ``*.SemanticModel`` folder, a ``definition`` folder or a ``*.Report``
     folder) and lazily parses each discovered model. ``reload()`` drops the
-    parse cache — the engine calls it after fixers have rewritten files, so
+    parse cache; the engine calls it after fixers have rewritten files, so
     the re-check always runs against what is actually on disk.
     """
 
@@ -93,6 +122,18 @@ class Rule:
     severity: Severity = Severity.ERROR
     description: str = ""
     fixable: bool = False
+    # False for defects that must never be accepted into a baseline (they
+    # stop the model from opening or deploying at all)
+    baselinable: bool = True
+    # per-rule options and their defaults; config files may override them
+    option_defaults: dict[str, Any] = {}
+
+    def __init__(self) -> None:
+        self.options: dict[str, Any] = dict(self.option_defaults)
+
+    def configure(self, options: dict[str, Any]) -> None:
+        """Apply per-rule options (already validated by the config loader)."""
+        self.options.update(options)
 
     def check(self, ctx: Context) -> list[Violation]:  # pragma: no cover
         raise NotImplementedError

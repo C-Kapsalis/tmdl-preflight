@@ -5,30 +5,50 @@ from __future__ import annotations
 from .base import Context, Rule, RuleSet, Severity, Violation
 from .dax_rules import (
     DaxDelimiterBalanceRule,
+    DaxReferenceResolutionRule,
     DuplicateMeasureNamesRule,
+    DuplicateVariableRule,
     NameofResolutionRule,
 )
-from .field_parameters import FieldParameterCommaRunsRule
+from .field_parameters import (
+    FieldParameterCommaRunsRule,
+    MissingRowSeparatorRule,
+    RaggedRowWidthRule,
+    TrailingRowCommaRule,
+)
 from .relationships import (
+    AmbiguousActivePairRule,
+    AutodetectedRelationshipsRule,
     BidirectionalFilterRule,
     DuplicateRelationshipsRule,
     OrphanTablesRule,
     RelationshipCardinalityRule,
     RelationshipEndpointsRule,
 )
-from .report import BookmarkIntegerTypesRule, BookmarkVisualRefsRule
+from .report import (
+    BookmarkIntegerTypesRule,
+    BookmarkOptionsSchemaRule,
+    BookmarkVisualRefsRule,
+    ReportDefinitionIntegrityRule,
+)
 from .structural import (
+    CalcGroupImplicitMeasuresRule,
     ColumnDataTypeRule,
+    DanglingDescriptionRule,
+    DuplicateObjectNamesRule,
     EntityQuerySourceRule,
     LineageTagFormatRule,
     LineageTagUniquenessRule,
+    MetadataInExpressionRule,
     ModelStructureRule,
     ModelTableReferencesRule,
+    PropertyAfterChildBlockRule,
+    RefTableTargetRule,
     ReservedTableNameRule,
     TablePartitionPresenceRule,
     TmdlWellFormedRule,
 )
-from .style import FormatStringPresenceRule
+from .style import FormatStringPresenceRule, MeasureDescriptionRule
 
 ALL_RULES: list[type[Rule]] = [
     ModelStructureRule,
@@ -40,18 +60,34 @@ ALL_RULES: list[type[Rule]] = [
     LineageTagUniquenessRule,
     LineageTagFormatRule,
     ColumnDataTypeRule,
+    MetadataInExpressionRule,
+    PropertyAfterChildBlockRule,
+    DuplicateObjectNamesRule,
+    DanglingDescriptionRule,
+    CalcGroupImplicitMeasuresRule,
+    RefTableTargetRule,
     DaxDelimiterBalanceRule,
     NameofResolutionRule,
     DuplicateMeasureNamesRule,
+    DaxReferenceResolutionRule,
+    DuplicateVariableRule,
     RelationshipEndpointsRule,
     RelationshipCardinalityRule,
     DuplicateRelationshipsRule,
     BidirectionalFilterRule,
     OrphanTablesRule,
+    AmbiguousActivePairRule,
+    AutodetectedRelationshipsRule,
     FieldParameterCommaRunsRule,
+    MissingRowSeparatorRule,
+    TrailingRowCommaRule,
+    RaggedRowWidthRule,
     BookmarkIntegerTypesRule,
     BookmarkVisualRefsRule,
+    BookmarkOptionsSchemaRule,
+    ReportDefinitionIntegrityRule,
     FormatStringPresenceRule,
+    MeasureDescriptionRule,
 ]
 
 

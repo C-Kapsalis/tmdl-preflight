@@ -160,3 +160,62 @@ class TestOrphanTables:
             encoding="utf-8",
         )
         assert OrphanTablesRule().check(Context(project)) == []
+
+
+# ---------------------------------------------------------------------------
+# R001 (malformed), R006, R007
+# ---------------------------------------------------------------------------
+
+from tmdl_preflight.rules.relationships import (  # noqa: E402
+    AmbiguousActivePairRule,
+    AutodetectedRelationshipsRule,
+)
+
+
+def test_malformed_relationship_reported_by_r001(project, definition, replace_in):
+    replace_in(_rels_file(definition), "\ttoColumn: Stores.store_id\n", "")
+    violations = RelationshipEndpointsRule().check(Context(project))
+    assert len(violations) == 1
+    assert "no usable toColumn" in violations[0].message
+    assert violations[0].line == 5
+
+
+def test_endpoints_resolve_case_insensitively(project, definition, replace_in):
+    replace_in(_rels_file(definition), "Sales.store_id", "sales.STORE_ID")
+    assert RelationshipEndpointsRule().check(Context(project)) == []
+
+
+class TestAmbiguousActivePair:
+    def test_clean_passes(self, project):
+        # the fixture has two Sales->Calendar relationships, one inactive
+        assert AmbiguousActivePairRule().check(Context(project)) == []
+
+    def test_second_active_relationship(self, project, definition, replace_in):
+        replace_in(_rels_file(definition), "\tisActive: false\n", "")
+        violations = AmbiguousActivePairRule().check(Context(project))
+        assert len(violations) == 1
+        assert violations[0].severity == Severity.ERROR
+        assert "4c9e5f6d" in (violations[0].obj or "")
+        assert AmbiguousActivePairRule.baselinable is False
+
+    def test_direction_does_not_matter(self, project, definition, replace_in):
+        replace_in(
+            _rels_file(definition),
+            "\tisActive: false\n\tfromColumn: Sales.ship_date\n\ttoColumn: Calendar.Date",
+            "\tfromColumn: Calendar.Date\n\ttoColumn: Sales.ship_date",
+        )
+        assert len(AmbiguousActivePairRule().check(Context(project))) == 1
+
+
+class TestAutodetectedRelationships:
+    def test_clean_passes(self, project):
+        assert AutodetectedRelationshipsRule().check(Context(project)) == []
+
+    def test_autodetected_id(self, project, definition, replace_in):
+        replace_in(
+            _rels_file(definition),
+            "relationship 2a7c3d4b-9d2e-4f60-8b81-2c3d4e5f6071",
+            "relationship AutoDetected_2a7c3d4b-9d2e-4f60-8b81-2c3d4e5f6071",
+        )
+        violations = AutodetectedRelationshipsRule().check(Context(project))
+        assert len(violations) == 1 and violations[0].severity == Severity.WARNING

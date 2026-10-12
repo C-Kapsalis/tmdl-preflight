@@ -65,3 +65,97 @@ class TestFieldParameterCommaRuns:
         )
         f.write_text(text, encoding="utf-8")
         assert FieldParameterCommaRunsRule().check(Context(project)) == []
+
+
+# ---------------------------------------------------------------------------
+# F002-F004
+# ---------------------------------------------------------------------------
+
+from tmdl_preflight.engine import check as run_check  # noqa: E402
+from tmdl_preflight.engine import fix as run_fix  # noqa: E402
+from tmdl_preflight.rules import default_ruleset  # noqa: E402
+from tmdl_preflight.rules.base import Severity  # noqa: E402
+from tmdl_preflight.rules.field_parameters import (  # noqa: E402
+    MissingRowSeparatorRule,
+    RaggedRowWidthRule,
+    TrailingRowCommaRule,
+)
+
+
+def _selector(definition):
+    return definition / "tables" / "Metric Selector.tmdl"
+
+
+class TestMissingRowSeparator:
+    def test_clean_passes(self, project):
+        assert MissingRowSeparatorRule().check(Context(project)) == []
+
+    def test_detected_and_fixed(self, project, definition, replace_in):
+        replace_in(
+            _selector(definition),
+            '( "Orders #", NAMEOF ( [Orders #] ), 1 ),',
+            '( "Orders #", NAMEOF ( [Orders #] ), 1 )',
+        )
+        rule = MissingRowSeparatorRule()
+        violations = rule.check(Context(project))
+        assert len(violations) == 1 and violations[0].line == 45
+        assert rule.fix(Context(project))
+        assert rule.check(Context(project)) == []
+        assert rule.fix(Context(project)) == []
+        assert '( "Orders #", NAMEOF ( [Orders #] ), 1 ),' in _selector(definition).read_text(
+            encoding="utf-8"
+        )
+
+    def test_two_rows_on_one_line(self, project, definition, replace_in):
+        replace_in(
+            _selector(definition),
+            '( "Orders #", NAMEOF ( [Orders #] ), 1 ),\n\t\t\t\t    ',
+            '( "Orders #", NAMEOF ( [Orders #] ), 1 ) ',
+        )
+        assert len(MissingRowSeparatorRule().check(Context(project))) == 1
+        report = run_fix(Context(project), default_ruleset())
+        assert report.violations == []
+
+
+class TestTrailingRowComma:
+    def test_clean_passes(self, project):
+        assert TrailingRowCommaRule().check(Context(project)) == []
+
+    def test_detected_and_fixed(self, project, definition, replace_in):
+        replace_in(
+            _selector(definition),
+            '( "Units Sold", NAMEOF ( [Units Sold] ), 3 )\n',
+            '( "Units Sold", NAMEOF ( [Units Sold] ), 3 ),\n',
+        )
+        rule = TrailingRowCommaRule()
+        assert len(rule.check(Context(project))) == 1
+        assert rule.fix(Context(project))
+        assert rule.check(Context(project)) == []
+        assert rule.fix(Context(project)) == []
+
+    def test_comma_run_before_brace_needs_both_fixers(self, project, definition, replace_in):
+        replace_in(
+            _selector(definition),
+            '( "Units Sold", NAMEOF ( [Units Sold] ), 3 )\n',
+            '( "Units Sold", NAMEOF ( [Units Sold] ), 3 ),\n\t\t\t\t    ,\n',
+        )
+        first = run_check(Context(project), default_ruleset())
+        assert {"F001", "F003"} <= {v.rule_id for v in first.violations}
+        report = run_fix(Context(project), default_ruleset())
+        assert report.violations == []
+
+
+class TestRaggedRows:
+    def test_clean_passes(self, project):
+        assert RaggedRowWidthRule().check(Context(project)) == []
+
+    def test_detected_check_only(self, project, definition, replace_in):
+        replace_in(
+            _selector(definition),
+            '( "Orders #", NAMEOF ( [Orders #] ), 1 ),',
+            '( "Orders #", NAMEOF ( [Orders #] ) ),',
+        )
+        violations = RaggedRowWidthRule().check(Context(project))
+        assert len(violations) == 1
+        assert violations[0].severity == Severity.WARNING and not violations[0].fixable
+        assert "1 row(s) with 2, 3 row(s) with 3" in violations[0].message
