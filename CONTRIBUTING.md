@@ -2,9 +2,9 @@
 
 tmdl-preflight is a preflight linter and auto-fixer for Power BI semantic
 models saved in TMDL format (PBIP folders): it catches the defects that stop
-Power BI Desktop from opening a project — missing `ref table` lines, tables
+Power BI Desktop from opening a project (missing `ref table` lines, tables
 with no partition, inline `#table` entity sources, duplicate or malformed
-lineage tags, field-parameter comma runs — and mechanically repairs the ones
+lineage tags, field-parameter comma runs) and mechanically repairs the ones
 whose fix is fully determined by the failure.
 
 Contributions are welcome: new rules, fixers, docs, and bug reports. This
@@ -44,7 +44,7 @@ src/tmdl_preflight/
 ├── pytest_plugin.py  # the `tmdl_preflight` fixture
 └── rules/
     ├── base.py           # Rule, Violation, Severity, Context, RuleSet
-    ├── structural.py     # M001–M008
+    ├── structural.py     # M001–M009
     ├── dax_rules.py      # D001–D003
     ├── relationships.py  # R001–R005
     ├── field_parameters.py # F001
@@ -53,9 +53,13 @@ src/tmdl_preflight/
     └── __init__.py       # ALL_RULES registry + default_ruleset()
 
 tests/                # pytest suite; fixtures/ holds the clean example model
-docs/                 # Diátaxis docs (tutorials, how-to, reference, explanation)
 examples/             # bike-shop-clean and bike-shop-broken PBIP projects
 ```
+
+The full Diátaxis documentation (tutorials, how-to guides, reference,
+explanation) lives in the separate `tmdl-preflight-documentation`
+repository, published on Read the Docs at
+<https://tmdl-preflight-documentation.readthedocs.io/en/latest/>.
 
 Each rule has an `id` (`M003`), a `name` (`lineage-duplicates`), a
 `Severity` (`ERROR` / `WARNING` / `INFO`), and a one-paragraph `description`.
@@ -101,16 +105,17 @@ violation class sets `fixable = True` and implements `fix()`.
    engine re-checks from disk afterward, so a fixer never vouches for
    itself.
 
-3. **Register it** in `src/tmdl_preflight/rules/__init__.py` — import the
+3. **Register it** in `src/tmdl_preflight/rules/__init__.py`: import the
    class and add it to the `ALL_RULES` list.
 
 4. **Add a test** in `tests/` (see below).
 
-5. **Document it** by adding an entry to `docs/reference/rules.md`, and, for
-   a substantial rule, an explanation guide under `docs/explanation/`.
+5. **Document it** by adding an entry to the rule catalog reference page, and,
+   for a substantial rule, an explanation page, both in
+   `tmdl-preflight-documentation`.
 
 The long-form version of this recipe, including the plain-Python API, is in
-[docs/how-to/add-a-custom-rule.md](docs/how-to/add-a-custom-rule.md).
+that repository's "add a custom rule" how-to guide.
 
 ## Testing
 
@@ -118,14 +123,14 @@ Tests live in `tests/`, one `test_rules_*.py` file per rule module. The
 shared fixtures in `tests/conftest.py` give you a pristine copy of the
 "Pedal & Sprocket Bike Co." model:
 
-- `project` — a disposable copy of the clean model in `tmp_path`, safe to
+- `project`, a disposable copy of the clean model in `tmp_path`, safe to
   mutate;
-- `definition` / `report_dir` — the model and report folders inside it;
-- `clean_project` — the pristine fixture (never mutate it).
+- `definition` / `report_dir`, the model and report folders inside it;
+- `clean_project`, the pristine fixture (never mutate it).
 
 Follow the built-in pattern: copy the clean fixture, break **exactly one**
-thing to trigger your failure mode, assert the violation is detected, and —
-for a fixer — assert that fix → re-check comes back clean and that a second
+thing to trigger your failure mode, assert the violation is detected, and,
+for a fixer, assert that fix → re-check comes back clean and that a second
 fix is a no-op (idempotent). For example:
 
 ```python

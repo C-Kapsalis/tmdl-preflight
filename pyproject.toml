@@ -31,7 +31,7 @@ dependencies = []
 test = ["pytest>=7.0"]
 
 [project.urls]
-Documentation = "https://github.com/c-kapsalis/tmdl-preflight/tree/main/docs"
+Documentation = "https://tmdl-preflight-documentation.readthedocs.io/en/latest/"
 Source = "https://github.com/c-kapsalis/tmdl-preflight"
 
 [project.scripts]

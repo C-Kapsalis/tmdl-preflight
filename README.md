@@ -1,10 +1,10 @@
 # tmdl-preflight
 
-**Preflight checks — and auto-fixes — for Power BI semantic models saved in
+**Preflight checks and auto-fixes for Power BI semantic models saved in
 TMDL format (PBIP folders).**
 
 For most of Power BI's life, the semantic model was a binary `.pbix` blob:
-un-diffable, un-reviewable, un-testable. PBIP and TMDL changed that — the
+un-diffable, un-reviewable, un-testable. PBIP and TMDL changed that. The
 model is now a folder of plain-text files, which means it can finally be
 tested like code. But nothing ships that testing layer: a duplicate
 `lineageTag` left behind by a copy-pasted table file sails through Power BI
@@ -19,7 +19,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
   inline `#table` entity sources that force a composite model, duplicate lineage tags, unbalanced DAX delimiters, dangling
   `NAMEOF()` references, broken relationship endpoints, stray commas in
   field-parameter sources, string-typed bookmark fields, and more.
-- **5 auto-fixers** for the defects whose repair is fully mechanical —
+- **5 auto-fixers** for the defects whose repair is fully mechanical,
   applied via a check → fix → re-check loop that never lets a fixer vouch
   for itself.
 - **Three entry points:** a CLI (`check`, `fix`, `rules`), a pytest fixture
@@ -41,9 +41,9 @@ package's own suite.
 
 ## Quickstart
 
-Point `check` at any PBIP folder — a project root, a `*.SemanticModel`
+Point `check` at any PBIP folder: a project root, a `*.SemanticModel`
 folder, a `definition` folder, or a `*.Report` folder. The repo ships a
-small fictional bike-shop project you can try it on — [`examples/`](examples/)
+small fictional bike-shop project you can try it on. [`examples/`](examples/)
 has a clean copy and a pre-broken one. `bike-shop-broken` **will not open in
 Power BI Desktop**: `Stores` lost its `ref table` line, its `lineageTag` is
 copy-pasted from `Products`, `__Calendar`'s tag is a placeholder, and a
@@ -76,7 +76,7 @@ fixed  F001: Metric Selector.tmdl: removed 1 orphan comma(s) from 'Metric Select
 tmdl-preflight: 0 error(s), 0 warning(s), 1 info(s), 4 fix(es) applied
 ```
 
-Exit code 0 — because the *re-check* came back clean of blockers, not
+Exit code 0, because the *re-check* came back clean of blockers, not
 because fixers ran. The four blockers are gone and the project now opens in
 Power BI Desktop; the S001 info line is yours to act on or ignore. Diff,
 review, commit.
@@ -85,25 +85,30 @@ review, commit.
 
 | ID | Protects you from | Severity | Auto-fix |
 |------|-------------------|----------|----------|
-| M001 | missing `model.tmdl` / `tables/` folder (truncated exports, bad merges) | error | — |
-| M002 | unreadable files, null bytes, unpaired ```` ``` ```` fences, missing table declarations | error | — |
-| M003 | duplicate `lineageTag` values — the deployment target rejects the model | error | yes |
+| M001 | missing `model.tmdl` / `tables/` folder (truncated exports, bad merges) | error | no |
+| M002 | unreadable files, null bytes, unpaired ```` ``` ```` fences, missing table declarations | error | no |
+| M003 | duplicate `lineageTag` values; the deployment target rejects the model | error | yes |
 | M004 | placeholder / non-UUID `lineageTag` values | warning | yes |
-| M005 | column `dataType` values the tabular engine does not accept | warning | — |
-| D001 | unbalanced `()`, `{}`, `[]`, quotes in any DAX expression | error | — |
-| D002 | `NAMEOF()` references to missing tables, columns, or measures | error | — |
-| D003 | the same measure name declared in two tables (engine requires model-wide uniqueness) | error | — |
-| R001 | relationships pointing at missing tables or columns | error | — |
-| R002 | cardinality values other than `one`/`many` | error | — |
-| R003 | two relationships over the same column pair (copy/paste or merge accident) | warning | — |
-| R004 | unreviewed `bothDirections` cross-filters (ambiguous filter paths) | info | — |
-| R005 | data tables with no relationships (load leftovers) | info | — |
+| M005 | column `dataType` values the tabular engine does not accept | warning | no |
+| M006 | a table with no `ref table` line in `model.tmdl`, so Power BI Desktop never opens the project | error | yes |
+| M007 | a table with no partition at all; Power BI Desktop crashes on open | error | no |
+| M008 | an inline `#table(type table ...)` source, which forces a composite model and blocks open | error | no |
+| M009 | a table literally named "Measures", a reserved name Power BI refuses to open | error | no |
+| D001 | unbalanced `()`, `{}`, `[]`, quotes in any DAX expression | error | no |
+| D002 | `NAMEOF()` references to missing tables, columns, or measures | error | no |
+| D003 | the same measure name declared in two tables (engine requires model-wide uniqueness) | error | no |
+| R001 | relationships pointing at missing tables or columns | error | no |
+| R002 | cardinality values other than `one`/`many` | error | no |
+| R003 | two relationships over the same column pair (copy/paste or merge accident) | warning | no |
+| R004 | unreviewed `bothDirections` cross-filters (ambiguous filter paths) | info | no |
+| R005 | data tables with no relationships (load leftovers) | info | no |
 | F001 | stray commas that make a field-parameter / calculated-table source unparseable | error | yes |
-| B001 | bookmark `howCreated`/`ComparisonKind`/`Version` stored as strings — report loader rejects them | error | yes |
-| B002 | bookmarks referencing renamed or deleted visuals | error | — |
-| S001 | visible measures without a `formatString` | info | — |
+| B001 | bookmark `howCreated`/`ComparisonKind`/`Version` stored as strings; the report loader rejects them | error | yes |
+| B002 | bookmarks referencing renamed or deleted visuals | error | no |
+| S001 | visible measures without a `formatString` | info | no |
 
-Details, scopes and severity semantics: [docs/reference/rules.md](docs/reference/rules.md).
+Details, scopes, and severity semantics: see the rule catalog in the
+[documentation](#documentation) below.
 Print the same catalog from the tool: `tmdl-preflight rules` (or `--json`).
 
 ## Selecting rules and other flags
@@ -117,9 +122,9 @@ Both `check` and `fix` take the same options:
 | `--strict` | exit nonzero on warnings as well as errors (`info` never blocks) |
 | `--json` | machine-readable report (summary, fixes, violations) |
 
-There is no config file in this release — scoping is per invocation.
-Exit codes: `0` clean, `1` violations remain, `2` usage/path error.
-Full details: [docs/reference/cli.md](docs/reference/cli.md).
+There is no config file in this release; scoping is per invocation.
+Exit codes: `0` clean, `1` violations remain, `2` usage/path error. Full
+details are in the [documentation](#documentation) below.
 
 ## In pytest
 
@@ -134,47 +139,52 @@ def test_model_is_deployable(tmdl_preflight):
 `assert_clean` takes `select=`/`ignore=` sets, `strict=True`, and
 `autofix=True` (repair, then assert on the re-check; also switchable via
 `TMDL_PREFLIGHT_AUTOFIX=1` so CI stays read-only while developers repair
-locally). `run()` returns the report without asserting. See
-[docs/how-to/run-in-pytest.md](docs/how-to/run-in-pytest.md).
+locally). `run()` returns the report without asserting. See the "run in
+pytest" how-to guide in the [documentation](#documentation) below.
 
 ## How `fix` works
 
 `fix` runs every selected rule, applies the fixers of the rules that failed,
-then drops the parse cache and runs every rule **again** from disk — the run
+then drops the parse cache and runs every rule **again** from disk; the run
 only counts as clean if the re-check is clean. A fixer never gets to vouch
 for itself: only repairs fully determined by the failure itself (a fresh
-UUID, a deleted orphan comma, `"2"` → `2`) earn one, and everything that
-requires human intent stays a plain failure. The full rationale:
-[the imposition pattern](docs/explanation/imposition-pattern.md).
+UUID, a deleted orphan comma, `"2"` becoming `2`) earn one, and everything
+that requires human intent stays a plain failure. The full rationale is in
+the "imposition pattern" explanation page linked below.
 
 ## Documentation
 
-The docs follow the [Diátaxis](https://diataxis.fr) framework:
+The full documentation, organized with the
+[Diátaxis](https://diataxis.fr) framework (a tutorial, how-to guides, a
+reference, and explanation pages, including the rule catalog and the
+imposition-pattern rationale mentioned above), is published on Read the Docs at
+<https://tmdl-preflight-documentation.readthedocs.io/en/latest/>.
 
-- **Tutorial** — [Getting started](docs/tutorials/getting-started.md):
-  install, check the sample model, break it, repair it. ~10 minutes.
-- **How-to guides** — [run in CI](docs/how-to/run-in-ci.md) ·
-  [run inside pytest](docs/how-to/run-in-pytest.md) ·
-  [run only the auto-fixable rules](docs/how-to/run-only-autofixable-rules.md) ·
-  [add a custom rule](docs/how-to/add-a-custom-rule.md).
-- **Reference** — [CLI](docs/reference/cli.md) (commands, flags, path
-  resolution, exit codes, JSON schema) ·
-  [rule catalog](docs/reference/rules.md) (every rule with scope and
-  severity).
-- **Release notes** — [what shipped in each version](RELEASE-NOTES.md).
-- **Explanation** — [one guide per pitfall](docs/explanation/README.md):
-  what it costs, how the rule detects it, and why the auto-fix (where one
-  exists) is safe — plus the design pieces on the
-  [imposition pattern](docs/explanation/imposition-pattern.md) and the
-  [layered test model](docs/explanation/layered-testing.md).
+Release notes for each version are in [RELEASE-NOTES.md](RELEASE-NOTES.md).
+
+## Part of a small family of Power BI tools
+
+tmdl-preflight is the validator a few related, independently installable
+tools build on; a team adopts whichever ones it needs, not all of them.
+
+- [`pbip-model-forge`](https://github.com/C-Kapsalis/pbip-model-forge):
+  builds a sample Power BI model from a plain-language description, and
+  gates every build on this tool.
+- [`tmdl-drift-doctor`](https://github.com/C-Kapsalis/tmdl-drift-doctor):
+  keeps many derived models in sync with one shared template.
+- [`pbi-plot-styler`](https://github.com/C-Kapsalis/pbi-plot-styler): keeps
+  report visuals on-brand as measures are added.
+- [`BI-report-template-site`](https://github.com/C-Kapsalis/BI-report-template-site):
+  not a tool, a documentation paradigm demonstrating what Diátaxis-style
+  documentation looks like applied to a Power BI report.
 
 ## Contributing
 
 Run the suite with `pip install -e ".[test]" && pytest`. New rules follow
-the recipe in [How to add a custom rule](docs/how-to/add-a-custom-rule.md);
-test them like the built-ins in `tests/test_rules_*.py` — copy the clean
-fixture, break exactly one thing, assert the violation, and (for fixers)
-assert that fix → re-check comes back clean and idempotent.
+the recipe in [CONTRIBUTING.md](CONTRIBUTING.md); test them like the
+built-ins in `tests/test_rules_*.py`: copy the clean fixture, break exactly
+one thing, assert the violation, and, for fixers, assert that fix then
+re-check comes back clean and idempotent.
 
 ## License
 
