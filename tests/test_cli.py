@@ -139,4 +139,7 @@ class TestRulesCommand:
         assert fixable == {
             "M003", "M004", "M006", "M011", "M013", "F001", "F002", "F003", "B001", "B003"
         }
+        # the original fields are unchanged; new ones are additive
         assert {"id", "name", "severity", "fixable", "description"} <= set(payload[0])
+        never = {r["id"] for r in payload if not r["baselinable"]}
+        assert never == {"M003", "M006", "M007", "M010", "M015", "R006"}

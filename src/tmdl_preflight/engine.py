@@ -12,14 +12,50 @@ mode the engine
 
 The run only counts as clean if the *re-check* is clean. A fixer that did
 not actually resolve its violation class leaves the violation on the
-report — auto-repair never gets to vouch for itself.
+report: auto-repair never gets to vouch for itself.
+
+``apply_policy`` then applies a project configuration (severity overrides,
+excluded paths, exemptions) to a report; baselines are applied by
+``baseline.apply_baseline``. Both only ever remove or re-grade violations
+the rules actually found; neither can add one.
 """
 
 from __future__ import annotations
 
+import datetime as _dt
+import json
 from dataclasses import dataclass, field
+from typing import Any, Optional
 
 from .rules.base import Context, RuleSet, Severity, Violation
+
+
+def scan_summary(ctx: Context) -> dict[str, int]:
+    """How much of the project a run actually looked at."""
+    models = ctx.models
+    tables = [t for m in models for t in m.table_list]
+    bookmarks = pages = visuals = 0
+    for report_dir in ctx.report_dirs:
+        bookmarks += sum(1 for _ in report_dir.rglob("*.bookmark.json"))
+        pages += sum(1 for _ in report_dir.rglob("page.json"))
+        visuals += sum(1 for _ in report_dir.rglob("visual.json"))
+    return {
+        "models": len(models),
+        "tables": len(tables),
+        "columns": sum(len(t.column_list) for t in tables),
+        "measures": sum(len(t.measure_list) for t in tables),
+        "relationships": sum(
+            len(m.relationships) + len(m.malformed_relationships) for m in models
+        ),
+        "dax_blocks": sum(sum(1 for _ in m.dax_blocks()) for m in models),
+        "calculation_groups": sum(1 for t in tables if t.is_calculation_group),
+        "expressions": sum(len(m.expressions) for m in models),
+        "tmdl_files": sum(len(m.tmdl_files) for m in models),
+        "reports": len(ctx.report_dirs),
+        "pages": pages,
+        "visuals": visuals,
+        "bookmarks": bookmarks,
+    }
 
 
 @dataclass
@@ -27,6 +63,13 @@ class PreflightReport:
     violations: list[Violation] = field(default_factory=list)
     fixes_applied: list[str] = field(default_factory=list)
     fixed_rule_ids: list[str] = field(default_factory=list)
+    scanned: dict[str, int] = field(default_factory=dict)
+    # filled by apply_policy / the baseline step; empty for a plain run
+    excluded: list[Violation] = field(default_factory=list)
+    exempted: list[Violation] = field(default_factory=list)
+    expired_exemptions: list[Any] = field(default_factory=list)
+    unused_exemptions: list[Any] = field(default_factory=list)
+    baseline: Optional[Any] = None  # baseline.BaselineResult
 
     def by_severity(self, severity: Severity) -> list[Violation]:
         return [v for v in self.violations if v.severity == severity]
@@ -51,16 +94,32 @@ class PreflightReport:
         return 0
 
     def to_dict(self) -> dict:
-        return {
+        payload: dict[str, Any] = {
             "summary": {
                 "errors": len(self.errors),
                 "warnings": len(self.warnings),
                 "infos": len(self.infos),
                 "fixes_applied": len(self.fixes_applied),
+                "excluded": len(self.excluded),
+                "exempted": len(self.exempted),
+                "baselined": len(self.baseline.suppressed) if self.baseline else 0,
             },
             "fixes": self.fixes_applied,
             "violations": [v.to_dict() for v in self.violations],
+            "scanned": self.scanned,
         }
+        if self.exempted or self.expired_exemptions or self.unused_exemptions:
+            payload["exemptions"] = {
+                "applied": len(self.exempted),
+                "expired": [e.to_dict() for e in self.expired_exemptions],
+                "unused": [e.to_dict() for e in self.unused_exemptions],
+            }
+        if self.baseline is not None:
+            payload["baseline"] = self.baseline.to_dict()
+        return payload
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), indent=2)
 
 
 def check(ctx: Context, ruleset: RuleSet) -> PreflightReport:
@@ -68,6 +127,7 @@ def check(ctx: Context, ruleset: RuleSet) -> PreflightReport:
     report = PreflightReport()
     for rule in ruleset.rules:
         report.violations.extend(rule.check(ctx))
+    report.scanned = scan_summary(ctx)
     return report
 
 
@@ -76,7 +136,7 @@ def fix(ctx: Context, ruleset: RuleSet) -> PreflightReport:
 
     The returned report carries the *post-fix* violations plus a log of
     every applied fix. Violations of fixable rules that survive the re-check
-    mean the fixer could not (safely) resolve them — they require a human.
+    mean the fixer could not (safely) resolve them; they require a human.
     """
     first = check(ctx, ruleset)
     report = PreflightReport()
@@ -95,4 +155,47 @@ def fix(ctx: Context, ruleset: RuleSet) -> PreflightReport:
 
     second = check(ctx, ruleset)
     report.violations = second.violations
+    report.scanned = second.scanned
+    return report
+
+
+def apply_policy(report: PreflightReport, config, today: Optional[_dt.date] = None) -> PreflightReport:
+    """Apply a ``config.Config`` to a report, in place.
+
+    Order: severity overrides, then path excludes, then exemptions. An
+    exemption past its ``until`` date no longer applies, so its violation
+    is reported again and the exemption is listed as expired.
+    """
+    from .config import glob_match  # local import: config imports rules
+
+    today = today or _dt.date.today()
+    for v in report.violations:
+        override = config.severity_overrides.get(v.rule_id)
+        if override is not None:
+            v.severity = override
+    if config.exclude:
+        kept = []
+        for v in report.violations:
+            if v.path and any(glob_match(p, v.path) for p in config.exclude):
+                report.excluded.append(v)
+            else:
+                kept.append(v)
+        report.violations = kept
+    active = []
+    for ex in config.exemptions:
+        if ex.expired(today):
+            report.expired_exemptions.append(ex)
+        else:
+            active.append(ex)
+    used: set[int] = set()
+    kept = []
+    for v in report.violations:
+        match = next((ex for ex in active if ex.matches(v)), None)
+        if match is None:
+            kept.append(v)
+        else:
+            used.add(id(match))
+            report.exempted.append(v)
+    report.violations = kept
+    report.unused_exemptions = [ex for ex in active if id(ex) not in used]
     return report
