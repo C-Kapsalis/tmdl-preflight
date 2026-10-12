@@ -1,0 +1,56 @@
+# Example GitHub Actions workflow for tmdl-preflight.
+#
+# Copy this file to .github/workflows/tmdl-preflight.yml in the repository
+# that holds your PBIP project. It is not active here.
+#
+# CI checks; developers fix. The job runs the read-only `check`, uploads the
+# findings as SARIF so they appear as code-scanning alerts on the pull
+# request, and fails on errors (add --strict to fail on warnings too).
+
+name: tmdl-preflight
+
+on:
+  pull_request:
+    paths:
+      - "**/*.SemanticModel/**"
+      - "**/*.Report/**"
+      - ".tmdl-preflight.*"
+      - "pyproject.toml"
+
+permissions:
+  contents: read
+  security-events: write  # only needed for the SARIF upload
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tmdl-preflight
+        run: pip install "tmdl-preflight @ git+https://github.com/c-kapsalis/tmdl-preflight@v1.1.0"
+
+      # Inline annotations on the pull request diff.
+      - name: Check (annotations)
+        run: tmdl-preflight check . --format github
+
+      # The same findings as a code-scanning report. Runs even when the
+      # check above failed, so the alerts are always uploaded.
+      - name: Check (SARIF)
+        if: always()
+        run: tmdl-preflight check . --format sarif > tmdl-preflight.sarif || true
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: tmdl-preflight.sarif
+          category: tmdl-preflight
+
+      # With a baseline committed (tmdl-preflight baseline .), fail only on
+      # new violations instead:
+      # - run: tmdl-preflight check . --baseline .tmdl-preflight-baseline.json

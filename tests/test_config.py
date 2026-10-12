@@ -218,3 +218,11 @@ class TestCliWithConfig:
         main(["check", str(project), "--json", "--select", "S002"])
         assert json.loads(capsys.readouterr().out)["summary"]["infos"] == 0
 
+
+@needs_toml
+def test_shipped_example_config_is_valid():
+    from pathlib import Path
+
+    example = Path(__file__).parent.parent / "examples" / "ci" / "tmdl-preflight.toml"
+    cfg = load_config(default_ruleset(), explicit=example, profile="ci")
+    assert cfg.strict and cfg.ignore == ["S002"] and cfg.exemptions

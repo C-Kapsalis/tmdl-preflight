@@ -1,0 +1,30 @@
+# pre-commit hook definitions for tmdl-preflight.
+#
+# Use from a project's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/c-kapsalis/tmdl-preflight
+#       rev: v1.1.0
+#       hooks:
+#         - id: tmdl-preflight
+#
+# The hook checks the whole project (not only the staged files): a TMDL
+# defect is often caused by one file and reported in another.
+
+- id: tmdl-preflight
+  name: tmdl-preflight check
+  description: Preflight checks for Power BI TMDL / PBIP models (read-only).
+  entry: tmdl-preflight check
+  args: ["."]
+  language: python
+  pass_filenames: false
+  files: '\.(tmdl|pbir|pbism|json)$'
+
+- id: tmdl-preflight-fix
+  name: tmdl-preflight fix
+  description: Apply the mechanical tmdl-preflight auto-fixes, then re-check.
+  entry: tmdl-preflight fix
+  args: ["."]
+  language: python
+  pass_filenames: false
+  files: '\.(tmdl|pbir|pbism|json)$'

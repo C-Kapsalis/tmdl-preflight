@@ -1,0 +1,7 @@
+# Example .pre-commit-config.yaml for a repository that holds a PBIP project.
+repos:
+  - repo: https://github.com/c-kapsalis/tmdl-preflight
+    rev: v1.1.0
+    hooks:
+      - id: tmdl-preflight
+        # args: [".", "--strict"]   # also block on warnings

@@ -1,0 +1,27 @@
+# Example .tmdl-preflight.toml (Python 3.11+; use .tmdl-preflight.json with
+# the same keys on Python 3.10). Every key is optional and validated: an
+# unknown key or rule id is an error, not a silent no-op.
+
+# Rules to skip everywhere (ids or names).
+ignore = ["S002"]
+
+# Grade a rule differently for this project.
+[severity_overrides]
+R007 = "error"   # autodetected relationships must be reviewed here
+
+# Per-rule options.
+[rules.S002]
+min_length = 20
+placeholder_words = ["todo", "tbd", "fixme"]
+
+# Documented exceptions. "reason" is required; after "until" the violation
+# is reported again.
+[[exemptions]]
+rule = "R004"
+object = "relationship 1f6f2b3a"
+reason = "bidirectional on purpose: product slicers filter stores"
+until = "2026-12-31"
+
+# Profiles are merged over the base settings with --profile NAME.
+[profiles.ci]
+strict = true
