@@ -1,0 +1,31 @@
+table 'x-Selector 1'
+	lineageTag: 52933519-d48e-57e7-8a53-5dc5550ce99d
+
+	column 'x-Selector 1'
+		dataType: string
+		lineageTag: 17e8657a-6d68-5f79-b1aa-2d8690d63bda
+		summarizeBy: none
+		sourceColumn: x-Selector 1
+		sortByColumn: 'x-Selector 1 Order'
+
+	column 'x-Selector 1 Fields'
+		dataType: string
+		lineageTag: 6a51d3fc-e88a-5309-b251-9d39f60a6145
+		summarizeBy: none
+		sourceColumn: x-Selector 1 Fields
+
+	column 'x-Selector 1 Order'
+		dataType: int64
+		lineageTag: ec0a5439-a761-52f9-b1da-1c3ffcaad331
+		summarizeBy: none
+		sourceColumn: x-Selector 1 Order
+
+	partition 'x-Selector 1' = calculated
+		mode: import
+		source =
+				{
+				    ("Model", NAMEOF('Bikes'[Model]), 0),
+				    -- ("Old", NAMEOF([Gone Measure]), 1),
+				    ("Revenue", NAMEOF([Revenue]), 2)
+				}
+

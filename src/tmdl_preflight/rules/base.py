@@ -212,6 +212,11 @@ class Rule:
     def __init__(self) -> None:
         self.options: dict[str, Any] = dict(self.option_defaults)
 
+    def disabled_by_policy(self) -> bool:
+        """True when a policy option turned this rule off for the run; the
+        engine then lists it under ``skipped`` instead of running it."""
+        return False
+
     def configure(self, options: dict[str, Any]) -> None:
         """Apply per-rule options (already validated by the config loader)."""
         self.options.update(options)

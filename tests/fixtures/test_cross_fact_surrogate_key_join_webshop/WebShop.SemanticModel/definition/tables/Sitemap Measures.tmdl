@@ -1,0 +1,14 @@
+table 'Sitemap Measures'
+	lineageTag: 73764e1c-3624-53f8-9c4a-e2ffc63428bc
+
+	measure 'Sitemap Pages #' = DISTINCTCOUNT('Sitemap'[landing_page_x_id])
+		formatString: #,0
+		lineageTag: ec5edf87-da71-5769-8062-4dbc2516b6fd
+
+	partition 'Sitemap Measures' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

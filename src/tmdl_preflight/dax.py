@@ -192,7 +192,9 @@ def _unterminated_regions(text: str, tags: str) -> list[str]:
             region = text[i:j]
             # a closed string ends with a quote that is not part of an escape
             if not _closed(region, '"'):
-                errors.append(f"unterminated string starting at line {_line_of(text, i)}")
+                errors.append(
+                    f"unterminated string (double quote) starting at line {_line_of(text, i)}"
+                )
             i = j
         elif tag == IDENT:
             j = i
@@ -200,7 +202,8 @@ def _unterminated_regions(text: str, tags: str) -> list[str]:
                 j += 1
             if not _closed(text[i:j], "'"):
                 errors.append(
-                    f"unterminated quoted identifier starting at line {_line_of(text, i)}"
+                    f"unterminated quoted table name (single quote) starting at line "
+                    f"{_line_of(text, i)}"
                 )
             i = j
         elif tag == BRACKET:

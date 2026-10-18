@@ -185,6 +185,28 @@ def build_parser() -> argparse.ArgumentParser:
     p_refs.add_argument("--tighten", action="store_true",
                         help="lower the floors in FILE to today's counts (never raises)")
 
+    p_report = sub.add_parser("report", help="read-only reports (complexity, nameof, relationships)")
+    p_report.add_argument("kind", choices=("complexity", "nameof", "relationships"),
+                          help="which report")
+    p_report.add_argument("path", help=path_help)
+    p_report.add_argument("--json", action="store_true", help="machine-readable output")
+    p_report.add_argument("--top", type=int, default=10, help="complexity: longest N measures")
+    p_report.add_argument("--group-prefix", action="append", metavar="PREFIX",
+                          help="nameof: table-name prefix to group by (repeatable)")
+
+    p_fmt = sub.add_parser("format-resolve",
+                           help="resolve the format a measure name gets from a format "
+                                "calculation group")
+    p_fmt.add_argument("path", help=path_help)
+    p_fmt.add_argument("--name", required=True, help="the measure name (SELECTEDMEASURENAME)")
+    p_fmt.add_argument("--table", default="z-Selector Format",
+                       help="the calculation-group table (default: z-Selector Format)")
+    p_fmt.add_argument("--axis", help="a field-parameter table in scope (default: every axis "
+                                      "the group branches on, plus none)")
+    p_fmt.add_argument("--label", help="the label the field parameter shows (default: the name)")
+    p_fmt.add_argument("--compare", metavar="NAME2", help="resolve a second name on the same axes")
+    p_fmt.add_argument("--json", action="store_true", help="machine-readable output")
+
     p_rules = sub.add_parser("rules", help="list the rule catalog")
     p_rules.add_argument("--json", action="store_true", help="machine-readable output")
     p_rules.add_argument("--format", choices=("text", "json", "markdown"), default=None,
@@ -416,6 +438,66 @@ def _cmd_rules_markdown(args) -> int:
     return 0
 
 
+def _cmd_report(args) -> int:
+    from . import nameof, reports
+
+    ctx = _context(args.path)
+    models = ctx.models
+    if not models:
+        raise UsageError("report needs a semantic model; no *.SemanticModel found")
+    if args.kind == "complexity":
+        data = reports.complexity(models, top=args.top)
+        text = reports.render_complexity
+    elif args.kind == "nameof":
+        data = nameof.build_report(models[0], args.group_prefix)
+        for extra in models[1:]:
+            other = nameof.build_report(extra, args.group_prefix)
+            data["broken"] += other["broken"]
+            for k, v in other["statistics"].items():
+                data["statistics"][k] += v
+        text = nameof.render_report
+    else:
+        data = reports.relationships(models[0])
+        text = reports.render_relationships
+    print(json.dumps(data, indent=2) if args.json else text(data))
+    return 0
+
+
+def _cmd_format_resolve(args) -> int:
+    from .format_resolver import UNKNOWN, branched_axes, decimals, resolve
+
+    ctx = _context(args.path)
+    table = next((t for m in ctx.models for t in m.table_list if t.name == args.table), None)
+    if table is None:
+        raise UsageError(f"no table '{args.table}' in {args.path}")
+    text = table.file.read_text(encoding="utf-8-sig")
+    axes = [args.axis] if args.axis else [None, *branched_axes(text)]
+    rows = []
+    for axis in axes:
+        fmt, unresolved = resolve(table.file, args.name, axis=axis, label=args.label)
+        row = {"axis": axis, "format": fmt, "decimals": decimals(fmt), "unresolved": unresolved}
+        if args.compare:
+            other, _u = resolve(table.file, args.compare, axis=axis)
+            row["compare_format"] = other
+            row["compare_decimals"] = decimals(other)
+            row["decimals_differ"] = decimals(other) != decimals(fmt)
+        rows.append(row)
+    if args.json:
+        print(json.dumps({"name": args.name, "compare": args.compare, "results": rows}, indent=2))
+        return 0
+    for row in rows:
+        where = row["axis"] or "(measure name)"
+        line = f"{where}: {row['format'] if row['format'] != UNKNOWN else '<unknown>'}"
+        if args.compare:
+            line += f"   {args.compare}: {row['compare_format']}"
+            if row["decimals_differ"]:
+                line += "   (decimals differ)"
+        print(line)
+        for u in row["unresolved"]:
+            print(f"    unresolved: {u}")
+    return 0
+
+
 def _cmd_stats(args) -> int:
     ctx = _context(args.path)
     stats = collect_stats(ctx)
@@ -504,7 +586,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 0
 
     handlers = {"check": _cmd_check, "fix": _cmd_check, "baseline": _cmd_baseline,
-                "stats": _cmd_stats, "comment-refs": _cmd_comment_refs}
+                "stats": _cmd_stats, "comment-refs": _cmd_comment_refs,
+                "report": _cmd_report, "format-resolve": _cmd_format_resolve}
     handler = handlers.get(args.command)
     if handler is None:
         parser.print_help()

@@ -1,0 +1,34 @@
+table Sales
+	lineageTag: f74eb7ea-21c9-577a-bad8-750bce857201
+
+	column sale_id
+		dataType: int64
+		lineageTag: f64e4846-5532-5e29-81ff-6798118ff820
+		summarizeBy: none
+		sourceColumn: sale_id
+
+	column bike_id
+		dataType: int64
+		lineageTag: 53ae20a7-6d7b-5f70-b624-86ee8d103f26
+		summarizeBy: none
+		sourceColumn: bike_id
+
+	column Amount
+		dataType: decimal
+		lineageTag: d780d320-2ee3-5536-b795-bb07053332ba
+		summarizeBy: none
+		sourceColumn: Amount
+
+	column Date
+		dataType: dateTime
+		lineageTag: 764011cf-2e1c-5fc3-9ebb-7f513cdc54e2
+		summarizeBy: none
+		sourceColumn: Date
+
+	partition Sales = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

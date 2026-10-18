@@ -1,0 +1,9 @@
+table 'z-Selector Format'
+	calculationGroup
+		calculationItem Format = selectedmeasure()
+
+			formatStringDefinition =
+				SWITCH(TRUE(),
+				    CONTAINSSTRING(SELECTEDMEASURENAME(), "/ "), "#,##0 €",
+				    CONTAINSSTRING(SELECTEDMEASURENAME(), "cost/"), "#,##0.00 €",
+				    "General")

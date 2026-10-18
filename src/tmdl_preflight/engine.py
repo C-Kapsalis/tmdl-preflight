@@ -144,7 +144,7 @@ def check(ctx: Context, ruleset: RuleSet) -> PreflightReport:
     report = PreflightReport()
     ctx.notes = []
     for rule in ruleset.rules:
-        if getattr(rule, "disabled_by_policy", lambda: False)():
+        if rule.disabled_by_policy():
             report.skipped.append(rule.name)
             continue
         report.violations.extend(rule.check(ctx))

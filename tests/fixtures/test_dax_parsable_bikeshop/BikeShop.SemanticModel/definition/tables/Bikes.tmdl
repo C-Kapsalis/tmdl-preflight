@@ -1,0 +1,40 @@
+table Bikes
+	lineageTag: a83723ca-c0a1-5191-afae-6bb0aa776624
+
+	column bike_id
+		dataType: int64
+		lineageTag: 3e8caa44-63bd-51f9-9f11-547993005d68
+		summarizeBy: none
+		sourceColumn: bike_id
+
+	column Model
+		dataType: string
+		lineageTag: 273af1ce-1711-5e60-b830-c071dc0fd9f8
+		summarizeBy: none
+		sourceColumn: Model
+
+	column Price
+		dataType: decimal
+		lineageTag: abc4ca6c-08b8-56d8-b8e2-be068c28f1cc
+		summarizeBy: none
+		sourceColumn: Price
+
+	column 'Sort Key'
+		dataType: int64
+		lineageTag: 5f9814d1-e2c5-589d-b9b8-d9334c0a42f3
+		summarizeBy: none
+		sourceColumn: Sort Key
+
+	column 'Price Band' =
+			IF(Bikes[Price] > 1000, "Premium", "Standard")
+		dataType: string
+		lineageTag: 4346bad6-3123-5a67-9102-61150a419f59
+		summarizeBy: none
+
+	partition Bikes = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

@@ -78,7 +78,7 @@ class TestNameofResolution:
             encoding="utf-8",
         )
         violations = NameofResolutionRule().check(Context(project))
-        assert any("no column or measure named" in v.message for v in violations)
+        assert any("not found in table" in v.message for v in violations)
 
     def test_qualified_measure_reference_is_clean(self, project, definition):
         # Power BI Desktop itself writes NAMEOF('Table'[Measure]) when adding
@@ -198,13 +198,19 @@ class TestDaxReferenceResolution:
         violations = DaxReferenceResolutionRule().check(Context(project))
         assert len(violations) == 1 and "'Sales'[qty]" in violations[0].message
 
-    def test_case_insensitive_resolution(self, project, definition, replace_in):
+    def test_case_mismatch_resolves_but_is_an_error(self, project, definition, replace_in):
+        # DAX resolves names case-insensitively, so nothing is "missing"; a
+        # spelling that differs from the declaration is still reported, as an
+        # error, by project decision (casing mismatches are errors).
         replace_in(
             _measures(definition),
             "measure 'Units Sold' = SUM(Sales[quantity])",
             "measure 'Units Sold' = SUM('SALES'[Quantity]) + [revenue]",
         )
-        assert DaxReferenceResolutionRule().check(Context(project)) == []
+        found = DaxReferenceResolutionRule().check(Context(project))
+        assert len(found) == 3
+        assert all("casing mismatch" in v.message and v.severity == Severity.ERROR for v in found)
+        assert not any("does not exist" in v.message for v in found)
 
     def test_unresolved_bare_reference_is_warning(self, project, definition, replace_in):
         _add_measure(definition, replace_in, "measure Ratio = DIVIDE([Revenue], [Old Measure])")

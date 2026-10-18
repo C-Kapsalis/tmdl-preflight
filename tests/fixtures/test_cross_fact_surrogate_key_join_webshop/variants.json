@@ -1,0 +1,44 @@
+{
+  "keepfilters_in_values": [
+    {
+      "file": "WebShop.SemanticModel/definition/tables/Sitemap Measures.tmdl",
+      "old": "\tmeasure 'Sitemap Pages #' = DISTINCTCOUNT('Sitemap'[landing_page_x_id])\n",
+      "new": "\tmeasure 'Sitemap Pages #' =\n\t\t\tCALCULATE(\n\t\t\t    DISTINCTCOUNT('Sitemap'[landing_page_x_id]),\n\t\t\t    KEEPFILTERS(Sitemap[landing_page_x_id] IN VALUES('Queries Organic'[landing_page_x_id])))\n"
+    }
+  ],
+  "in_calculatetable_values": [
+    {
+      "file": "WebShop.SemanticModel/definition/tables/Sitemap Measures.tmdl",
+      "old": "\tmeasure 'Sitemap Pages #' = DISTINCTCOUNT('Sitemap'[landing_page_x_id])\n",
+      "new": "\tmeasure 'Sitemap Pages #' =\n\t\t\tCALCULATE(\n\t\t\t    DISTINCTCOUNT('Sitemap'[landing_page_x_id]),\n\t\t\t    KEEPFILTERS('Sitemap'[landing_page_x_id] IN CALCULATETABLE(VALUES('Queries Organic'[landing_page_x_id]), 'Queries Organic')))\n"
+    }
+  ],
+  "same_table_case_insensitive": [
+    {
+      "file": "WebShop.SemanticModel/definition/tables/Sitemap Measures.tmdl",
+      "old": "\tmeasure 'Sitemap Pages #' = DISTINCTCOUNT('Sitemap'[landing_page_x_id])\n",
+      "new": "\tmeasure 'Sitemap Pages #' =\n\t\t\tCALCULATE(\n\t\t\t    DISTINCTCOUNT('Sitemap'[landing_page_x_id]),\n\t\t\t    KEEPFILTERS('Sitemap'[landing_page_x_id] IN VALUES('sitemap'[landing_page_x_id])))\n"
+    }
+  ],
+  "commented_out": [
+    {
+      "file": "WebShop.SemanticModel/definition/tables/Sitemap Measures.tmdl",
+      "old": "\tmeasure 'Sitemap Pages #' = DISTINCTCOUNT('Sitemap'[landing_page_x_id])\n",
+      "new": "\tmeasure 'Sitemap Pages #' =\n\t\t\t/* old form:\n\t\t\t    KEEPFILTERS(Sitemap[landing_page_x_id] IN VALUES('Queries Organic'[landing_page_x_id]))\n\t\t\t*/\n\t\t\t// KEEPFILTERS(Sitemap[landing_page_x_id] IN VALUES('Queries Organic'[landing_page_x_id]))\n\t\t\tDISTINCTCOUNT('Sitemap'[landing_page_x_id])\n"
+    }
+  ],
+  "unlisted_key": [
+    {
+      "file": "WebShop.SemanticModel/definition/tables/Sitemap Measures.tmdl",
+      "old": "\tmeasure 'Sitemap Pages #' = DISTINCTCOUNT('Sitemap'[landing_page_x_id])\n",
+      "new": "\tmeasure 'Sitemap Pages #' =\n\t\t\tCALCULATE(\n\t\t\t    DISTINCTCOUNT('Sitemap'[url]),\n\t\t\t    KEEPFILTERS('Sitemap'[account_x_id] IN VALUES('Queries Organic'[account_x_id])))\n"
+    }
+  ],
+  "url_set_algebra": [
+    {
+      "file": "WebShop.SemanticModel/definition/tables/Sitemap Measures.tmdl",
+      "old": "\tmeasure 'Sitemap Pages #' = DISTINCTCOUNT('Sitemap'[landing_page_x_id])\n",
+      "new": "\tmeasure 'Sitemap Pages #' =\n\t\t\tVAR SitemapUrls =\n\t\t\t    CALCULATETABLE(VALUES('_Landing Pages'[Landing Page]), 'Sitemap')\n\t\t\tVAR QueryUrls =\n\t\t\t    CALCULATETABLE(VALUES('_Landing Pages'[Landing Page]), 'Queries Organic')\n\t\t\tRETURN\n\t\t\t    COUNTROWS(INTERSECT(SitemapUrls, QueryUrls))\n"
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "fsd_orphan_fragment": [
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/z-Selector Format.tmdl",
+      "old": "\"#\"), \"#,##0\",",
+      "new": "\"#\"), \"#,##0\"), \"0.00\","
+    }
+  ],
+  "bracket_broken": [
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/Shop Measures.tmdl",
+      "old": "AVERAGE(Bikes[Price])",
+      "new": "SUM(Bikes[Price)"
+    }
+  ],
+  "one_unmatched_paren": [
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/Shop Measures.tmdl",
+      "old": "SUM(Sales[Amount])",
+      "new": "SUM(Sales[Amount]"
+    }
+  ],
+  "dup_var_twice": [
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/Shop Measures.tmdl",
+      "old": "\t\t\tVAR total = [Revenue]\n\t\t\tVAR cnt = [Sales #]\n\t\t\tRETURN\n\t\t\t    DIVIDE(total, cnt)\n",
+      "new": "\t\t\tVAR total = [Revenue]\n\t\t\tVAR cnt = [Sales #]\n\t\t\tVAR total = [Revenue] * 1\n\t\t\tRETURN\n\t\t\t    DIVIDE(total, cnt)\n"
+    }
+  ],
+  "dup_var_in_branches": [
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/Shop Measures.tmdl",
+      "old": "\t\t\tVAR total = [Revenue]\n\t\t\tVAR cnt = [Sales #]\n\t\t\tRETURN\n\t\t\t    DIVIDE(total, cnt)\n",
+      "new": "\t\t\tIF([Sales #] > 0,\n\t\t\t    VAR t = [Revenue] RETURN t,\n\t\t\t    VAR t = 0 RETURN t)\n"
+    }
+  ],
+  "dup_var_thrice": [
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/Shop Measures.tmdl",
+      "old": "\t\t\tVAR total = [Revenue]\n\t\t\tVAR cnt = [Sales #]\n\t\t\tRETURN\n\t\t\t    DIVIDE(total, cnt)\n",
+      "new": "\t\t\tVAR total = [Revenue]\n\t\t\tVAR total = [Revenue] * 1\n\t\t\tVAR total = [Revenue] * 2\n\t\t\tRETURN\n\t\t\t    total\n"
+    }
+  ],
+  "only_m_partitions": [
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/z-Selector Format.tmdl",
+      "delete": true
+    },
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/x-Selector 1.tmdl",
+      "delete": true
+    }
+  ],
+  "dangling_table_measure": [
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/Shop Measures.tmdl",
+      "old": "\tpartition 'Shop Measures' = m\n",
+      "new": "\tmeasure 'Fleet Value' = SUM('Rentals'[Fee])\n\t\tformatString: #,0\n\t\tlineageTag: 691b2bc2-4a0f-578b-a48c-93546a77f686\n\n\tpartition 'Shop Measures' = m\n"
+    }
+  ],
+  "dangling_enumeration_line": [
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/Shop Measures.tmdl",
+      "old": "\tpartition 'Shop Measures' = m\n",
+      "new": "\tmeasure 'Any Filter' =\n\t\t\tIF(\n\t\t\t    ISFILTERED('Bikes') || ISINSCOPE('Bikes'[Model]) ||\n\t\t\t    ISFILTERED('Rentals') || ISINSCOPE('Rentals'[Fee]) ||\n\t\t\t    ISFILTERED('__Calendar'),\n\t\t\t    1, 0)\n\t\tformatString: #,0\n\t\tlineageTag: 9c4f3283-677f-5971-9f28-b92c6563c693\n\n\tpartition 'Shop Measures' = m\n"
+    }
+  ],
+  "escaped_quote_table": [
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/Ride 'Since' Bucket.tmdl",
+      "write": "table 'Ride ''Since'' Bucket'\n\tlineageTag: d620524a-6872-5a61-b076-f1deeaf740b7\n\n\tcolumn 'Ride ''Since'' Field'\n\t\tdataType: string\n\t\tlineageTag: 20e05c68-ac6d-55c5-9972-f02d7a9e6f30\n\t\tsummarizeBy: none\n\t\tsourceColumn: Ride 'Since' Field\n\n\tpartition 'Ride ''Since'' Bucket' = m\n\t\tmode: import\n\t\tsource =\n\t\t\t\tlet\n\t\t\t\t    Source = #table({}, {})\n\t\t\t\tin\n\t\t\t\t    Source\n"
+    },
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/Shop Measures.tmdl",
+      "old": "\tpartition 'Shop Measures' = m\n",
+      "new": "\tmeasure 'Since Count' = DISTINCTCOUNT('Ride ''Since'' Bucket'[Ride 'Since' Field])\n\t\tformatString: #,0\n\t\tlineageTag: b9934472-3817-5d64-9653-f9a28ff77fba\n\n\tpartition 'Shop Measures' = m\n"
+    }
+  ],
+  "leaked_sort_by_line": [
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/Bikes.tmdl",
+      "old": "\t\tdataType: string\n\t\tlineageTag: 4346bad6-3123-5a67-9102-61150a419f59",
+      "new": "\t\tsortByColumn: 'Sort Key'\n\t\tdataType: string\n\t\tlineageTag: 4346bad6-3123-5a67-9102-61150a419f59"
+    }
+  ],
+  "reference_casing": [
+    {
+      "file": "BikeShop.SemanticModel/definition/tables/Shop Measures.tmdl",
+      "old": "\tpartition 'Shop Measures' = m\n",
+      "new": "\tmeasure 'Lower Revenue' = SUM(sales[Amount])\n\t\tformatString: #,0\n\t\tlineageTag: f6e97f75-e0ce-5211-a743-06f7c8b5a487\n\n\tpartition 'Shop Measures' = m\n"
+    }
+  ]
+}

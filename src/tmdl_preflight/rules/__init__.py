@@ -10,6 +10,11 @@ from .dax_rules import (
     DuplicateVariableRule,
     NameofResolutionRule,
 )
+from .dax_patterns import (
+    CalcDaxBlocksPresentRule,
+    CalcItemBlindAverageRule,
+    CrossFactMultirowKeyJoinRule,
+)
 from .field_parameters import (
     FieldParameterCategoryColumnRule,
     FieldParameterCommaRunsRule,
@@ -18,12 +23,19 @@ from .field_parameters import (
     TrailingRowCommaRule,
 )
 from .comments import CommentTicketRefsRule
+from .contract_patterns import (
+    GuardedRatioWrapperRule,
+    MeasureArmScopedFilterRule,
+    MeasureReferenceContractRule,
+    TypedFlagPredicatesRule,
+)
 from .contracts import (
     FieldParamRegistrationContractRule,
     ModelContractObjectsRule,
     ModelContractRelationshipsRule,
     RequiredModelObjectsRule,
 )
+from .formats import FormatMinDecimalsRule
 from .hygiene import (
     ModelAnnotationDuplicatesRule,
     SpaceIndentationRule,
@@ -100,6 +112,9 @@ ALL_RULES: list[type[Rule]] = [
     DuplicateMeasureNamesRule,
     DaxReferenceResolutionRule,
     DuplicateVariableRule,
+    CalcDaxBlocksPresentRule,
+    CalcItemBlindAverageRule,
+    CrossFactMultirowKeyJoinRule,
     RelationshipEndpointsRule,
     RelationshipCardinalityRule,
     DuplicateRelationshipsRule,
@@ -132,6 +147,11 @@ ALL_RULES: list[type[Rule]] = [
     ModelContractObjectsRule,
     ModelContractRelationshipsRule,
     FieldParamRegistrationContractRule,
+    MeasureReferenceContractRule,
+    GuardedRatioWrapperRule,
+    TypedFlagPredicatesRule,
+    MeasureArmScopedFilterRule,
+    FormatMinDecimalsRule,
 ]
 
 

@@ -44,10 +44,18 @@ the example model with one defect each. Where that evidence and the
 | O005 | measures-in-dimension-tables (opt-in) | info | no |
 | O006 | empty-measure-tables (opt-in) | info | no |
 | O007 | dead-fact-tables (opt-in) | error | no |
+| D010 | calc-dax-blocks-present (opt-in) | warning | no |
+| D011 | calc-item-blind-average | error | no |
+| X001 | cross-fact-multirow-key-join | error | no |
+| C005 | measure-reference-contract | error | no |
+| C006 | guarded-ratio-wrapper | error | no |
+| C007 | typed-flag-predicates | error | no |
+| C008 | measure-arm-scoped-filter | error | no |
+| S005 | format-min-decimals | error | no |
 
 Rules that encode one team's conventions are **opt-in**: they run only when
 named in `--select` or in the configuration's `select` (`rules` marks them).
-Contract rules (C001-C004, R008, F005) read their contracts from the
+Contract rules (C001-C008, R008, F005, S005, X001) read their contracts from the
 configuration (`contracts` section or rule options) and report nothing
 until configured.
 
@@ -77,8 +85,25 @@ until configured.
   the end of the file too; blank lines before a run are never touched. New
   option `fix_mode = "attach"` deletes the blank lines between a
   description and its object instead, keeping the documentation.
+- **D001** messages name the delimiter kind ("double quote", "single
+  quote", "bracket", "parenthesis", "brace"). New option `min_success_rate`
+  (default 0.90): when fewer measure and calculated-column expressions are
+  clean, one extra error says so (each unbalanced expression stays an error
+  whatever the share). A model with tables but no measures gets a warning.
+- **D002** is rebuilt on the new `tmdl_preflight.nameof` module: quoted
+  members (`Sales['Amount']`), double-quoted tables and dotted table names
+  are accepted; an unparseable NAMEOF in a field-parameter row is an error;
+  a table-qualified measure outside a field parameter is a warning ("use
+  the bare form"); new option `excluded_tables`. Every unresolved-reference
+  message contains "not found".
+- **Casing mismatches are errors** (project decision): D002 and D004 report
+  a table, column or measure spelled with different casing from its
+  declaration as an error, although DAX itself resolves it.
 - **D004** reports an unqualified `[X]` that names a measure declared in two
-  or more tables as an ambiguous reference (warning).
+  or more tables as an ambiguous reference (warning), ignores TMDL property
+  lines that leaked into an expression (M010 reports those), and gains a
+  fixer marked unsafe: selected explicitly, it deletes whole generated
+  `ISFILTERED('<missing table>') || ...` lines and nothing else.
 - **NAMEOF** extraction ignores a malformed reference whose quoted table
   name contains a double quote.
 - Names declared with trailing spaces inside quotes (`'Frame Size   '`) are
@@ -100,6 +125,13 @@ until configured.
 - `fix --clear-cache` deletes `<Model>.SemanticModel/.pbi/cache.abf` after
   lineage tags changed; without it the tool prints a hint when the cache
   exists.
+- `report complexity|nameof|relationships <path> [--json]`: read-only
+  reports (measure length distribution and threshold suggestions, NAMEOF
+  inventory, relationship topology).
+- `format-resolve <path> --name NAME [--axis T] [--label L] [--compare N2]`
+  resolves the format a name gets from a format calculation group; the same
+  evaluator backs S005. Python API: `tmdl_preflight.format_resolver`
+  (`resolve`, `decimals`, `UNKNOWN`).
 - `stats --measures` summarises how measures are organised (name classes,
   helper kinds, field-parameter surfacing, top tables, described helpers).
 - `comment-refs <path> [--list] [--json] [--floors FILE] [--tighten]`
@@ -144,6 +176,14 @@ the stricter of test and rule wins; DESKTOP: Power BI Desktop evidence).
 - BUGFIX: `test_naming_conventions::TestHelperMeasuresFollowConventions`
   counts 2 described dash helpers where the original printed 1 (its index
   dropped the description of a measure that directly follows another).
+- STRICTER (DECISIONS 5): `test_dax_table_references::test_dax_references_resolve[reference_casing-*]`
+  now fail: `sales[Amount]` against table `Sales` resolves in DAX, but casing
+  mismatches are D004 errors (the original verdict was pass).
+- STRICTER: `test_dax_parsable::test_dax_comprehensive_syntax_check[one_unmatched_paren]`
+  asserts the D001 error even though the clean share (90.9%) meets the
+  threshold (the original passed).
+- Existing test updated: `test_rules_dax::test_case_mismatch_resolves_but_is_an_error`
+  (was `test_case_insensitive_resolution`) expects three casing errors.
 - Existing tests updated for the severity changes above: M011 is an error
   and its fixer targets the first property slot; M013 at end of file is an
   error and keeps blank lines before the run; the M002 fence message

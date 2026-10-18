@@ -14,7 +14,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 
 ## Features
 
-- **56 rules** over the failure modes that reject imports or silently corrupt
+- **64 rules** over the failure modes that reject imports or silently corrupt
   results: duplicate lineage tags and object names, TMDL properties leaked
   into DAX, dangling `///` descriptions, tables with no partition, inline
   `#table` entity sources that force a composite model, DAX references to
@@ -25,7 +25,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
   opt-in, and project contracts (required objects, pinned relationships,
   field-parameter registrations) are declared in the configuration. The
   full catalog is generated into [`docs/rules.md`](docs/rules.md).
-- **11 auto-fixers** for the defects whose repair is fully mechanical,
+- **12 auto-fixers** for the defects whose repair is fully mechanical,
   applied via a check → fix → re-check loop that never lets a fixer vouch
   for itself.
 - **Surgical, verified edits.** Fixers rewrite single lines or single JSON
@@ -130,11 +130,18 @@ commit.
 | C002 | a declared object contract broke: a table, column or measure is gone, a key changed type, a DAX shape changed | error | no |
 | C003 | a declared relationship contract broke: an unsanctioned axis edge, a guard that no longer matches the graph, a pinned edge changed | error | no |
 | C004 | a declared field-parameter registration broke: a missing label, an ordinal outside its gap, a duplicate ordinal | error | no |
-| D001 | unbalanced `()`, `{}`, `[]`, quotes in any DAX expression | error | no |
-| D002 | `NAMEOF()` references to missing tables, columns, or measures | error | no |
+| C005 | a declared measure-reference contract broke (a helper names a table it must not, a consumer skips its partner helper, a ratio divides a raw measure) | error | no |
+| C006 | a cost ratio over a re-allocated count is not wrapped in its window guard, or the guard/boundary drifted (configured) | error | no |
+| C007 | a count flag compared with `= 1` or a boolean, or a boolean flag compared with a number (configured) | error | no |
+| C008 | a filter that must stay on one arm of a blended measure moved, spread or changed literals (configured) | error | no |
+| D001 | unbalanced `()`, `{}`, `[]`, quotes in any DAX expression; a clean share under `min_success_rate`; a model with no measures (warning) | error | no |
+| D002 | `NAMEOF()` references to missing tables, columns or measures, unparseable field-parameter rows, names spelled with other casing | error | no |
 | D003 | the same measure name declared in two tables (engine requires model-wide uniqueness, case-insensitive) | error | no |
-| D004 | DAX references to tables or qualified columns that do not exist (error); unresolved bare `[X]` (warning) | error | no |
+| D004 | DAX references to tables or qualified columns that do not exist, or spelled with other casing (error); unresolved or ambiguous bare `[X]` (warning) | error | yes (unsafe: only when selected; removes generated `ISFILTERED('<missing table>') \|\|` lines) |
 | D005 | the same `VAR` declared twice in one scope | error | no |
+| D010 | no calculated-table, calculation-item or format-string DAX at all (opt-in sanity floor) | warning | no |
+| D011 | a "Daily" calculation item that averages ratios per day | error | no |
+| X001 | two facts compared on a surrogate key whose dimension has several rows per entity (configured keys) | error | no |
 | R001 | relationships pointing at missing tables or columns, or missing an endpoint | error | no |
 | R002 | cardinality values other than `one`/`many` | error | no |
 | R003 | two relationships over the same column pair (copy/paste or merge accident) | warning | no |
@@ -156,6 +163,7 @@ commit.
 | S002 | visible measures without a real `///` description | info | no |
 | S003 | a visible measure whose name gives a format-picking calculation group nothing to go on (opt-in) | info | no |
 | S004 | ticket numbers (`#365`) in model comments above the recorded floor (opt-in ratchet) | error | no |
+| S005 | a measure that resolves to too few decimals through the format calculation group (configured expectations) | error | no |
 | O001 | a helper measure in a user-only (`#`) table (opt-in) | warning | no |
 | O002 | a helper measure in the wrong table for its kind (opt-in; `profile = "lenient"` for infos) | warning | no |
 | O003 | a user-facing measure parked in a dimension or helper table (opt-in) | warning | no |
@@ -247,6 +255,14 @@ numbers worth watching in a pull request. `stats --measures` adds how the
 measures are organised: user-facing vs helper names, helper kinds, which
 measures a field parameter surfaces, the busiest tables, and how many
 dash-prefixed helpers carry a description.
+
+`tmdl-preflight report complexity|nameof|relationships <path>` prints the
+measure-length distribution with threshold suggestions, the NAMEOF inventory
+(with the broken references and per-table counts), or the relationship
+topology (cardinalities, both-direction filters, hubs, unrelated tables).
+`tmdl-preflight format-resolve <path> --name NAME [--compare NAME2]` shows
+the format a measure name gets from a format calculation group on every
+axis the group branches on, before a rename ships.
 
 `tmdl-preflight comment-refs <path>` counts ticket references (`#365`) in
 comments per model; `--floors FILE --tighten` lowers a ratchet file to

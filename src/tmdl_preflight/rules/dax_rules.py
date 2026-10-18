@@ -8,7 +8,6 @@ import re
 from ..dax import (
     DAX_KEYWORDS,
     check_balanced_delimiters,
-    extract_nameof_references,
     extract_references,
     find_outer_scope_duplicate_vars,
     string_literals,
@@ -21,18 +20,29 @@ class DaxDelimiterBalanceRule(Rule):
     id = "D001"
     name = "dax-delimiters"
     severity = Severity.ERROR
+    option_defaults = {"min_success_rate": 0.90}
     description = (
         "Every DAX expression in the model (measures, calculated columns, "
         "calculated-partition sources, calculation items, dynamic format "
         "strings) must have balanced parentheses, braces, brackets and "
-        "quotes, with comments and string contents excluded."
+        "quotes, with comments and string contents excluded. Each unbalanced "
+        "expression is an error. The share of clean measure and "
+        "calculated-column expressions is reported; below min_success_rate "
+        "(default 0.90) one extra error says so. A model with tables but no "
+        "measures gets a warning (usually a parsing or layout problem)."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
+        threshold = float(self.options.get("min_success_rate", 0.90))
         for model in ctx.models:
+            counted = clean = 0
             for block in model.dax_blocks():
-                for err in check_balanced_delimiters(block.expression):
+                errors = check_balanced_delimiters(block.expression)
+                if block.kind in ("measure", "calculated_column") and block.expression.strip():
+                    counted += 1
+                    clean += 0 if errors else 1
+                for err in errors:
                     out.append(
                         self.violation(
                             f"{err} in {block.kind} expression; the expression "
@@ -43,6 +53,26 @@ class DaxDelimiterBalanceRule(Rule):
                             obj=block.label,
                         )
                     )
+            share = clean / counted if counted else 1.0
+            key = ctx.model_key(model)
+            if clean < counted:
+                ctx.notes.append(
+                    f"D001: {key}: {clean} of {counted} measure/calculated-column "
+                    f"expressions are balanced ({share:.1%})"
+                )
+            if share < threshold:
+                out.append(self.violation(
+                    f"parse success rate below threshold: {share:.1%} of measure and "
+                    f"calculated-column expressions are balanced, under the configured "
+                    f"{threshold:.0%}.",
+                    file=model.definition_path, obj=key,
+                ))
+            if model.table_list and not any(True for _ in model.all_measures()):
+                out.append(self.violation(
+                    "no measures found; check the model was parsed (a layout or "
+                    "indentation problem can hide every measure).",
+                    file=model.definition_path, obj=key, severity=Severity.WARNING,
+                ))
         return out
 
 
@@ -50,82 +80,43 @@ class NameofResolutionRule(Rule):
     id = "D002"
     name = "nameof-resolution"
     severity = Severity.ERROR
+    option_defaults = {"excluded_tables": []}
     description = (
         "Every NAMEOF() reference must resolve: NAMEOF('Table'[Member]) to a "
         "column or measure on that table, NAMEOF([Measure]) to an existing, "
         "unambiguous measure. Field parameters are built from NAMEOF tuples, "
-        "so a broken reference silently invalidates the whole parameter table."
+        "so a broken reference invalidates the whole parameter table. An "
+        "unparseable NAMEOF in a field-parameter row and a name that only "
+        "matches with different casing are errors too; a table-qualified "
+        "measure outside a field parameter and an ambiguous bare measure are "
+        "warnings. Commented-out rows are never checked. 'excluded_tables' "
+        "lists tables a reference must not point at."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
+        from ..nameof import NameofResolver
+
         out: list[Violation] = []
         for model in ctx.models:
-            for block in model.dax_blocks():
-                for table, member, rel_line in extract_nameof_references(block.expression):
-                    line = block.first_line + rel_line - 1
-                    if table is None:
-                        matches = model.find_measures_ci(member)
-                        if not matches:
-                            out.append(
-                                self.violation(
-                                    f"NAMEOF([{member}]) does not resolve: the "
-                                    f"model has no measure named '{member}'. "
-                                    f"The measure was probably renamed or "
-                                    f"removed; update or remove this reference, "
-                                    f"because a broken NAMEOF invalidates the "
-                                    f"whole expression it feeds.",
-                                    file=block.file,
-                                    line=line,
-                                    obj=block.label,
-                                )
-                            )
-                        elif len(matches) > 1:
-                            tables = sorted(m.table for m in matches)
-                            out.append(
-                                self.violation(
-                                    f"NAMEOF([{member}]) is ambiguous: a measure "
-                                    f"named '{member}' is declared in more than "
-                                    f"one table ({tables}). Resolve the "
-                                    f"duplicate measure names (rule D003 reports "
-                                    f"them) so the reference has a single target.",
-                                    file=block.file,
-                                    line=line,
-                                    obj=block.label,
-                                    severity=Severity.WARNING,
-                                )
-                            )
-                        continue
-
-                    t = model.find_table(table)
-                    if t is None:
-                        out.append(
-                            self.violation(
-                                f"NAMEOF('{table}'[{member}]) does not resolve: "
-                                f"the model has no table named '{table}'. The "
-                                f"table was probably renamed or removed; update "
-                                f"this reference to the current table name.",
-                                file=block.file,
-                                line=line,
-                                obj=block.label,
-                            )
-                        )
-                        continue
-                    if t.find_column(member) or t.find_measure(member):
-                        # Fully-qualified references to measures are valid DAX;
-                        # Power BI Desktop itself writes NAMEOF('T'[Measure])
-                        # when building field parameters.
-                        continue
-                    out.append(
-                        self.violation(
-                            f"NAMEOF('{table}'[{member}]) does not resolve: "
-                            f"table '{table}' has no column or measure named "
-                            f"'{member}'. The field was probably renamed or "
-                            f"removed; update this reference to the current name.",
-                            file=block.file,
-                            line=line,
-                            obj=block.label,
-                        )
-                    )
+            resolver = NameofResolver(model, self.options.get("excluded_tables") or [])
+            refs = resolver.find_all_nameof_references(measures_only=False)
+            for broken in resolver.validate_references(refs):
+                ref = broken.reference
+                label = f"{ref.source_table}[{ref.source_measure}] ({ref.source_kind})"
+                call = f"NAMEOF({ref.raw_argument.strip()})"
+                if broken.casing:
+                    hint = "Spell the name exactly as it is declared."
+                elif broken.severity == Severity.ERROR:
+                    hint = ("The target was probably renamed or removed; update or park the "
+                            "reference, because a broken NAMEOF invalidates the whole "
+                            "expression it feeds.")
+                else:
+                    hint = ""
+                out.append(self.violation(
+                    f"{call}: {broken.reason}. {hint}".strip(),
+                    file=ref.file, line=ref.line_number or None, obj=label,
+                    severity=broken.severity,
+                ))
         return out
 
 
@@ -180,49 +171,73 @@ def _is_virtual(name: str) -> bool:
     return name.startswith(_VIRTUAL_TABLE_PREFIXES)
 
 
+_PROPERTY_LINE_RE = re.compile(
+    r"^\s*(?:annotation|changedProperty|dataType|description|displayFolder|formatString|"
+    r"isHidden|lineageTag|sortByColumn|summarizeBy)\b"
+)
+_ENUMERATION_LINE_RE = re.compile(r"^\s*ISFILTERED\(\s*'(?P<table>(?:[^']|'')+)'\s*\)\s*\|\|.*$")
+
+
+def _drop_property_lines(expr: str) -> str:
+    """Blank expression lines that are really TMDL property lines (a merge
+    accident M010 reports); they never hold references."""
+    return "\n".join("" if _PROPERTY_LINE_RE.match(ln) else ln for ln in expr.split("\n"))
+
+
 class DaxReferenceResolutionRule(Rule):
     id = "D004"
     name = "dax-reference-resolution"
     severity = Severity.ERROR
-    option_defaults = {"check_bare_references": True}
+    fixable = True
+    safe = False
+    option_defaults = {"check_bare_references": True, "fix_enumeration_lines": True}
     description = (
         "Every table and column a DAX expression names must exist: 'T'[c], "
         "T[c] and a bare 'T' must resolve to a table (and a column or "
-        "measure on it), case-insensitively. TMDL import does not check DAX "
-        "names, so a renamed or deleted table imports cleanly and then fails "
-        "on every visual that evaluates it ('Cannot find table'). A missing "
-        "table or qualified column is an error. An unqualified [X] that "
-        "matches no measure, no column and no name the expression itself "
-        "introduces (ADDCOLUMNS, SELECTCOLUMNS, SUMMARIZECOLUMNS and similar "
-        "name new columns with string literals) is a warning. Auto date/time "
-        "tables (DateTableTemplate_*, LocalDateTable_*) are always legal."
+        "measure on it). TMDL import does not check DAX names, so a renamed "
+        "or deleted table imports cleanly and then fails on every visual that "
+        "evaluates it ('Cannot find table'). A missing table or qualified "
+        "column is an error, and so is a name spelled with different casing "
+        "from its declaration. An unqualified [X] that matches no measure, no "
+        "column and no name the expression itself introduces is a warning, "
+        "as is one that names a measure declared in several tables. Auto "
+        "date/time tables are always legal. The fixer (unsafe: it runs only "
+        "when D004 is selected explicitly) deletes whole generated "
+        "'ISFILTERED('<missing table>') || ...' lines and nothing else."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         check_bare = bool(self.options.get("check_bare_references", True))
         for model in ctx.models:
+            measures_exact = {m.name for m in model.all_measures()}
+            columns_exact = {c.name for c in model.all_columns()}
             measure_names = {m.name.lower() for m in model.all_measures()}
             measure_tables: dict[str, set] = {}
             for m in model.all_measures():
                 measure_tables.setdefault(m.name.lower(), set()).add(m.table)
             column_names = {c.name.lower() for c in model.all_columns()}
             for block in model.dax_blocks():
-                expr = block.expression
+                expr = _drop_property_lines(block.expression)
                 refs = extract_references(expr)
                 if not refs:
                     continue
                 variables = variable_names(expr)
-                introduced = {s.lower() for s in string_literals(expr)}
+                introduced = {x.lower() for x in string_literals(expr)}
                 seen: set[tuple] = set()
+
+                def report(key, message, line, severity=None):
+                    if key in seen:
+                        return
+                    seen.add(key)
+                    out.append(self.violation(message, file=block.file, line=line,
+                                              obj=block.label, severity=severity))
+
                 for ref in refs:
                     line = block.first_line + ref.line - 1
                     if ref.kind == "bare" and ref.prev_word:
                         word = ref.prev_word
-                        if (
-                            word.upper() not in DAX_KEYWORDS
-                            and model.find_table(word) is not None
-                        ):
+                        if word.upper() not in DAX_KEYWORDS and model.find_table(word) is not None:
                             ref.kind, ref.table = "column", word
                     if ref.kind in ("table", "column"):
                         name = ref.table or ""
@@ -230,100 +245,119 @@ class DaxReferenceResolutionRule(Rule):
                             continue
                         table = model.find_table(name)
                         if table is None:
-                            key = ("table", name.lower())
-                            if key in seen:
-                                continue
-                            seen.add(key)
-                            out.append(
-                                self.violation(
-                                    f"DAX references table '{name}', which does "
-                                    f"not exist in the model. The table was "
-                                    f"probably renamed or removed; the model "
-                                    f"still imports, but every visual that "
-                                    f"evaluates this expression fails. Update "
-                                    f"the reference or restore the table.",
-                                    file=block.file,
-                                    line=line,
-                                    obj=block.label,
-                                )
-                            )
+                            report(("table", name.lower()),
+                                   f"DAX references table '{name}', which does not exist in "
+                                   f"the model. The table was probably renamed or removed; the "
+                                   f"model still imports, but every visual that evaluates this "
+                                   f"expression fails. Update the reference or restore the table.",
+                                   line)
                             continue
+                        if table.name != name:
+                            report(("table-case", name),
+                                   f"casing mismatch: DAX writes table '{name}' but it is "
+                                   f"declared as '{table.name}'. Spell the name exactly as "
+                                   f"declared.", line)
                         if ref.kind == "table":
                             continue
                         member = ref.member or ""
-                        if table.find_column(member) or table.find_measure(member):
+                        target = table.find_column(member) or table.find_measure(member)
+                        if target is not None:
+                            if target.name != member:
+                                report(("member-case", table.name.lower(), member),
+                                       f"casing mismatch: DAX writes '{table.name}'[{member}] "
+                                       f"but it is declared as [{target.name}]. Spell the name "
+                                       f"exactly as declared.", line)
                             continue
                         if not table.column_list and any(
                             p.kind == "calculated" for p in table.partitions
                         ):
                             continue  # calculated table without declared columns
-                        key = ("column", name.lower(), member.lower())
-                        if key in seen:
-                            continue
-                        seen.add(key)
-                        out.append(
-                            self.violation(
-                                f"DAX references '{table.name}'[{member}], but "
-                                f"table '{table.name}' has no column or measure "
-                                f"named '{member}'. The field was probably "
-                                f"renamed or removed; update the reference to "
-                                f"the current name.",
-                                file=block.file,
-                                line=line,
-                                obj=block.label,
-                            )
-                        )
+                        report(("column", name.lower(), member.lower()),
+                               f"DAX references '{table.name}'[{member}], but table "
+                               f"'{table.name}' has no column or measure named '{member}'. "
+                               f"The field was probably renamed or removed; update the "
+                               f"reference to the current name.", line)
                         continue
                     # bare [X]
                     if not check_bare:
                         continue
-                    low = (ref.member or "").lower()
+                    member = ref.member or ""
+                    low = member.lower()
+                    if low in variables or low in introduced:
+                        continue
                     homes = measure_tables.get(low, set())
-                    if len(homes) > 1 and low not in variables and low not in introduced:
-                        key = ("ambiguous", low)
-                        if key not in seen:
-                            seen.add(key)
-                            out.append(
-                                self.violation(
-                                    f"[{ref.member}] is ambiguous: a measure with "
-                                    f"that name is declared in {len(homes)} tables "
-                                    f"({', '.join(sorted(homes))}). Rename the "
-                                    f"duplicates (D003 reports them) so the "
-                                    f"reference has one target.",
-                                    file=block.file,
-                                    line=line,
-                                    obj=block.label,
-                                    severity=Severity.WARNING,
-                                )
-                            )
+                    if len(homes) > 1:
+                        report(("ambiguous", low),
+                               f"[{member}] is ambiguous: a measure with that name is "
+                               f"declared in {len(homes)} tables ({', '.join(sorted(homes))}). "
+                               f"Rename the duplicates (D003 reports them) so the reference "
+                               f"has one target.", line, Severity.WARNING)
                         continue
-                    if (
-                        low in measure_names
-                        or low in column_names
-                        or low in introduced
-                        or low in variables
-                        or _IMPLICIT_COLUMN_RE.match(low)
-                    ):
+                    if low in measure_names and member not in measures_exact and \
+                            member not in columns_exact and low not in column_names:
+                        actual = next(m.name for m in model.all_measures() if m.name.lower() == low)
+                        report(("bare-case", member),
+                               f"casing mismatch: DAX writes [{member}] but the measure is "
+                               f"declared as [{actual}]. Spell the name exactly as declared.",
+                               line)
                         continue
-                    key = ("bare", low)
-                    if key in seen:
+                    if low in measure_names or low in column_names or _IMPLICIT_COLUMN_RE.match(low):
                         continue
-                    seen.add(key)
-                    out.append(
-                        self.violation(
-                            f"[{ref.member}] matches no measure, no column and "
-                            f"no column this expression introduces. It was "
-                            f"probably renamed or removed; update the "
-                            f"reference. If it names a column created inside "
-                            f"the expression in a way the checker cannot "
-                            f"follow, ignore this warning.",
-                            file=block.file,
-                            line=line,
-                            obj=block.label,
-                            severity=Severity.WARNING,
-                        )
-                    )
+                    report(("bare", low),
+                           f"[{member}] matches no measure, no column and no column this "
+                           f"expression introduces. It was probably renamed or removed; "
+                           f"update the reference. If it names a column created inside the "
+                           f"expression in a way the checker cannot follow, ignore this "
+                           f"warning.", line, Severity.WARNING)
         return out
+
+    def _missing_tables(self, ctx: Context) -> set[str]:
+        prefix = "DAX references table '"
+        names = set()
+        for v in self.check(ctx):
+            if v.message.startswith(prefix):
+                names.add(v.message[len(prefix):].split("'", 1)[0])
+        return names
+
+    def fix(self, ctx: Context) -> list[str]:
+        from ..edits import EditRefused, read_text_file, verified_write
+
+        if not self.options.get("fix_enumeration_lines", True):
+            return []
+        missing = self._missing_tables(ctx)
+        if not missing:
+            return []
+        applied: list[str] = []
+        for model in ctx.models:
+            for f in sorted((model.definition_path / "tables").glob("*.tmdl")):
+                try:
+                    original = read_text_file(f)
+                except (OSError, UnicodeDecodeError):
+                    continue
+                lines = original.lines()
+                kept, dropped = [], []
+                for ln in lines:
+                    m = _ENUMERATION_LINE_RE.match(ln)
+                    if m and m.group("table").replace("''", "'") in missing:
+                        dropped.append(ln)
+                    else:
+                        kept.append(ln)
+                if not dropped:
+                    continue
+
+                def verify(old: str, new: str, _n=len(dropped)) -> None:
+                    if len(old.split(original.newline)) - len(new.split(original.newline)) != _n:
+                        raise EditRefused("enumeration-line repair changed more than whole lines")
+
+                try:
+                    if verified_write(original, original.join(kept), verify):
+                        applied.append(
+                            f"{f.name}: removed {len(dropped)} generated ISFILTERED line(s) "
+                            f"naming a missing table"
+                        )
+                except EditRefused:
+                    continue
+        return applied
 
 
 class DuplicateVariableRule(Rule):

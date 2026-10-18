@@ -1,0 +1,28 @@
+table 'Queries Organic'
+	lineageTag: 912fcf20-9833-591f-be97-c834c57c58af
+
+	column landing_page_x_id
+		dataType: int64
+		lineageTag: 54102e5a-173a-55af-b3b3-0855c36cb4ad
+		summarizeBy: none
+		sourceColumn: landing_page_x_id
+
+	column account_x_id
+		dataType: int64
+		lineageTag: c3ff3f58-2704-565e-a1d1-78f009c99b98
+		summarizeBy: none
+		sourceColumn: account_x_id
+
+	column clicks
+		dataType: int64
+		lineageTag: b5523152-9755-5cb7-8cc1-eb814e3bdd63
+		summarizeBy: none
+		sourceColumn: clicks
+
+	partition 'Queries Organic' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

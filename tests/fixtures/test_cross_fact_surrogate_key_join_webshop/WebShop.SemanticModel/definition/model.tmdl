@@ -1,0 +1,7 @@
+model Model
+	culture: en-US
+
+ref table Sitemap
+ref table 'Queries Organic'
+ref table '_Landing Pages'
+ref table 'Sitemap Measures'
