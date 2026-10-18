@@ -134,8 +134,8 @@ class MeasureReferenceContractRule(Rule):
             t = model.get_table(table)
             if t is None:
                 return []
-            raw = c.get("raw", "")
-            glob = c.get("measure_glob", "*")
+            raw = c.get("raw", c.get("raw_measure", ""))
+            glob = c.get("measure_glob", c.get("measures", "*"))
             pattern = re.compile(r"(?<!\^)DIVIDE\s*\(\s*\[" + re.escape(raw) + r"\]", re.IGNORECASE)
             return [
                 self.violation(

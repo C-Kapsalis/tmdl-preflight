@@ -1,0 +1,13 @@
+table 'z-Selector Period'
+	lineageTag: 771bcecf-f520-5c51-8214-ca6a49ec620e
+
+	column Period
+		dataType: string
+		lineageTag: efda3676-d61d-5444-891d-bb204d606d75
+		summarizeBy: none
+		sourceColumn: Period
+
+	partition 'z-Selector Period' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

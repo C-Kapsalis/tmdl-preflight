@@ -12,17 +12,26 @@ class RelationshipEndpointsRule(Rule):
     id = "R001"
     name = "relationship-endpoints"
     severity = Severity.ERROR
+    option_defaults = {"min_endpoint_success_rate": 0.95}
     description = (
         "Both endpoints of every relationship must exist: the from/to tables "
-        "must be declared, and the referenced columns must exist on them "
-        "(names compare case-insensitively). A relationship whose fromColumn "
-        "or toColumn is missing or unreadable is reported too, never dropped."
+        "must be declared, and the referenced columns must exist on them. "
+        "Names resolve case-insensitively, as Power BI does, but an endpoint "
+        "spelled with different casing from its declaration is reported as "
+        "an error too. A relationship whose fromColumn or toColumn is missing "
+        "or unreadable is reported, never dropped. When the share of "
+        "relationships with valid endpoints falls under "
+        "min_endpoint_success_rate (default 0.95) the report notes it; the "
+        "broken endpoints are errors whatever the share."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
+        threshold = float(self.options.get("min_endpoint_success_rate", 0.95))
         for model in ctx.models:
+            broken_ids: set[int] = set()
             for rel in model.malformed_relationships:
+                broken_ids.add(id(rel))
                 missing = [
                     side
                     for side, table, column in (
@@ -47,31 +56,47 @@ class RelationshipEndpointsRule(Rule):
                     ("from", rel.from_table, rel.from_column),
                     ("to", rel.to_table, rel.to_column),
                 ):
+                    obj = f"relationship {rel.rel_id[:8]}"
                     t = model.find_table(table)
                     if t is None:
-                        out.append(
-                            self.violation(
-                                f"{side}-table '{table}' does not exist in the "
-                                f"model, so this relationship cannot deploy. The "
-                                f"table was probably renamed or removed; update "
-                                f"the relationship or restore the table.",
-                                file=rel.file,
-                                line=rel.line,
-                                obj=f"relationship {rel.rel_id[:8]}",
-                            )
-                        )
-                    elif t.find_column(column) is None:
-                        out.append(
-                            self.violation(
-                                f"{side}-column '{table}'[{column}] does not "
-                                f"exist, so this relationship cannot deploy. The "
-                                f"column was probably renamed or removed; update "
-                                f"the relationship or restore the column.",
-                                file=rel.file,
-                                line=rel.line,
-                                obj=f"relationship {rel.rel_id[:8]}",
-                            )
-                        )
+                        broken_ids.add(id(rel))
+                        out.append(self.violation(
+                            f"{side}-table '{table}' does not exist in the model (table "
+                            f"not found), so this relationship cannot deploy. The table "
+                            f"was probably renamed or removed; update the relationship "
+                            f"or restore the table.",
+                            file=rel.file, line=rel.line, obj=obj,
+                        ))
+                        continue
+                    col = t.find_column(column)
+                    if col is None:
+                        broken_ids.add(id(rel))
+                        out.append(self.violation(
+                            f"{side}-column '{table}'[{column}] does not exist (column "
+                            f"not found), so this relationship cannot deploy. The column "
+                            f"was probably renamed or removed; update the relationship "
+                            f"or restore the column.",
+                            file=rel.file, line=rel.line, obj=obj,
+                        ))
+                        continue
+                    if t.name != table or col.name != column:
+                        out.append(self.violation(
+                            f"casing mismatch: the relationship names '{table}'[{column}], "
+                            f"the column is declared '{t.name}'[{col.name}]. Use the "
+                            f"declared spelling.",
+                            file=rel.file, line=rel.line, obj=obj,
+                        ))
+            total = len(model.relationships) + len(model.malformed_relationships)
+            if total:
+                rate = (total - len(broken_ids)) / total
+                if rate < threshold:
+                    # every broken endpoint is already an error, so the rate is
+                    # reported as a note and never adds a finding of its own
+                    ctx.notes.append(
+                        f"R001: {ctx.model_key(model)}: endpoint success rate {rate:.1%} is "
+                        f"below the configured {threshold:.0%} ({len(broken_ids)} of {total} "
+                        f"relationship(s) have a broken endpoint)"
+                    )
         return out
 
 
@@ -263,32 +288,83 @@ class AmbiguousActivePairRule(Rule):
 class AutodetectedRelationshipsRule(Rule):
     id = "R007"
     name = "autodetected-relationships"
-    severity = Severity.WARNING
+    severity = Severity.ERROR
+    fixable = True
+    safe = False
+    option_defaults = {"fix_autodetected_relationships": False}
     description = (
-        "Relationships whose id starts with 'AutoDetected_' were created by "
-        "Power BI Desktop's relationship autodetection, not by a modeler. "
-        "They often join on columns that merely share a name. Review each "
-        "one; keep it (Desktop then keeps the id, so ignore this rule or "
-        "baseline it) or delete it and turn autodetection off."
+        "A relationship whose id contains 'autodetected' (any case) was "
+        "invented by Power BI Desktop's relationship autodetection, which "
+        "turns itself back on after Desktop updates. An active one changes "
+        "results with no DAX change and can open a second filter path; an "
+        "inactive one is indistinguishable from a deliberate one. Delete a "
+        "wrong one in Model view; adopt a right one by removing the marker "
+        "from its id. The fixer deletes the relationship blocks and runs only "
+        "when R007 is selected explicitly or fix_autodetected_relationships "
+        "is true; never in a blanket fix."
     )
+
+    def unsafe_fix_enabled(self) -> bool:
+        return bool(self.options.get("fix_autodetected_relationships"))
+
+    @staticmethod
+    def _matches(rel) -> bool:
+        return "autodetected" in rel.rel_id.lower()
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for model in ctx.models:
             for rel in model.relationships + model.malformed_relationships:
-                if rel.rel_id.startswith("AutoDetected_"):
+                if self._matches(rel):
+                    state = "active" if rel.is_active else "inactive"
                     out.append(
                         self.violation(
-                            f"relationship {rel.from_table}[{rel.from_column}] "
-                            f"-> {rel.to_table}[{rel.to_column}] was "
-                            f"autodetected by Power BI Desktop. Confirm it "
-                            f"joins the right columns, or delete it.",
+                            f"{state} relationship {rel.from_table}[{rel.from_column}] "
+                            f"-> {rel.to_table}[{rel.to_column}] was created by "
+                            f"Power BI Desktop's autodetection, not by a modeler. "
+                            f"Delete it in Model view if it is wrong; adopt it by "
+                            f"removing the autodetection marker from its id.",
                             file=rel.file,
                             line=rel.line,
                             obj=f"relationship {rel.rel_id}",
                         )
                     )
         return out
+
+    def fix(self, ctx: Context) -> list[str]:
+        from ..edits import EditRefused, read_text_file, verified_write
+
+        applied: list[str] = []
+        for model in ctx.models:
+            path = model.definition_path / "relationships.tmdl"
+            doomed = [r for r in model.relationships + model.malformed_relationships
+                      if self._matches(r)]
+            if not doomed or not path.is_file():
+                continue
+            original = read_text_file(path)
+            lines = original.lines()
+            starts = sorted(r.line - 1 for r in doomed)
+            drop: set[int] = set()
+            for start in starts:
+                end = start + 1
+                while end < len(lines) and not lines[end].startswith("relationship "):
+                    end += 1
+                drop.update(range(start, end))
+            kept = [ln for k, ln in enumerate(lines) if k not in drop]
+            text = original.join(kept).rstrip("\r\n") + original.newline if any(
+                ln.strip() for ln in kept) else ""
+
+            def verify(old: str, new: str) -> None:
+                if any("autodetected" in ln.lower() and ln.startswith("relationship ")
+                       for ln in new.split(original.newline)):
+                    raise EditRefused("an autodetected relationship survived the removal")
+
+            try:
+                if verified_write(original, text, verify):
+                    applied.extend(f"relationships.tmdl: removed relationship {r.rel_id}" for r in doomed)
+            except EditRefused:
+                continue
+        return applied
 
 
 class FactConformedDimensionJoinRule(Rule):

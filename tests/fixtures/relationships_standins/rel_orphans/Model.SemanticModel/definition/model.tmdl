@@ -1,0 +1,9 @@
+model Model
+	culture: en-US
+
+ref table Sales
+ref table _Stores
+ref table 'x-Selector 1'
+ref table 'z-Selector Period'
+ref table 'Sales Measures'
+ref table Notes

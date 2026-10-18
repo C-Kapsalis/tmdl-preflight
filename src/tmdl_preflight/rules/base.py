@@ -212,6 +212,11 @@ class Rule:
     def __init__(self) -> None:
         self.options: dict[str, Any] = dict(self.option_defaults)
 
+    def unsafe_fix_enabled(self) -> bool:
+        """True when the rule's own configuration opts its unsafe fixer into
+        a blanket fix."""
+        return False
+
     def disabled_by_policy(self) -> bool:
         """True when a policy option turned this rule off for the run; the
         engine then lists it under ``skipped`` instead of running it."""

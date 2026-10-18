@@ -19,6 +19,7 @@ the example model with one defect each. Where that evidence and the
 | M003 lineage-duplicates | error | error | Desktop refused to open the model: "Failed to add a deserialized Table object into the model ... An object with lineage-tag '...' already exists in the collection." |
 | F001 fieldparam-comma-runs | error | error, new message | Desktop opened the model, but every visual that uses the field parameter failed ("Error fetching data for this visual. Failed to move the data reader to the next row."). F002 and F003 are expected to behave the same; not observed. |
 | M011 property-after-child-block | warning | error | Stricter of the ported test and the rule. |
+| R007 autodetected-relationships | warning | error | Stricter: the ported gate was zero-tolerance. Its id match widened to "contains autodetected, any case", and it gains an unsafe fixer that deletes the relationship blocks. |
 | M013 dangling-description at end of file | warning | error | Stricter of the ported test and the rule. |
 
 ### New rules
@@ -52,6 +53,18 @@ the example model with one defect each. Where that evidence and the
 | C007 | typed-flag-predicates | error | no |
 | C008 | measure-arm-scoped-filter | error | no |
 | S005 | format-min-decimals | error | no |
+| R009 | relationships-presence (opt-in) | warning | no |
+| R010 | relationship-cycles | info | no |
+| R011 | fact-calendar-coverage | warning | no |
+| R012 | calendar-relationship-cardinality | warning | no |
+| R013 | calendar-standard-columns (opt-in) | info | no |
+| R014 | dimension-key-columns (opt-in) | info | no |
+| R015 | cohort-calendar-reach | error | no |
+| R016 | dead-anchor-calendar | error | no |
+| C009 | reach-guard-helper-consistency | error | no |
+| C010 | grain-guard-coverage | error | no |
+| C011 | grain-policy-exception | error | no |
+| D012 | dax-or-chain-depth | error | no |
 
 Rules that encode one team's conventions are **opt-in**: they run only when
 named in `--select` or in the configuration's `select` (`rules` marks them).
@@ -85,6 +98,15 @@ until configured.
   the end of the file too; blank lines before a run are never touched. New
   option `fix_mode = "attach"` deletes the blank lines between a
   description and its object instead, keeping the documentation.
+- **R001** messages say "not found"; an endpoint spelled with different
+  casing is an error; new option `min_endpoint_success_rate` (default 0.95)
+  notes a low share of valid relationships (each broken endpoint is an
+  error whatever the share, so the rate never adds a finding).
+- Policy toggles (`require_fact_link`, `require_dimension_keys`, D010's
+  `enabled`, ...) set to false skip their rule: the run lists it under
+  `skipped` and reports nothing for it.
+- A fixer marked unsafe can be opted into a blanket `fix` by its own option
+  (R007 `fix_autodetected_relationships`).
 - **D001** messages name the delimiter kind ("double quote", "single
   quote", "bracket", "parenthesis", "brace"). New option `min_success_rate`
   (default 0.90): when fewer measure and calculated-column expressions are
@@ -125,6 +147,10 @@ until configured.
 - `fix --clear-cache` deletes `<Model>.SemanticModel/.pbi/cache.abf` after
   lineage tags changed; without it the tool prints a hint when the cache
   exists.
+- `grain <path> --cost-fact T --backend-fact T ... [--permit T] [--check
+  --guard-table T --guard-measure M] [--emit-config]` derives conformed and
+  blocked dimensions from the relationship graph (USERELATIONSHIP to a
+  calendar counts) and checks a grain guard against it.
 - `report complexity|nameof|relationships <path> [--json]`: read-only
   reports (measure length distribution and threshold suggestions, NAMEOF
   inventory, relationship topology).
@@ -184,6 +210,18 @@ the stricter of test and rule wins; DESKTOP: Power BI Desktop evidence).
   threshold (the original passed).
 - Existing test updated: `test_rules_dax::test_case_mismatch_resolves_but_is_an_error`
   (was `test_case_insensitive_resolution`) expects three casing errors.
+- STRICTER/DECISIONS 5: `test_relationships::test_relationship_endpoints_exist[rel_casing-fail]`
+  expects the casing mismatch as an error that fails without `--strict`
+  (the porter expected a warning).
+- Port convention: R001's success rate is a note, not a finding (the ported
+  tests count exactly one R001 finding per broken endpoint).
+- Port convention: R010 does not report a two-table loop (a reverse pair is
+  R006's); the ported cycle test expects no finding for it.
+- Renames (DECISIONS 7): the ported files and fixtures named after the
+  employer's internal model now say `insights` (for example
+  `test_insights_mcp_feedback_contract.py`, `spinout_02_db/insights.SemanticModel`).
+- Existing tests updated: `test_rules_relationships` expects R007 as an
+  error and an R001 casing error for `sales.STORE_ID`.
 - Existing tests updated for the severity changes above: M011 is an error
   and its fixer targets the first property slot; M013 at end of file is an
   error and keeps blank lines before the run; the M002 fence message

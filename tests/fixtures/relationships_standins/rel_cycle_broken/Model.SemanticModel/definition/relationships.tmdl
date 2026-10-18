@@ -1,0 +1,12 @@
+relationship cyc-0001
+	fromColumn: Alpha.next_id
+	toColumn: Beta.id
+
+relationship cyc-0002
+	fromColumn: Beta.next_id
+	toColumn: Gamma.id
+
+relationship cyc-0003
+	isActive: false
+	fromColumn: Gamma.next_id
+	toColumn: Alpha.id

@@ -1,0 +1,13 @@
+table Notes
+	lineageTag: 04b43d25-5993-557d-a909-f019cb6f23ce
+
+	column Note
+		dataType: string
+		lineageTag: 022d667b-c854-557d-b1ff-9f49488e59e6
+		summarizeBy: none
+		sourceColumn: Note
+
+	partition Notes = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

@@ -207,6 +207,24 @@ def build_parser() -> argparse.ArgumentParser:
     p_fmt.add_argument("--compare", metavar="NAME2", help="resolve a second name on the same axes")
     p_fmt.add_argument("--json", action="store_true", help="machine-readable output")
 
+    p_grain = sub.add_parser("grain", help="derive which dimensions can filter a cost fact and "
+                                            "its backend facts; check a grain guard against it")
+    p_grain.add_argument("path", help=path_help)
+    p_grain.add_argument("--cost-fact", required=True, help="the fact the cost side reads")
+    p_grain.add_argument("--backend-fact", action="append", default=[], required=True,
+                         help="a fact of the population side (repeatable)")
+    p_grain.add_argument("--permit", action="append", default=[], metavar="TABLE",
+                         help="treat this dimension as conformed (repeatable)")
+    p_grain.add_argument("--axis-prefix", action="append", default=None, metavar="PREFIX",
+                         help="field-parameter tables whose NAMEOF rows expose columns "
+                              "(default: y-Selector and y-Plot Specific)")
+    p_grain.add_argument("--check", action="store_true", help="check the guard; exit 1 on a gap")
+    p_grain.add_argument("--guard-table", help="with --check: the table holding the guard")
+    p_grain.add_argument("--guard-measure", help="with --check: the guard measure")
+    p_grain.add_argument("--emit-config", action="store_true",
+                         help="print the blocked/permitted lists as grain-guard-coverage config")
+    p_grain.add_argument("--json", action="store_true", help="machine-readable output")
+
     p_rules = sub.add_parser("rules", help="list the rule catalog")
     p_rules.add_argument("--json", action="store_true", help="machine-readable output")
     p_rules.add_argument("--format", choices=("text", "json", "markdown"), default=None,
@@ -498,6 +516,45 @@ def _cmd_format_resolve(args) -> int:
     return 0
 
 
+def _cmd_grain(args) -> int:
+    from .rules.grain import grain_gaps, grain_verdicts
+
+    ctx = _context(args.path)
+    if not ctx.models:
+        raise UsageError("grain needs a semantic model")
+    model = ctx.models[0]
+    rows = grain_verdicts(model, args.cost_fact, args.backend_fact, args.permit, args.axis_prefix)
+    payload: dict = {"dimensions": rows}
+    code = 0
+    if args.check:
+        if not args.guard_table or not args.guard_measure:
+            raise UsageError("--check needs --guard-table and --guard-measure")
+        error, gaps = grain_gaps(model, rows, args.guard_table, args.guard_measure)
+        payload.update({"error": error, "gaps": gaps})
+        code = 1 if (error or gaps) else 0
+    if args.emit_config:
+        payload["config"] = {
+            "blocked_tables": [r["dimension"] for r in rows
+                               if r["verdict"] != "CONFORMED" and not r["dimension"].startswith("z-")],
+            "permitted_tables": [r["dimension"] for r in rows if r["verdict"] == "CONFORMED"],
+        }
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return code
+    for r in rows:
+        print(f"{r['dimension']:30s} cost={'yes' if r['reaches_cost'] else 'no':3s} "
+              f"backend={','.join(r['backend_reached']) or '-':20s} {r['verdict']:12s} "
+              f"{len(r['exposed_columns'])} exposed column(s)")
+    if args.check:
+        if payload["error"]:
+            print(f"error: {payload['error']}")
+        for g in payload["gaps"]:
+            print(f"gap: {g}")
+    if args.emit_config:
+        print(json.dumps(payload["config"], indent=2))
+    return code
+
+
 def _cmd_stats(args) -> int:
     ctx = _context(args.path)
     stats = collect_stats(ctx)
@@ -587,7 +644,8 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     handlers = {"check": _cmd_check, "fix": _cmd_check, "baseline": _cmd_baseline,
                 "stats": _cmd_stats, "comment-refs": _cmd_comment_refs,
-                "report": _cmd_report, "format-resolve": _cmd_format_resolve}
+                "report": _cmd_report, "format-resolve": _cmd_format_resolve,
+                "grain": _cmd_grain}
     handler = handlers.get(args.command)
     if handler is None:
         parser.print_help()

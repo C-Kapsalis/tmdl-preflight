@@ -1,0 +1,19 @@
+table Alpha
+	lineageTag: 189a917c-76f4-5930-ae8d-68c114b486bb
+
+	column id
+		dataType: int64
+		lineageTag: 529d1958-c20a-544e-8b3b-0073d9e6e588
+		summarizeBy: none
+		sourceColumn: id
+
+	column next_id
+		dataType: int64
+		lineageTag: 0a0bd184-4c4f-5015-b9b4-63db91d27767
+		summarizeBy: none
+		sourceColumn: next_id
+
+	partition Alpha = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

@@ -1,0 +1,7 @@
+relationship a1
+	fromColumn: Orders.store_id
+	toColumn: Stores.store_id
+
+relationship a2
+	fromColumn: Orders.region_id
+	toColumn: Stores.region_id

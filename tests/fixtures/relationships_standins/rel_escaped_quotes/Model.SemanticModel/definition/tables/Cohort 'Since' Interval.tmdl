@@ -1,0 +1,13 @@
+table 'Cohort ''Since'' Interval'
+	lineageTag: ab0fb763-e49b-562d-b0a7-2189a15791f4
+
+	column Value4
+		dataType: string
+		lineageTag: 652e75d9-7a11-5526-8468-260f7b4d8e01
+		summarizeBy: none
+		sourceColumn: Value4
+
+	partition 'Cohort ''Since'' Interval' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

@@ -36,6 +36,12 @@ from .contracts import (
     RequiredModelObjectsRule,
 )
 from .formats import FormatMinDecimalsRule
+from .grain import (
+    DaxOrChainDepthRule,
+    GrainGuardCoverageRule,
+    GrainPolicyExceptionRule,
+    ReachGuardHelperConsistencyRule,
+)
 from .hygiene import (
     ModelAnnotationDuplicatesRule,
     SpaceIndentationRule,
@@ -86,6 +92,16 @@ from .structural import (
     TmdlWellFormedRule,
 )
 from .style import FormatStringPresenceRule, MeasureDescriptionRule
+from .topology import (
+    CalendarRelationshipCardinalityRule,
+    CalendarStandardColumnsRule,
+    CohortCalendarReachRule,
+    DeadAnchorCalendarRule,
+    DimensionKeyColumnsRule,
+    FactCalendarCoverageRule,
+    RelationshipCyclesRule,
+    RelationshipsPresenceRule,
+)
 
 ALL_RULES: list[type[Rule]] = [
     ModelStructureRule,
@@ -115,6 +131,7 @@ ALL_RULES: list[type[Rule]] = [
     CalcDaxBlocksPresentRule,
     CalcItemBlindAverageRule,
     CrossFactMultirowKeyJoinRule,
+    DaxOrChainDepthRule,
     RelationshipEndpointsRule,
     RelationshipCardinalityRule,
     DuplicateRelationshipsRule,
@@ -123,6 +140,14 @@ ALL_RULES: list[type[Rule]] = [
     AmbiguousActivePairRule,
     AutodetectedRelationshipsRule,
     FactConformedDimensionJoinRule,
+    RelationshipsPresenceRule,
+    RelationshipCyclesRule,
+    FactCalendarCoverageRule,
+    CalendarRelationshipCardinalityRule,
+    CalendarStandardColumnsRule,
+    DimensionKeyColumnsRule,
+    CohortCalendarReachRule,
+    DeadAnchorCalendarRule,
     FieldParameterCommaRunsRule,
     MissingRowSeparatorRule,
     TrailingRowCommaRule,
@@ -151,6 +176,9 @@ ALL_RULES: list[type[Rule]] = [
     GuardedRatioWrapperRule,
     TypedFlagPredicatesRule,
     MeasureArmScopedFilterRule,
+    ReachGuardHelperConsistencyRule,
+    GrainGuardCoverageRule,
+    GrainPolicyExceptionRule,
     FormatMinDecimalsRule,
 ]
 

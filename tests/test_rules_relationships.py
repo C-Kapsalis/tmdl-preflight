@@ -180,9 +180,13 @@ def test_malformed_relationship_reported_by_r001(project, definition, replace_in
     assert violations[0].line == 5
 
 
-def test_endpoints_resolve_case_insensitively(project, definition, replace_in):
+def test_endpoints_resolve_case_insensitively_but_casing_is_an_error(project, definition, replace_in):
     replace_in(_rels_file(definition), "Sales.store_id", "sales.STORE_ID")
-    assert RelationshipEndpointsRule().check(Context(project)) == []
+    found = RelationshipEndpointsRule().check(Context(project))
+    # resolves (no "does not exist"), but the spelling differs: an error by
+    # project decision (casing mismatches are errors)
+    assert len(found) == 1 and "casing mismatch" in found[0].message
+    assert found[0].severity == Severity.ERROR
 
 
 class TestAmbiguousActivePair:
@@ -218,4 +222,5 @@ class TestAutodetectedRelationships:
             "relationship AutoDetected_2a7c3d4b-9d2e-4f60-8b81-2c3d4e5f6071",
         )
         violations = AutodetectedRelationshipsRule().check(Context(project))
-        assert len(violations) == 1 and violations[0].severity == Severity.WARNING
+        # an error since 1.2 (the ported suite's gate was zero-tolerance)
+        assert len(violations) == 1 and violations[0].severity == Severity.ERROR

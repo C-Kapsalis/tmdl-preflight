@@ -1,0 +1,8 @@
+relationship 6f1c2d3e-0000-4000-8000-000000000001
+	isActive: false
+	fromColumn: Orders.order_id
+	toColumn: Stores.store_id
+
+relationship 1a2b3c4d-0000-4000-8000-0000000000aa
+	fromColumn: Orders.store_id
+	toColumn: Stores.store_id

@@ -14,7 +14,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 
 ## Features
 
-- **64 rules** over the failure modes that reject imports or silently corrupt
+- **76 rules** over the failure modes that reject imports or silently corrupt
   results: duplicate lineage tags and object names, TMDL properties leaked
   into DAX, dangling `///` descriptions, tables with no partition, inline
   `#table` entity sources that force a composite model, DAX references to
@@ -25,7 +25,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
   opt-in, and project contracts (required objects, pinned relationships,
   field-parameter registrations) are declared in the configuration. The
   full catalog is generated into [`docs/rules.md`](docs/rules.md).
-- **12 auto-fixers** for the defects whose repair is fully mechanical,
+- **13 auto-fixers** for the defects whose repair is fully mechanical,
   applied via a check → fix → re-check loop that never lets a fixer vouch
   for itself.
 - **Surgical, verified edits.** Fixers rewrite single lines or single JSON
@@ -134,6 +134,9 @@ commit.
 | C006 | a cost ratio over a re-allocated count is not wrapped in its window guard, or the guard/boundary drifted (configured) | error | no |
 | C007 | a count flag compared with `= 1` or a boolean, or a boolean flag compared with a number (configured) | error | no |
 | C008 | a filter that must stay on one arm of a blended measure moved, spread or changed literals (configured) | error | no |
+| C009 | reach-guard helpers that disagree on their dimension list or key a table by the wrong column (configured) | error | no |
+| C010 | a grain guard that misses a blocked table or axis column, or blocks a conformed one (configured) | error | no |
+| C011 | a grain-policy exception that is not narrow (configured) | error | no |
 | D001 | unbalanced `()`, `{}`, `[]`, quotes in any DAX expression; a clean share under `min_success_rate`; a model with no measures (warning) | error | no |
 | D002 | `NAMEOF()` references to missing tables, columns or measures, unparseable field-parameter rows, names spelled with other casing | error | no |
 | D003 | the same measure name declared in two tables (engine requires model-wide uniqueness, case-insensitive) | error | no |
@@ -141,15 +144,24 @@ commit.
 | D005 | the same `VAR` declared twice in one scope | error | no |
 | D010 | no calculated-table, calculation-item or format-string DAX at all (opt-in sanity floor) | warning | no |
 | D011 | a "Daily" calculation item that averages ratios per day | error | no |
+| D012 | an OR chain longer than 60 terms in one VAR | error | no |
 | X001 | two facts compared on a surrogate key whose dimension has several rows per entity (configured keys) | error | no |
-| R001 | relationships pointing at missing tables or columns, or missing an endpoint | error | no |
+| R001 | relationships pointing at missing tables or columns, missing an endpoint, or spelled with other casing | error | no |
 | R002 | cardinality values other than `one`/`many` | error | no |
 | R003 | two relationships over the same column pair (copy/paste or merge accident) | warning | no |
 | R004 | unreviewed `bothDirections` cross-filters (ambiguous filter paths) | info | no |
 | R005 | data tables with no relationships (load leftovers) | info | no |
 | R006 | more than one active relationship between the same two tables | error | no |
-| R007 | relationships created by Desktop's autodetection (`AutoDetected_*` ids) | warning | no |
+| R007 | relationships created by Desktop's autodetection (id contains `autodetected`) | error | yes (unsafe: only when selected or `fix_autodetected_relationships`) |
 | R008 | a fact table with no active relationship to the conformed dimension (configured; ratchet) | error | no |
+| R009 | no `relationships.tmdl`, or one without a complete relationship (opt-in) | warning | no |
+| R010 | a cycle of three or more tables over active relationships | info | no |
+| R011 | fact tables with no relationship to the calendar (coverage under 90%) | warning | no |
+| R012 | a calendar relationship that is not many-to-one | warning | no |
+| R013 | a calendar missing Date/Year/Quarter/Month/Week/Day (opt-in) | info | no |
+| R014 | a `_` dimension with no key-like column (opt-in) | info | no |
+| R015 | a cohort calendar that does not reach a fact carrying its subject within two hops | error | no |
+| R016 | an anchor calendar (`__...Calendar`) that filters nothing | error | no |
 | F001 | stray commas in a field-parameter / calculated-table source; the model opens but its visuals fail | error | yes |
 | F002 | a missing comma between two rows of a `{ (...), (...) }` constructor | error | yes |
 | F003 | a trailing comma before the constructor's closing `}` | error | yes |
@@ -263,6 +275,12 @@ topology (cardinalities, both-direction filters, hubs, unrelated tables).
 `tmdl-preflight format-resolve <path> --name NAME [--compare NAME2]` shows
 the format a measure name gets from a format calculation group on every
 axis the group branches on, before a rename ships.
+
+`tmdl-preflight grain <path> --cost-fact T --backend-fact T ...` works out
+from the relationship graph which dimensions can filter both sides of a
+ratio (conformed, cost-only, backend-only, partial, neither); `--check
+--guard-table T --guard-measure M` confirms the guard blocks every
+non-conformed dimension, and `--emit-config` prints the lists for C010.
 
 `tmdl-preflight comment-refs <path>` counts ticket references (`#365`) in
 comments per model; `--floors FILE --tighten` lowers a ratchet file to

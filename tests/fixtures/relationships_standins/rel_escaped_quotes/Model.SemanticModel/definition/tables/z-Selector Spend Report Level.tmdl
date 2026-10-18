@@ -1,0 +1,13 @@
+table 'z-Selector Spend Report Level'
+	lineageTag: 2da969d6-eda3-5dc3-a436-aa0e3b7e8a7d
+
+	column 'z-Spend Report Level'
+		dataType: string
+		lineageTag: e4e2b8ee-261b-5501-b27f-026da8ec1f8f
+		summarizeBy: none
+		sourceColumn: z-Spend Report Level
+
+	partition 'z-Selector Spend Report Level' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

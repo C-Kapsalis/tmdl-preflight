@@ -1,0 +1,7 @@
+model Model
+	culture: en-US
+
+ref table 'Cohort ''Since'' Interval'
+ref table 'z-Selector Cohort Timeframe'
+ref table 'z-Selector Spend Report Level'
+ref table 'z-Spend Report Level'

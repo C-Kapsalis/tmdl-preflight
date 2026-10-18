@@ -1,0 +1,4 @@
+relationship rel-sales-stores-0001
+	toCardinality: single
+	fromColumn: Sales.store_id
+	toColumn: _Stores.store_id
