@@ -1,0 +1,16 @@
+table Date
+	lineageTag: 05dc3caa-bc53-50d7-a00d-8bc52ec6c058
+
+	column Date
+		dataType: dateTime
+		lineageTag: 1f4ef9b4-3a68-5643-9c6e-282136cd4751
+		summarizeBy: none
+		sourceColumn: Date
+
+	partition Date = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

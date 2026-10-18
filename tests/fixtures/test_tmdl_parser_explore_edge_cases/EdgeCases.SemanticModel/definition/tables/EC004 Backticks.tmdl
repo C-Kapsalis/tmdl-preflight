@@ -1,0 +1,16 @@
+table 'EC004 Backticks'
+	lineageTag: b894ce82-ea77-57a7-8258-11972bf427a6
+
+	measure 'Backtick Text' = ```
+			VAR txt = "This has ``` backticks"
+			RETURN txt
+			```
+		lineageTag: 297466ec-6cd2-5368-87e7-71f4aaad88e4
+
+	partition 'EC004 Backticks' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

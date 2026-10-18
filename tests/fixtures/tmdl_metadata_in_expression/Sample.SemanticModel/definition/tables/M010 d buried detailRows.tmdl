@@ -1,0 +1,13 @@
+table 'M010 d buried detailRows'
+	lineageTag: ac85cd57-1c2d-5ed0-9f29-8fa7bf5e1a37
+
+	measure 'Cups Sold' =
+			VAR c = SUM(Brews[cups])
+			RETURN
+			detailRows
+			c
+		lineageTag: d4576aab-dfad-55dd-89f2-a14ca6b3d10f
+
+	partition 'M010 d buried detailRows' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})

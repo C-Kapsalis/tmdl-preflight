@@ -38,6 +38,35 @@ def iter_unfenced(lines: list[str]) -> Iterator[tuple[int, str]]:
             in_fence = True
 
 
+_FENCE_OPEN_RE = re.compile(r"=\s*```")
+
+
+def unpaired_fence(lines: list[str]) -> Optional[int]:
+    """0-based index of a ``` fence that never pairs up, or None.
+
+    A fence opens on a line whose text after ``=`` starts with three
+    backticks and closes on the next line that starts with three backticks.
+    Backticks anywhere else (inside a string literal of a fenced body, or in
+    a one-line expression) are content, not fences. A line that starts with
+    backticks outside any fence is a stray closing fence.
+    """
+    open_at: Optional[int] = None
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if open_at is not None:
+            if stripped.startswith("```"):
+                open_at = None
+            continue
+        m = _FENCE_OPEN_RE.search(line)
+        if m:
+            if line.count("```", m.end()) == 0:  # not opened and closed in one line
+                open_at = idx
+            continue
+        if stripped.startswith("```"):
+            return idx
+    return open_at
+
+
 # ---------------------------------------------------------------------------
 # M013: dangling /// descriptions
 # ---------------------------------------------------------------------------
@@ -75,27 +104,49 @@ def find_dangling_descriptions(lines: list[str]) -> list[DanglingDescription]:
 
 
 def remove_dangling_descriptions(lines: list[str]) -> tuple[list[str], int]:
-    """Delete each dangling run plus one adjacent blank line.
+    """Delete each dangling run plus the one blank line directly after it.
 
-    Mid-file, the blank line that follows the run goes with it. At the end
-    of the file, the blank line *before* the run goes instead, so the file
-    keeps exactly one trailing newline.
+    The same rule holds at the end of the file: blank lines *before* a run
+    are never touched. ``lines`` is the file split on its newline, so a file
+    that ends with a newline has an empty last element; that element is the
+    file's final newline, not a blank line, and is kept.
     """
     found = find_dangling_descriptions(lines)
     if not found:
         return lines, 0
     drop: set[int] = set()
-    n = len(lines)
+    last = len(lines) - 1
     for d in found:
         drop.update(range(d.start, d.end + 1))
         after = d.end + 1
-        if not d.at_eof:
-            drop.add(after)  # the single blank line that orphaned the run
-        elif d.start > 0 and not lines[d.start - 1].strip():
-            drop.add(d.start - 1)
-        elif after < n - 1 and not lines[after].strip():
-            drop.add(after)
+        if after <= last and not lines[after].strip():
+            if after < last or lines[after] != "":
+                drop.add(after)  # the single blank line that orphaned the run
     return [ln for k, ln in enumerate(lines) if k not in drop], len(found)
+
+
+def attach_descriptions(lines: list[str]) -> tuple[list[str], int, int]:
+    """Attach mode of the M013 fixer: delete every whitespace-only line that
+    directly follows a ``///`` line, so the description sits on its object
+    again. Returns ``(lines, occurrences, blank_lines_removed)``. The file's
+    final newline (an empty last element) is kept."""
+    out: list[str] = []
+    occurrences = removed = 0
+    last = len(lines) - 1
+    i = 0
+    while i < len(lines):
+        out.append(lines[i])
+        if lines[i].lstrip().startswith("///"):
+            j = i + 1
+            while j <= last and not lines[j].strip() and not (j == last and lines[j] == ""):
+                j += 1
+            if j > i + 1:
+                occurrences += 1
+                removed += j - i - 1
+            i = j
+            continue
+        i += 1
+    return out, occurrences, removed
 
 
 # ---------------------------------------------------------------------------
@@ -104,16 +155,23 @@ def remove_dangling_descriptions(lines: list[str]) -> tuple[list[str], int]:
 
 SIMPLE_PROPERTIES = frozenset(
     {
-        "isHidden", "isKey", "isNameInferred", "isDefaultLabel", "isDefaultImage",
-        "isAvailableInMdx", "isNullable", "isDataTypeInferred", "displayFolder",
-        "formatString", "summarizeBy", "sortByColumn", "dataType", "dataCategory",
-        "displayOrdinal", "lineageTag", "sourceLineageTag", "sourceColumn",
+        "dataCategory", "dataType", "displayFolder", "displayOrdinal", "formatString",
+        "isAvailableInMdx", "isDataTypeInferred", "isDefaultImage", "isDefaultLabel",
+        "isHidden", "isKey", "isNameInferred", "isNullable", "lineageTag",
+        "sortByColumn", "sourceColumn", "sourceLineageTag", "summarizeBy",
     }
 )
-CHILD_BLOCKS = frozenset({"annotation", "changedProperty", "extendedProperty"})
+# Nested sections of an object. Once one has started, the object's simple
+# properties may no longer follow.
+CHILD_BLOCKS = frozenset(
+    {
+        "annotation", "changedProperty", "detailRows", "extendedProperty",
+        "formatStringDefinition", "kpi", "relatedColumnDetails",
+    }
+)
 _OBJECT_DECL_RE = re.compile(
     r"^[\t ]*(table|column|measure|partition|hierarchy|level|calculationItem|"
-    r"calculationGroup|expression|relationship)\b"
+    r"calculationGroup|expression|relationship|role)\b"
 )
 
 
@@ -133,49 +191,80 @@ class MisorderedProperty:
     token: str
 
 
+def _expression_end(lines: list[str], decl: int) -> int:
+    """0-based index of the last line of the expression a declaration on line
+    ``decl`` carries (``decl`` itself when it has none or it is inline)."""
+    head = lines[decl]
+    level = indent_level(head)
+    if _FENCE_OPEN_RE.search(head) and head.count("```", _FENCE_OPEN_RE.search(head).end()) == 0:
+        for j in range(decl + 1, len(lines)):
+            if lines[j].strip().startswith("```"):
+                return j
+        return decl
+    end = decl
+    for j in range(decl + 1, len(lines)):
+        text = lines[j]
+        if text.strip() == "":
+            continue
+        if indent_level(text) < level + 2:
+            break
+        end = j
+    return end
+
+
 def find_properties_after_child_blocks(lines: list[str]) -> list[MisorderedProperty]:
     """Simple properties (``isHidden``, ``displayFolder``...) written after
-    one of their object's child blocks (``annotation``, ``changedProperty``,
-    ``extendedProperty``). Lines inside fences and expression bodies are
-    never considered: only the lines exactly one level under a declaration.
+    one of their object's nested sections (``annotation``, ``kpi``,
+    ``formatStringDefinition`` ...). A nested section counts for the closest
+    declaration above it; a property counts when it sits exactly one level
+    under its declaration. Fenced bodies are skipped.
+
+    ``target`` is the object's first property slot: the line right after its
+    expression (or after the declaration when the expression is inline).
     """
     out: list[MisorderedProperty] = []
-    # level -> [decl text, first child block index or None]
+    # level -> [decl text, section started?, decl index]
     owners: dict[int, list] = {}
     for idx, line in iter_unfenced(lines):
         if not line.strip() or line.lstrip().startswith("///"):
             continue
         level = indent_level(line)
-        for lvl in [k for k in owners if k >= level]:
-            del owners[lvl]
+        tok = first_token(line)
         if _OBJECT_DECL_RE.match(line):
-            owners[level] = [line.strip(), None]
+            for lvl in [k for k in owners if k >= level]:
+                del owners[lvl]
+            owners[level] = [line.strip(), False, idx]
+            continue
+        if tok in CHILD_BLOCKS:
+            above = [k for k in owners if k < level]
+            if above:
+                owners[max(above)][1] = True
             continue
         parent = owners.get(level - 1)
         if parent is None:
             continue
-        tok = first_token(line)
-        if tok in CHILD_BLOCKS:
-            if parent[1] is None:
-                parent[1] = idx
-        elif tok in SIMPLE_PROPERTIES and parent[1] is not None:
-            target = parent[1]
-            # land after the last property, before the blank line(s) that
-            # usually separate properties from child blocks
-            while target > 0 and not lines[target - 1].strip():
-                target -= 1
+        if tok in SIMPLE_PROPERTIES and parent[1]:
+            target = _expression_end(lines, parent[2]) + 1
             out.append(MisorderedProperty(idx, target, parent[0], tok))
     return out
 
 
-def move_properties_before_child_blocks(lines: list[str]) -> tuple[list[str], int]:
-    """Move every misordered property up to its object's property section."""
+def move_properties_before_child_blocks(
+    lines: list[str], limit: int = 200
+) -> tuple[list[str], int]:
+    """Move every misordered property to its object's first property slot.
+
+    Returns ``(lines, moved)``; ``moved`` is -1 when ``limit`` moves did not
+    clear the file (the caller then writes nothing).
+    """
     moved = 0
     lines = list(lines)
-    for _ in range(len(lines)):
+    while True:
         found = find_properties_after_child_blocks(lines)
         if not found:
-            break
+            return lines, moved
+        if moved >= limit:
+            return lines, -1
         f = found[0]
         prop = lines.pop(f.line)
         # removing the line may leave two blank lines in a row; keep one
@@ -187,7 +276,6 @@ def move_properties_before_child_blocks(lines: list[str]) -> tuple[list[str], in
             lines.pop(f.line)
         lines.insert(f.target, prop)
         moved += 1
-    return lines, moved
 
 
 # ---------------------------------------------------------------------------
@@ -207,10 +295,36 @@ _LEAK_RE = re.compile(
     r")"
 )
 
+# Keywords that are TMDL metadata, never DAX: a DAX body line that starts
+# with one of them, as a whole word, is a property that slipped into the
+# expression.
+METADATA_KEYWORDS = frozenset(
+    {
+        "annotation", "changedProperty", "dataCategory", "dataType", "detailRows",
+        "displayFolder", "displayOrdinal", "extendedProperty", "formatString",
+        "formatStringDefinition", "isAvailableInMdx", "isDataTypeInferred",
+        "isDefaultImage", "isDefaultLabel", "isHidden", "isKey", "isNameInferred",
+        "kpi", "lineageTag", "relatedColumnDetails", "sortByColumn", "sourceColumn",
+        "sourceLineageTag", "summarizeBy",
+    }
+)
+_KEYWORD_RE = re.compile(r"^([A-Za-z]+)(?=$|[\s:=])")
+
 
 def leaked_property(line: str) -> Optional[str]:
-    """The property keyword if ``line`` is a TMDL property line, else None."""
+    """The property keyword if ``line`` has the shape of a TMDL property line
+    (``key: value``, a bare flag, ``annotation Name = ...``), else None. Used
+    for M (Power Query) bodies, where a bare word can be a step name."""
     s = line.strip()
     if _LEAK_RE.match(s):
         return first_token(s)
+    return None
+
+
+def leaked_keyword(line: str) -> Optional[str]:
+    """The metadata keyword a DAX body line starts with, whatever follows it
+    (``kpi``, ``detailRows = x``, ``displayFolder``), else None."""
+    m = _KEYWORD_RE.match(line.strip())
+    if m and m.group(1) in METADATA_KEYWORDS:
+        return m.group(1)
     return None

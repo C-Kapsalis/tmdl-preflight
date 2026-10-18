@@ -1,0 +1,13 @@
+table 'M010 h flag inside comment'
+	lineageTag: 5ff67ddc-d1ff-5d9c-8ced-47acc08b011b
+
+	measure 'Cups Sold' =
+			VAR c = SUM(Brews[cups])
+			// isHidden was removed
+			RETURN
+			c
+		lineageTag: f224290a-c4a4-5b14-b77e-a723c89c453d
+
+	partition 'M010 h flag inside comment' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})

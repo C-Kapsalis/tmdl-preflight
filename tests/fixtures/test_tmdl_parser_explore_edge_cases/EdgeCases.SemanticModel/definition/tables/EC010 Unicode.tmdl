@@ -1,0 +1,16 @@
+table 'EC010 Unicode'
+	lineageTag: 7a10f861-50d6-525a-b906-4b359df6eb4d
+
+	column 'Preis €'
+		dataType: decimal
+		lineageTag: c5ee121e-6432-592b-a439-48777115d7c6
+		summarizeBy: none
+		sourceColumn: Preis €
+
+	partition 'EC010 Unicode' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

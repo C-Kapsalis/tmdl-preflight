@@ -1,0 +1,17 @@
+table 'EC018 Two Returns'
+	lineageTag: 7d62a63d-44c1-544f-8800-9747cc6b3e6d
+
+	measure Odd =
+			VAR a = 1
+			RETURN a
+			RETURN a + 1
+		formatString: #,0
+		lineageTag: a37a983d-e07f-5964-aca3-1d4bc3d2ee00
+
+	partition 'EC018 Two Returns' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

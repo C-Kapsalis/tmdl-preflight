@@ -16,6 +16,11 @@ from .field_parameters import (
     RaggedRowWidthRule,
     TrailingRowCommaRule,
 )
+from .hygiene import (
+    ModelAnnotationDuplicatesRule,
+    SpaceIndentationRule,
+    UndefinedQueryGroupRule,
+)
 from .relationships import (
     AmbiguousActivePairRule,
     AutodetectedRelationshipsRule,
@@ -46,6 +51,7 @@ from .structural import (
     RefTableTargetRule,
     ReservedTableNameRule,
     TablePartitionPresenceRule,
+    TmdlFileSanityRule,
     TmdlWellFormedRule,
 )
 from .style import FormatStringPresenceRule, MeasureDescriptionRule
@@ -66,6 +72,10 @@ ALL_RULES: list[type[Rule]] = [
     DanglingDescriptionRule,
     CalcGroupImplicitMeasuresRule,
     RefTableTargetRule,
+    TmdlFileSanityRule,
+    SpaceIndentationRule,
+    ModelAnnotationDuplicatesRule,
+    UndefinedQueryGroupRule,
     DaxDelimiterBalanceRule,
     NameofResolutionRule,
     DuplicateMeasureNamesRule,

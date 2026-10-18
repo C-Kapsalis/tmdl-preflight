@@ -1,0 +1,16 @@
+table 'M011 b property after changedProperty'
+	lineageTag: 68c0082f-8307-5e79-9c6d-5579fc8a218c
+
+	column grams
+		dataType: int64
+		lineageTag: 4bc39e36-77a8-531b-969f-752f79eb38ef
+		summarizeBy: none
+		sourceColumn: grams
+
+		changedProperty = IsHidden
+
+		displayFolder: Beans
+
+	partition 'M011 b property after changedProperty' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})

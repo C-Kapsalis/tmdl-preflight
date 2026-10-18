@@ -1,0 +1,13 @@
+table 'M010 b buried flag'
+	lineageTag: 5174c277-b6be-5dd9-a9dc-35bec3ee48a3
+
+	measure 'Cups Sold' =
+			VAR c = SUM(Brews[cups])
+			RETURN
+			isHidden
+			c
+		lineageTag: 39139fd4-2286-54fb-9163-c08b65ab75fc
+
+	partition 'M010 b buried flag' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})

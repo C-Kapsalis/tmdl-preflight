@@ -89,11 +89,60 @@ class Context:
     the re-check always runs against what is actually on disk.
     """
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, exclude: Optional[list[str]] = None):
         self.root = Path(root)
-        self.definition_dirs: list[Path] = find_definition_dirs(self.root)
-        self.report_dirs: list[Path] = find_report_dirs(self.root)
+        self.exclude: list[str] = list(exclude or [])
+        # files under models/reports that were skipped entirely because every
+        # file they hold matches an ``exclude`` glob
+        self.excluded_files: int = 0
+        self.definition_dirs: list[Path] = self._keep(find_definition_dirs(self.root))
+        self.report_dirs: list[Path] = self._keep(find_report_dirs(self.root))
         self._models: Optional[list[SemanticModel]] = None
+        self.options: dict[str, Any] = {}
+
+    # -- exclusions --------------------------------------------------------
+    def scan_relative(self, file: Path) -> Optional[str]:
+        """``file`` relative to the scan root (POSIX), or None if outside it."""
+        try:
+            return Path(file).resolve().relative_to(self.root.resolve()).as_posix()
+        except (ValueError, OSError):
+            return None
+
+    def is_excluded(self, file: Path) -> bool:
+        """True when an ``exclude`` glob matches the file's path relative to
+        the scan root or to its PBIP item. Folders above the scan root never
+        take part, so a checkout under ``~/legacy/`` is still scanned."""
+        if not self.exclude:
+            return False
+        from ..config import glob_match  # local import: config imports rules
+
+        candidates = [c for c in (self.scan_relative(file), item_relative_path(file)) if c]
+        return any(glob_match(p, c) for p in self.exclude for c in candidates)
+
+    def _keep(self, folders: list[Path]) -> list[Path]:
+        if not self.exclude:
+            return folders
+        kept = []
+        for folder in folders:
+            files = [f for f in folder.rglob("*") if f.is_file()]
+            if files and all(self.is_excluded(f) for f in files):
+                self.excluded_files += len(files)
+                continue
+            kept.append(folder)
+        return kept
+
+    def files_scanned(self) -> int:
+        """TMDL and report JSON files the run looked at (excluded ones not
+        counted)."""
+        n = 0
+        for d in self.definition_dirs:
+            n += sum(1 for f in d.rglob("*.tmdl") if not self.is_excluded(f))
+        for r in self.report_dirs:
+            n += sum(
+                1 for f in r.rglob("*")
+                if f.is_file() and f.suffix in (".json", ".pbir") and not self.is_excluded(f)
+            )
+        return n
 
     @property
     def models(self) -> list[SemanticModel]:
@@ -122,6 +171,10 @@ class Rule:
     severity: Severity = Severity.ERROR
     description: str = ""
     fixable: bool = False
+    # False for fixers that change data or regenerate content (for example a
+    # partition's M source). They never run as part of a blanket ``fix``;
+    # only when the rule is selected explicitly by id or name.
+    safe: bool = True
     # False for defects that must never be accepted into a baseline (they
     # stop the model from opening or deploying at all)
     baselinable: bool = True

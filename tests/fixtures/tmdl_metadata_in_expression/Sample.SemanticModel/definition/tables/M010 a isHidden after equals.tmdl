@@ -1,0 +1,11 @@
+table 'M010 a isHidden after equals'
+	lineageTag: bd9156b4-b580-519e-8db5-db5bff20854d
+
+	measure 'Cups Sold' =
+		isHidden
+			SUM(Brews[cups])
+		lineageTag: e50aa078-6826-5e59-994f-246d5cef9f5c
+
+	partition 'M010 a isHidden after equals' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})

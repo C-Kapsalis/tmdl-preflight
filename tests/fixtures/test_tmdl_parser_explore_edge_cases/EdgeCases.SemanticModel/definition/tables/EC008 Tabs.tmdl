@@ -1,0 +1,18 @@
+table 'EC008 Tabs'
+	lineageTag: 5aeb7df7-68bf-54a7-8ac2-16a89664c394
+
+	measure Tabbed =
+			CALCULATE(
+				SUM(Rentals[Fee]),
+				Rentals[Status] = "Done"
+			)
+		formatString: #,0
+		lineageTag: 7729ff5d-491c-59a9-9d09-7249d9c43cc3
+
+	partition 'EC008 Tabs' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

@@ -1,0 +1,31 @@
+table 'Helper Measures'
+	lineageTag: 0000b4b1-0000-0000-0000-000000000046
+
+	/// Paid drilldown compatibility.
+	measure '-helper y-drilldown paid performance' = IF(ISINSCOPE('_Queries'[query]), "non_compatible", "ok")
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000041
+
+	/// GA4 cannot reach query/keyword rows.
+	measure '-helper y-drilldown ga4 unreachable' = IF(ISINSCOPE('_Queries'[query]), TRUE(), FALSE())
+		-- '_Keywords' is mentioned only in a comment
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000042
+
+	// Section of diagnostics
+	measure 'i-Row Count' = COUNTROWS(Ads)
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000043
+
+	measure '-Visual Bar Color' = "#336699"
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000044
+
+	measure '_Running Total' = 1
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000045
+
+	partition 'Helper Measures' = calculated
+		mode: import
+		source = ROW("x", 1)
+

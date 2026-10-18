@@ -1,0 +1,13 @@
+table 'M011 e properties before annotation'
+	lineageTag: ec242403-dcc0-56eb-ae18-02796796380c
+
+	measure 'Cups Sold' = SUM(Brews[cups])
+		isHidden
+		displayFolder: Brewing
+		lineageTag: 9fd63ede-1e91-51ca-b600-00e5d5035d66
+
+		annotation Owner = bar
+
+	partition 'M011 e properties before annotation' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})

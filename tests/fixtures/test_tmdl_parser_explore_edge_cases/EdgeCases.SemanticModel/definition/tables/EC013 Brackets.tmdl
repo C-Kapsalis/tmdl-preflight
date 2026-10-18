@@ -1,0 +1,14 @@
+table 'EC013 Brackets'
+	lineageTag: 68f12954-f501-541c-b4be-034879cd0c9e
+
+	measure 'Euro Price' = SUM(Bikes[Price [EUR]]])
+		formatString: #,0
+		lineageTag: ed2fdf08-8bcc-5bd9-bf98-b867470704de
+
+	partition 'EC013 Brackets' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

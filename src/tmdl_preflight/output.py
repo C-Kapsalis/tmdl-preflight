@@ -82,7 +82,14 @@ def render_text(report: PreflightReport, root: Path) -> str:
     out: list[str] = []
     for applied in report.fixes_applied:
         out.append(f"fixed  {applied}")
-    if report.fixes_applied:
+    for planned in report.would_fix:
+        out.append(f"would fix  {planned}")
+    for rid in report.skipped_fixers:
+        out.append(
+            f"not fixed  {rid}: its fixer can change data, so a blanket fix skips "
+            f"it; run 'fix --select {rid}' to apply it"
+        )
+    if report.fixes_applied or report.would_fix or report.skipped_fixers:
         out.append("")
     for v in _sorted(report.violations):
         loc = _display_path(v.file, root)

@@ -40,6 +40,7 @@ def scan_summary(ctx: Context) -> dict[str, int]:
         pages += sum(1 for _ in report_dir.rglob("page.json"))
         visuals += sum(1 for _ in report_dir.rglob("visual.json"))
     return {
+        "files": ctx.files_scanned(),
         "models": len(models),
         "tables": len(tables),
         "columns": sum(len(t.column_list) for t in tables),
@@ -70,6 +71,14 @@ class PreflightReport:
     expired_exemptions: list[Any] = field(default_factory=list)
     unused_exemptions: list[Any] = field(default_factory=list)
     baseline: Optional[Any] = None  # baseline.BaselineResult
+    # files skipped before parsing because an exclude glob matched them all
+    excluded_files: int = 0
+    # fixable rules whose (unsafe) fixer a blanket fix did not run
+    skipped_fixers: list[str] = field(default_factory=list)
+    # rules disabled by a policy toggle; they ran no check at all
+    skipped: list[str] = field(default_factory=list)
+    # fix --dry-run: what a real fix would repair, per rule
+    would_fix: list[str] = field(default_factory=list)
 
     def by_severity(self, severity: Severity) -> list[Violation]:
         return [v for v in self.violations if v.severity == severity]
@@ -100,11 +109,16 @@ class PreflightReport:
                 "warnings": len(self.warnings),
                 "infos": len(self.infos),
                 "fixes_applied": len(self.fixes_applied),
-                "excluded": len(self.excluded),
+                "excluded": len(self.excluded) + self.excluded_files,
+                "excluded_files": self.excluded_files,
+                "files_scanned": self.scanned.get("files", 0),
                 "exempted": len(self.exempted),
                 "baselined": len(self.baseline.suppressed) if self.baseline else 0,
             },
             "fixes": self.fixes_applied,
+            "skipped": self.skipped,
+            "skipped_fixers": self.skipped_fixers,
+            "would_fix": self.would_fix,
             "violations": [v.to_dict() for v in self.violations],
             "scanned": self.scanned,
         }
@@ -131,7 +145,7 @@ def check(ctx: Context, ruleset: RuleSet) -> PreflightReport:
     return report
 
 
-def fix(ctx: Context, ruleset: RuleSet) -> PreflightReport:
+def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> PreflightReport:
     """Imposition pass: check, repair what is repairable, then re-check.
 
     The returned report carries the *post-fix* violations plus a log of
@@ -142,8 +156,12 @@ def fix(ctx: Context, ruleset: RuleSet) -> PreflightReport:
     report = PreflightReport()
 
     dirty_rule_ids = {v.rule_id for v in first.violations}
+    chosen = {e.lower() for e in (explicit or set())}
     for rule in ruleset.rules:
         if not rule.fixable or rule.id not in dirty_rule_ids:
+            continue
+        if not rule.safe and not ({rule.id.lower(), rule.name.lower()} & chosen):
+            report.skipped_fixers.append(rule.id)
             continue
         applied = rule.fix(ctx)
         if applied:
@@ -159,7 +177,8 @@ def fix(ctx: Context, ruleset: RuleSet) -> PreflightReport:
     return report
 
 
-def apply_policy(report: PreflightReport, config, today: Optional[_dt.date] = None) -> PreflightReport:
+def apply_policy(report: PreflightReport, config, today: Optional[_dt.date] = None,
+                 ctx: Optional[Context] = None) -> PreflightReport:
     """Apply a ``config.Config`` to a report, in place.
 
     Order: severity overrides, then path excludes, then exemptions. An
@@ -173,10 +192,14 @@ def apply_policy(report: PreflightReport, config, today: Optional[_dt.date] = No
         override = config.severity_overrides.get(v.rule_id)
         if override is not None:
             v.severity = override
+    if ctx is not None:
+        report.excluded_files = ctx.excluded_files
     if config.exclude:
         kept = []
         for v in report.violations:
-            if v.path and any(glob_match(p, v.path) for p in config.exclude):
+            scan_rel = ctx.scan_relative(v.file) if (ctx is not None and v.file) else None
+            paths = [p for p in (v.path, scan_rel) if p]
+            if any(glob_match(p, path) for p in config.exclude for path in paths):
                 report.excluded.append(v)
             else:
                 kept.append(v)

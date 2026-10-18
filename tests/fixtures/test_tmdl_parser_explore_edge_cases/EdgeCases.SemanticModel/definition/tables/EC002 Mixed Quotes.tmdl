@@ -1,0 +1,14 @@
+table 'EC002 Mixed Quotes'
+	lineageTag: a5e28da9-9fef-55c4-9b23-bdd51b62595e
+
+	measure 'Mixed Ref' = NAMEOF('Bikes"Model'[Frame])
+		formatString: #,0
+		lineageTag: 01801ff0-a931-5e7a-9a6b-8f554c196ed1
+
+	partition 'EC002 Mixed Quotes' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

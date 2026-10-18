@@ -1,0 +1,11 @@
+table 'w-Titles'
+	lineageTag: 0000b4b1-0000-0000-0000-00000000006d
+
+	measure 'w-Chart Title' = "Paid overview"
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-00000000006c
+
+	partition 'w-Titles' = calculated
+		mode: import
+		source = ROW("x", 1)
+

@@ -1,0 +1,21 @@
+table 'z-Selector Time Intelligence Function'
+	lineageTag: 0000b4b1-0000-0000-0000-000000000050
+
+	calculationGroup
+
+		calculationItem Current = SELECTEDMEASURE()
+
+	column Name
+		dataType: string
+		lineageTag: 0000b4b1-0000-0000-0000-000000000051
+		summarizeBy: none
+		sourceColumn: Name
+		sortByColumn: Ordinal
+
+	column Ordinal
+		dataType: int64
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000052
+		summarizeBy: sum
+		sourceColumn: Ordinal
+

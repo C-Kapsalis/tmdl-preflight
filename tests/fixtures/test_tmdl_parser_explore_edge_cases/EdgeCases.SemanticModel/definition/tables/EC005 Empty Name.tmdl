@@ -1,0 +1,20 @@
+table 'EC005 Empty Name'
+	lineageTag: 63794678-2ca6-59b1-b680-1845e138cf7c
+
+	column ''
+		dataType: int64
+		lineageTag: d853ac65-d4bd-58db-a517-b8c296c8dce5
+
+	column 'Kept Column'
+		dataType: string
+		lineageTag: 1e6c7dcf-f6d2-54cc-a579-ff3f58e57655
+		summarizeBy: none
+		sourceColumn: Kept Column
+
+	partition 'EC005 Empty Name' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

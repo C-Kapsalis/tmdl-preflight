@@ -1,0 +1,12 @@
+table 'Helper Measures'
+	lineageTag: 6488f1b6-ff08-52aa-baf3-3d65c2404498
+
+	measure 'h-Cups' = 1
+		lineageTag: 96657310-20bb-5bf2-b5e1-231c608b128f
+
+	measure 'h-Kg' = 2
+		lineageTag: b1c2d3e4-f5g6-7890-hijk-lmnopqrstuvw
+
+	partition 'Helper Measures' = calculated
+		mode: import
+		source = ROW("x", 1)

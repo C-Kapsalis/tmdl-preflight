@@ -1,0 +1,16 @@
+table 'EC007 Trailing Spaces'
+	lineageTag: 86317d00-2901-53a4-a148-36fb1916c1a8
+
+	column 'Frame Size   '
+		dataType: string
+		lineageTag: 9a2d8922-8170-55b8-acb7-a049a01d08d1
+		summarizeBy: none
+		sourceColumn: Frame Size
+
+	partition 'EC007 Trailing Spaces' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

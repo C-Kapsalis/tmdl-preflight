@@ -1,0 +1,17 @@
+table __Calendar
+	lineageTag: 0000b4b1-0000-0000-0000-00000000002a
+
+	column Date
+		dataType: dateTime
+		lineageTag: 0000b4b1-0000-0000-0000-000000000029
+		summarizeBy: none
+		sourceColumn: Date
+
+	partition __Calendar = m
+		mode: import
+		source =
+			let
+			    Source = source_filter_dates("calendar_n", "date")
+			in
+			    Source
+

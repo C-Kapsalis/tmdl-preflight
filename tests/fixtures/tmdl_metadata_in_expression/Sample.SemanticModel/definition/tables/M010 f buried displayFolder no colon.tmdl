@@ -1,0 +1,13 @@
+table 'M010 f buried displayFolder no colon'
+	lineageTag: 3d12b5ae-d1b1-5c80-be43-980d35b17470
+
+	measure 'Cups Sold' =
+			VAR c = SUM(Brews[cups])
+			RETURN
+			displayFolder
+			c
+		lineageTag: 5214a44c-485e-5837-8361-84163789594d
+
+	partition 'M010 f buried displayFolder no colon' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})

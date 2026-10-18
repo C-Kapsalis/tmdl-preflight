@@ -1,0 +1,7 @@
+relationship 0000b4b1-0000-0000-0000-00000000003a
+	fromColumn: Ads.ad_id
+	toColumn: _Ads.ad_id
+
+relationship 0000b4b1-0000-0000-0000-00000000003b
+	fromColumn: Ads.date
+	toColumn: __Calendar.Date

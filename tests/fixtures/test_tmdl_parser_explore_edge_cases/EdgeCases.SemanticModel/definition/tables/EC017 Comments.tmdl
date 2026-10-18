@@ -1,0 +1,26 @@
+table 'EC017 Comments'
+	lineageTag: 695e2be8-19f3-5b8d-b9e1-d3ad2ef76f65
+
+	measure 'Simple Comments' =
+			SUM(Rentals[Fee]) // [Ghost Slash]
+			    -- [Ghost Dash]
+			    + 0
+		formatString: #,0
+		lineageTag: 0d7511ed-ed8a-51c9-808a-42b5f360337a
+
+	measure 'Block Comment' =
+			/* history:
+			   used to be [Ghost Block]
+			   and Rentals[Ghost Column]
+			*/
+			SUM(Rentals[Fee])
+		formatString: #,0
+		lineageTag: 8f4d5eb0-f158-5ad0-a0a9-cf30013423ac
+
+	partition 'EC017 Comments' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

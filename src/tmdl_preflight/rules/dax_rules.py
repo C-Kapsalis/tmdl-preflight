@@ -203,6 +203,9 @@ class DaxReferenceResolutionRule(Rule):
         check_bare = bool(self.options.get("check_bare_references", True))
         for model in ctx.models:
             measure_names = {m.name.lower() for m in model.all_measures()}
+            measure_tables: dict[str, set] = {}
+            for m in model.all_measures():
+                measure_tables.setdefault(m.name.lower(), set()).add(m.table)
             column_names = {c.name.lower() for c in model.all_columns()}
             for block in model.dax_blocks():
                 expr = block.expression
@@ -275,6 +278,25 @@ class DaxReferenceResolutionRule(Rule):
                     if not check_bare:
                         continue
                     low = (ref.member or "").lower()
+                    homes = measure_tables.get(low, set())
+                    if len(homes) > 1 and low not in variables and low not in introduced:
+                        key = ("ambiguous", low)
+                        if key not in seen:
+                            seen.add(key)
+                            out.append(
+                                self.violation(
+                                    f"[{ref.member}] is ambiguous: a measure with "
+                                    f"that name is declared in {len(homes)} tables "
+                                    f"({', '.join(sorted(homes))}). Rename the "
+                                    f"duplicates (D003 reports them) so the "
+                                    f"reference has one target.",
+                                    file=block.file,
+                                    line=line,
+                                    obj=block.label,
+                                    severity=Severity.WARNING,
+                                )
+                            )
+                        continue
                     if (
                         low in measure_names
                         or low in column_names

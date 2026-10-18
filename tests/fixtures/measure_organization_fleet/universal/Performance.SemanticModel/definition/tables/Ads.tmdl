@@ -1,0 +1,49 @@
+table Ads
+	lineageTag: 0000b4b1-0000-0000-0000-000000000032
+
+	column ad_id
+		dataType: int64
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-00000000002b
+		summarizeBy: none
+		sourceColumn: ad_id
+
+	column date
+		dataType: dateTime
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-00000000002c
+		summarizeBy: none
+		sourceColumn: date
+
+	column cost
+		dataType: double
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-00000000002d
+		summarizeBy: none
+		sourceColumn: cost
+
+	column clicks
+		dataType: int64
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-00000000002e
+		summarizeBy: none
+		sourceColumn: clicks
+
+	column revenue
+		dataType: double
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-00000000002f
+		summarizeBy: none
+		sourceColumn: revenue
+
+	measure 'countrows check' = COUNTROWS(Ads)
+		lineageTag: 0000b4b1-0000-0000-0000-000000000030
+
+	measure 'Total Revenue' = SUM(Ads[revenue])
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000031
+
+	partition Ads = m
+		mode: import
+		source = let ir_dfilter = " cast(date as date) >= parse_date('%m/%d/%Y', '" & Date.ToText(DateTime.Date(RangeStart), "MM/dd/yyyy") & "') and cast(date as date) < parse_date('%m/%d/%Y', '" & Date.ToText(DateTime.Date(RangeEnd), "MM/dd/yyyy") & "') and cast(date as date) >= parse_date('%m/%d/%Y', '" & Date.ToText(v-fromdate-ads, "MM/dd/yyyy") & "') ", ir_qstr = "SELECT * FROM `" & #"v-BQ_project" & "." & #"v-db" & "." & "ads_n" & "` where " & ir_dfilter & #"v-rows_limit", ir_src = Value.NativeQuery(GoogleBigQuery.Database([CommandTimeout=#duration(0,3,0,0), BillingProject=#"v-BQ_billing_project"]){[Name= #"v-BQ_project" ]}[Data], ir_qstr, null, [EnableFolding=true]) in ir_src
+

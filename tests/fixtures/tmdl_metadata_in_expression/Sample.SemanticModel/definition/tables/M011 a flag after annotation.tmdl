@@ -1,0 +1,13 @@
+table 'M011 a flag after annotation'
+	lineageTag: 88787cb5-6703-52e6-9291-df996dc5a53f
+
+	measure 'Cups Sold' = SUM(Brews[cups])
+		lineageTag: fdeb68a8-0222-5b72-8768-88d83c16e9e0
+
+		annotation Owner = bar
+
+		isHidden
+
+	partition 'M011 a flag after annotation' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})

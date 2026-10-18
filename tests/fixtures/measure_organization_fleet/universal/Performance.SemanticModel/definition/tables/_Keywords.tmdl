@@ -1,0 +1,17 @@
+table _Keywords
+	lineageTag: 0000b4b1-0000-0000-0000-000000000028
+
+	column keyword
+		dataType: string
+		lineageTag: 0000b4b1-0000-0000-0000-000000000027
+		summarizeBy: none
+		sourceColumn: keyword
+
+	partition _Keywords = m
+		mode: import
+		source =
+			let
+			    Source = source_filter_dates("keywords_n", "date")
+			in
+			    Source
+

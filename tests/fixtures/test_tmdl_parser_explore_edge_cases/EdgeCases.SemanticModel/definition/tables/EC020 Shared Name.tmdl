@@ -1,0 +1,20 @@
+table 'EC020 Shared Name'
+	lineageTag: 44bedf41-e08a-5bd3-a103-6e154cf54104
+
+	column Total
+		dataType: decimal
+		lineageTag: 7cabcaa6-7c77-56d0-96cc-c993150195bc
+		summarizeBy: none
+		sourceColumn: Total
+
+	measure Total = SUM('EC020 Shared Name'[Total])
+		formatString: #,0
+		lineageTag: d8a33aeb-dc8a-5502-9391-7d080d76a6a6
+
+	partition 'EC020 Shared Name' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

@@ -54,7 +54,7 @@ class TestTmdlWellFormed:
             encoding="utf-8",
         )
         violations = TmdlWellFormedRule().check(Context(project))
-        assert any("unpaired expression fences" in v.message for v in violations)
+        assert any("unpaired ``` expression fence" in v.message for v in violations)
 
     def test_null_bytes(self, project, definition):
         f = definition / "tables" / "Stores.tmdl"
@@ -324,7 +324,7 @@ class TestPropertyAfterChildBlock:
         violations = PropertyAfterChildBlockRule().check(Context(project))
         assert len(violations) == 1
         v = violations[0]
-        assert v.severity == Severity.WARNING and v.fixable
+        assert v.severity == Severity.ERROR and v.fixable  # stricter since 1.2
         assert "displayFolder" in v.message and "Metric Selector Order" in v.obj
 
     def test_fix_moves_line_and_is_idempotent(self, project, definition, replace_in):
@@ -333,9 +333,11 @@ class TestPropertyAfterChildBlock:
         applied = rule.fix(Context(project))
         assert applied and "moved 1" in applied[0]
         text = f.read_text(encoding="utf-8")
+        # the property moves to the column's first property slot (spec
+        # B-property-after-child-block), right under the declaration
         assert (
-            "\t\tsourceColumn: [Value3]\n\t\tdisplayFolder: Hidden helpers\n\n"
-            "\t\tannotation SummarizationSetBy = Automatic\n" in text
+            "\tcolumn 'Metric Selector Order'\n\t\tdisplayFolder: Hidden helpers\n"
+            "\t\tisHidden\n" in text
         )
         assert "\n\n\n" not in text
         assert rule.check(Context(project)) == []
@@ -410,12 +412,12 @@ class TestDanglingDescription:
         assert len(violations) == 1
         assert violations[0].severity == Severity.ERROR and violations[0].fixable
 
-    def test_at_end_of_file_is_warning(self, project, definition):
+    def test_at_end_of_file_is_error(self, project, definition):
         f = definition / "tables" / "Stores.tmdl"
         f.write_text(f.read_text(encoding="utf-8").rstrip("\n") + "\n\n/// orphan\n",
                      encoding="utf-8")
         violations = DanglingDescriptionRule().check(Context(project))
-        assert len(violations) == 1 and violations[0].severity == Severity.WARNING
+        assert len(violations) == 1 and violations[0].severity == Severity.ERROR
 
     def test_fix_preserves_crlf_and_is_idempotent(self, project, definition):
         f = _measures(definition)
@@ -433,12 +435,14 @@ class TestDanglingDescription:
         assert rule.check(Context(project)) == []
         assert rule.fix(Context(project)) == []
 
-    def test_fix_at_eof_keeps_single_trailing_newline(self, project, definition):
+    def test_fix_at_eof_keeps_blank_lines_before_the_run(self, project, definition):
         f = definition / "tables" / "Stores.tmdl"
         original = f.read_text(encoding="utf-8")
         f.write_text(original.rstrip("\n") + "\n\n/// orphan\n", encoding="utf-8")
         DanglingDescriptionRule().fix(Context(project))
-        assert f.read_text(encoding="utf-8") == original.rstrip("\n") + "\n"
+        # the run goes with the blank line after it (none here); blank lines
+        # before it are left alone, and the final newline stays
+        assert f.read_text(encoding="utf-8") == original.rstrip("\n") + "\n\n"
 
 
 class TestCalcGroupImplicitMeasures:

@@ -81,6 +81,7 @@ def _print_rules(as_json: bool) -> None:
                         "fixable": r.fixable,
                         "description": r.description,
                         "baselinable": r.baselinable,
+                        "safe": r.safe if r.fixable else None,
                         "options": r.option_defaults,
                     }
                     for r in ruleset.rules
@@ -138,6 +139,12 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--baseline", metavar="FILE",
                        help="only fail on violations not recorded in this "
                             "baseline file")
+        if name == "fix":
+            p.add_argument("--dry-run", action="store_true",
+                           help="report what fix would change; write nothing")
+            p.add_argument("--clear-cache", action="store_true",
+                           help="after lineage tags change, delete the model's "
+                                ".pbi/cache.abf so Desktop does not reuse old tags")
         _add_config_options(p)
 
     p_base = sub.add_parser(
@@ -161,10 +168,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_rules = sub.add_parser("rules", help="list the rule catalog")
     p_rules.add_argument("--json", action="store_true", help="machine-readable output")
+    p_rules.add_argument("--format", choices=("text", "json", "markdown"), default=None,
+                         help="catalog format (markdown: a generated docs page)")
+    p_rules.add_argument("--out", metavar="FILE", help="write the catalog to FILE")
+    p_rules.add_argument("--check", action="store_true",
+                         help="with --out: fail if FILE is missing or stale; write nothing")
     return parser
 
 
-def _context(raw_path: str) -> Context:
+def _context(raw_path: str, exclude: Optional[list[str]] = None) -> Context:
     root = Path(raw_path)
     if not root.exists():
         raise UsageError(
@@ -172,7 +184,9 @@ def _context(raw_path: str) -> Context:
             f"PBIP project root, a *.SemanticModel folder, a definition "
             f"folder, or a *.Report folder."
         )
-    ctx = Context(root)
+    ctx = Context(root, exclude=exclude)
+    if ctx.is_empty() and ctx.excluded_files:
+        return ctx  # everything was excluded on purpose: a clean, empty run
     if ctx.is_empty():
         raise UsageError(
             f"no semantic model or report found under {root}. Expected a "
@@ -232,12 +246,26 @@ def _effective_ruleset(full: RuleSet, cfg: Config, args) -> RuleSet:
 
 
 def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
-    ctx = _context(args.path)
     full = default_ruleset()
+    if not Path(args.path).exists():
+        _context(args.path)  # raises the path error before any config error
     cfg = _load_config(args, full)
+    ctx = _context(args.path, cfg.exclude)
     ruleset = _effective_ruleset(full, cfg, args)
-    report = fix(ctx, ruleset) if mode == "fix" else check(ctx, ruleset)
-    apply_policy(report, cfg)
+    if mode == "fix" and not getattr(args, "dry_run", False):
+        report = fix(ctx, ruleset, explicit=_parse_id_list(args.select))
+    else:
+        report = check(ctx, ruleset)
+        if mode == "fix":  # dry run: say what would be repaired
+            fixable = {r.id: r for r in ruleset.rules if r.fixable}
+            counts: dict[str, int] = {}
+            for v in report.violations:
+                if v.rule_id in fixable:
+                    counts[v.rule_id] = counts.get(v.rule_id, 0) + 1
+            report.would_fix = [
+                f"{rid}: {n} violation(s)" for rid, n in sorted(counts.items())
+            ]
+    apply_policy(report, cfg, ctx=ctx)
     ran = {r.id for r in ruleset.rules}
     report.unused_exemptions = [e for e in report.unused_exemptions if e.rule in ran]
     return report, ruleset, cfg, ctx
@@ -255,9 +283,31 @@ def _cmd_check(args) -> int:
         report.violations, report.baseline = apply_baseline(
             report.violations, known, ruleset, {r.id for r in ruleset.rules}
         )
+    if args.command == "fix" and not getattr(args, "dry_run", False):
+        _after_fix_cache(args, report, _ctx)
     fmt = "json" if args.json else (args.format or "text")
     print(render(fmt, report, Path(args.path), ruleset))
     return report.exit_code(strict=args.strict or cfg.strict)
+
+
+def _after_fix_cache(args, report: PreflightReport, ctx: Context) -> None:
+    """Desktop keeps a model cache (.pbi/cache.abf) that remembers lineage
+    tags. After tags change, delete it on request, or say that it exists."""
+    if not any(rid in ("M003", "M004") for rid in report.fixed_rule_ids):
+        return
+    for d in ctx.definition_dirs:
+        cache = d.parent / ".pbi" / "cache.abf"
+        if not cache.is_file():
+            continue
+        if getattr(args, "clear_cache", False):
+            cache.unlink()
+            report.fixes_applied.append(f"cache: deleted {cache.parent.parent.name}/.pbi/cache.abf")
+        else:
+            print(
+                f"tmdl-preflight: lineage tags changed; Power BI Desktop may still hold "
+                f"the old ones in {cache}. Re-run with --clear-cache to delete it.",
+                file=sys.stderr,
+            )
 
 
 def _cmd_baseline(args) -> int:
@@ -313,6 +363,39 @@ def _cmd_baseline(args) -> int:
     return 0
 
 
+def _cmd_rules_markdown(args) -> int:
+    from .catalog import REGENERATE, render_markdown_catalog
+
+    if getattr(args, "format", None) not in (None, "markdown"):
+        print("tmdl-preflight: --out/--check only apply to --format markdown", file=sys.stderr)
+        return 2
+    if args.check and not args.out:
+        print("tmdl-preflight: --check needs --out FILE", file=sys.stderr)
+        return 2
+    payload = render_markdown_catalog(default_ruleset())
+    if not args.out:
+        sys.stdout.write(payload)
+        return 0
+    target = Path(args.out)
+    if args.check:
+        problem = None
+        if not target.is_file():
+            problem = f"MISSING: {target} was never generated."
+        elif target.read_bytes() != payload.encode("utf-8"):
+            problem = f"DRIFT: {target} is stale."
+        if problem:
+            print("catalog check FAILED:", file=sys.stderr)
+            print(f"  {problem}", file=sys.stderr)
+            print(f"  regenerate with: {REGENERATE.format(out=target.as_posix())}", file=sys.stderr)
+            return 1
+        print("OK: catalog up to date.")
+        return 0
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload.encode("utf-8"))
+    print(f"Wrote {target}")
+    return 0
+
+
 def _cmd_stats(args) -> int:
     ctx = _context(args.path)
     stats = collect_stats(ctx)
@@ -326,7 +409,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     if args.rules or args.command == "rules":
-        _print_rules(getattr(args, "json", False))
+        fmt = getattr(args, "format", None)
+        if fmt == "markdown" or getattr(args, "out", None) or getattr(args, "check", False):
+            return _cmd_rules_markdown(args)
+        _print_rules(getattr(args, "json", False) or fmt == "json")
         return 0
 
     handlers = {"check": _cmd_check, "fix": _cmd_check, "baseline": _cmd_baseline,

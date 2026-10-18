@@ -251,6 +251,9 @@ class ParseError:
     file: Path
     message: str
     line: Optional[int] = None
+    # "error" for anything that stops the file from loading; "warning" for
+    # oddities the parser could still read (for example an empty name)
+    severity: str = "error"
 
 
 @dataclass

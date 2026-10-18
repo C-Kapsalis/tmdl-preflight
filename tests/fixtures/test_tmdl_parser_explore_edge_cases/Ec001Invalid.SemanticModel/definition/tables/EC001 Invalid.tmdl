@@ -1,0 +1,7 @@
+table 'EC001 Invalid'
+	lineageTag: 2aeff37f-3852-5e00-b1ca-13149df0c1ca
+
+	column 'Rider's Name'
+		dataType: string
+		lineageTag: cc1cec5c-0b09-576f-973d-07a17d0cc2da
+

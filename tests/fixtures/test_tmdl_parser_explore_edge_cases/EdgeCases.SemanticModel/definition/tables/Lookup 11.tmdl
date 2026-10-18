@@ -1,0 +1,22 @@
+table 'Lookup 11'
+	lineageTag: 218c84ac-4ed5-5840-ad75-7bc5ed5d4853
+
+	column code
+		dataType: int64
+		lineageTag: 30ebbdd3-0698-5fb9-a239-cc3b502a33f7
+		summarizeBy: none
+		sourceColumn: code
+
+	column label
+		dataType: string
+		lineageTag: 6fe21e35-70b1-5020-8647-8f01068800f0
+		summarizeBy: none
+		sourceColumn: label
+
+	partition 'Lookup 11' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

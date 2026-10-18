@@ -1,0 +1,14 @@
+table 'EC019 Shop A'
+	lineageTag: 63815898-aff1-594a-ab66-99df779ad2dc
+
+	measure 'Grand Total' = SUM(Rentals[Fee])
+		formatString: #,0
+		lineageTag: 13d21fd7-d1b7-526f-bb1f-2105273e1208
+
+	partition 'EC019 Shop A' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

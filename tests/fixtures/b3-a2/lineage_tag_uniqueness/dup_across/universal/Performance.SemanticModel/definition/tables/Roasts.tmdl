@@ -1,0 +1,26 @@
+table Roasts
+	lineageTag: 816c36e0-74e2-513a-9062-58037bb87538
+
+	column roast_id
+		dataType: int64
+		lineageTag: d2f34a13-bc9a-52bc-90be-26c4ba0deb0e
+		summarizeBy: none
+		sourceColumn: roast_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column level
+		dataType: string
+		lineageTag: cc1c8f7f-abca-51aa-b678-c98219999ae8
+		summarizeBy: none
+		sourceColumn: level
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Roasts = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from roasts")
+				in
+				    Source

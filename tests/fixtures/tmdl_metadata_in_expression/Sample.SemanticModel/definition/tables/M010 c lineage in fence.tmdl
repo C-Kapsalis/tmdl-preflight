@@ -1,0 +1,11 @@
+table 'M010 c lineage in fence'
+	lineageTag: 8831b77e-d2fe-5abf-8169-740365a2842f
+
+	measure 'Cups Sold' = ```
+			SUM(Brews[cups])
+			lineageTag: 12345678-0000-4000-8000-000000000000
+			```
+
+	partition 'M010 c lineage in fence' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})

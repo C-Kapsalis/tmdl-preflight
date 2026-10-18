@@ -1,5 +1,115 @@
 # Release notes
 
+## Unreleased
+
+This release ports a large private pytest suite into the tool: its checks
+become rules, its scripts become commands, and its tests become the
+tool's own test suite (fictional stand-in models, no client data).
+
+### Severity changes
+
+Power BI Desktop (Windows, installer build, 2026-10-18) was run on copies of
+the example model with one defect each. Where that evidence and the
+"stricter wins" policy disagree, the evidence wins.
+
+| Rule | Was | Now | Why |
+|---|---|---|---|
+| M006 model-table-refs | error, "Power BI will not open the project" | warning, baselinable | Desktop opened a model whose only defect was a table file with no `ref table` line, loaded the table and kept its relationship. The fixer stays: model.tmdl should list every table file. |
+| M004 lineage-format | warning | warning | Desktop opened a model whose only defect was a placeholder tag. |
+| M003 lineage-duplicates | error | error | Desktop refused to open the model: "Failed to add a deserialized Table object into the model ... An object with lineage-tag '...' already exists in the collection." |
+| F001 fieldparam-comma-runs | error | error, new message | Desktop opened the model, but every visual that uses the field parameter failed ("Error fetching data for this visual. Failed to move the data reader to the next row."). F002 and F003 are expected to behave the same; not observed. |
+| M011 property-after-child-block | warning | error | Stricter of the ported test and the rule. |
+| M013 dangling-description at end of file | warning | error | Stricter of the ported test and the rule. |
+
+### New rules
+
+| ID | Name | Severity | Auto-fix |
+|---|---|---|---|
+| M016 | tmdl-file-sanity | error | no |
+| M017 | space-indentation | error | no |
+| M018 | model-annotation-duplicates | error | no |
+| M019 | undefined-query-group | error | yes |
+
+### Changed rules
+
+- **M002** pairs ``` fences by structure (a fence opens after `=` and closes
+  on the next line that starts with backticks), so backticks inside a fenced
+  string literal are no longer an "unpaired fence". It also reports a
+  broken quoted name (`'Rider's Name'`, an apostrophe not doubled) as an
+  error and an empty name as a warning.
+- **M003** keeps a shared tag on the occurrence that most plausibly owns
+  it: table files first, then `relationships.tmdl`, `expressions.tmdl`,
+  `cultures/`, everything else (path, then line, inside a class). Before, a
+  column could lose its tag to an expression because `expressions.tmdl`
+  sorts before `tables/`. Expression occurrences now name the expression.
+- **M010** recognises `kpi`, `detailRows` and `relatedColumnDetails`, and in
+  DAX bodies matches a metadata keyword as a whole word whatever follows it
+  (`displayFolder` with no colon counts). Shared expressions are checked
+  too; in M bodies only a line shaped like a property counts.
+- **M011** knows the nested sections `kpi`, `detailRows`,
+  `relatedColumnDetails` and `formatStringDefinition`, resets at `role`
+  declarations, and its fixer moves the line to the object's first property
+  slot (right after the expression) instead of the end of the property
+  section. Valued properties move like flags; a file that would need more
+  than 200 moves is left alone.
+- **M013** fix removes the run and the one blank line directly after it, at
+  the end of the file too; blank lines before a run are never touched. New
+  option `fix_mode = "attach"` deletes the blank lines between a
+  description and its object instead, keeping the documentation.
+- **D004** reports an unqualified `[X]` that names a measure declared in two
+  or more tables as an ambiguous reference (warning).
+- **NAMEOF** extraction ignores a malformed reference whose quoted table
+  name contains a double quote.
+- Names declared with trailing spaces inside quotes (`'Frame Size   '`) are
+  read trimmed.
+
+### Commands and options
+
+- `exclude` globs match the path relative to the scan root (the folder you
+  pass), as well as the path inside the PBIP item. Folders above the scan
+  root never take part, so a checkout under `~/legacy/` is still scanned. A
+  model or report whose files are all excluded is skipped before parsing.
+  The JSON summary gains `files_scanned`, `excluded_files`, and `excluded`
+  now counts skipped files as well as excluded violations. A partly
+  excluded model is still parsed in full (so references into excluded files
+  resolve); only its findings in excluded files are dropped.
+- A bare `definition/` folder is accepted as a model when it holds
+  `tables/`, `model.tmdl` or `expressions.tmdl`.
+- `fix --dry-run` reports what would be repaired and writes nothing.
+- `fix --clear-cache` deletes `<Model>.SemanticModel/.pbi/cache.abf` after
+  lineage tags changed; without it the tool prints a hint when the cache
+  exists.
+- Rules carry a `safe` flag (`rules --json`). A fixer marked `safe: false`
+  (it changes data or regenerates content) never runs in a blanket `fix`;
+  select its rule explicitly to run it. The JSON payload lists such
+  fixers under `skipped_fixers`.
+
+### Bug fixes carried over from the ported suite
+
+- A lineage tag followed by a tab or several spaces after `lineageTag:` is
+  rewritten like any other (the original script only handled one space).
+- Three or more copies of a tag in one file: the later copies are
+  rewritten, the first is kept.
+
+### Ported test suite: changed expectations
+
+Each ported test whose expectation differs from the original's verdict is
+listed with the reason (BUGFIX: a bug in the original is fixed; STRICTER:
+the stricter of test and rule wins; DESKTOP: Power BI Desktop evidence).
+
+- DESKTOP: `test_lineage_tag_uniqueness::test_lineage_tag_format_validity[placeholder-fail]`
+  expects M004 as a warning (the porter expected an error).
+- STRICTER: `test_tmdl_parser_explore::test_ec020_column_and_measure_share_a_name_target`
+  accepts any severity; M012 already reports a measure named like a column
+  of its own table as an error.
+- Port convention: `test_p0_tmdl_guardian` turns on M016's opt-in
+  `check_line_endings` (off by default because Windows checkouts are often
+  CRLF) to reproduce the original verdicts.
+- Existing tests updated for the severity changes above: M011 is an error
+  and its fixer targets the first property slot; M013 at end of file is an
+  error and keeps blank lines before the run; the M002 fence message
+  changed; `rules --json` no longer pins the rule count.
+
 ## 1.1.0 (2026-10-12)
 
 ### Highlights

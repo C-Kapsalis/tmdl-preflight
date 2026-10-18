@@ -34,9 +34,11 @@ class FieldParameterCommaRunsRule(Rule):
         "Calculated-table sources (which include field-parameter tables) must "
         "not contain stray structural commas: two or more commas separated "
         "only by whitespace, typically left behind when a row was removed but "
-        "its separator was not. One stray comma makes the whole source "
-        "unparseable. Commas inside -- or // comments are exempt. Auto-fix "
-        "keeps each run's first comma and deletes the orphans."
+        "its separator was not. Observed in Power BI Desktop: the model still "
+        "opens, but every visual that uses the field parameter fails ('Error "
+        "fetching data for this visual. Failed to move the data reader to the "
+        "next row.'). Commas inside comments and string literals are exempt. "
+        "Auto-fix keeps each run's first comma and deletes the orphans."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -48,7 +50,11 @@ class FieldParameterCommaRunsRule(Rule):
                     out.append(
                         self.violation(
                             f"stray comma run ({orphans} orphan comma(s)) in "
-                            f"calculated partition source",
+                            f"calculated partition source. Power BI Desktop "
+                            f"still opens the model, but every visual that uses "
+                            f"this table fails ('Error fetching data for this "
+                            f"visual'). Delete the orphan comma(s) (the "
+                            f"auto-fix does).",
                             file=part.file,
                             line=line,
                             obj=f"{table.name} (partition source)",
@@ -191,15 +197,18 @@ class MissingRowSeparatorRule(_ConstructorRuleBase):
         "Rows of a { (...), (...) } table constructor (field parameters, "
         "calculated tables) must be separated by commas. A row appended after "
         "the previous last row without adding its comma makes the whole "
-        "source unparseable; the table then loads empty. Auto-fix inserts "
-        "the comma after the previous row."
+        "source unparseable. The Desktop symptom is expected to match F001 "
+        "(the model opens, visuals on the table fail), but it has not been "
+        "observed for this defect on its own. Auto-fix inserts the comma "
+        "after the previous row."
     )
 
     def _message(self, issue) -> str:
         return (
             "two rows of the table constructor have no comma between them, "
-            "so the calculated partition source cannot be parsed and the "
-            "table loads empty. Add a comma after the previous row (the "
+            "so the calculated partition source cannot be parsed (visuals on "
+            "this table are expected to fail, as with F001; not observed for "
+            "this defect alone). Add a comma after the previous row (the "
             "auto-fix does)."
         )
 
@@ -217,7 +226,9 @@ class TrailingRowCommaRule(_ConstructorRuleBase):
         "The last row of a { (...), (...) } table constructor must not be "
         "followed by a comma. A trailing comma before the closing brace, "
         "typically left behind when the last row is deleted, makes the "
-        "source unparseable. Auto-fix deletes the comma."
+        "source unparseable; the Desktop symptom is expected to match F001 "
+        "but has not been observed for this defect alone. Auto-fix deletes "
+        "the comma."
     )
 
     def _message(self, issue) -> str:

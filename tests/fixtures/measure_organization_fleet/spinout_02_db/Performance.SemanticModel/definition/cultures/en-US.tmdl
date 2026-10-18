@@ -1,0 +1,34 @@
+cultureInfo en-US
+
+	linguisticMetadata =
+			{
+			  "Version": "1.0.0",
+			  "Language": "en-US",
+			  "Entities": {
+			    "ads": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "_Ads"
+			        }
+			      },
+			      "State": "Generated"
+			    },
+			    "ads_measures": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Ads Measures"
+			        }
+			      },
+			      "State": "Generated"
+			    },
+			    "suppliers": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "_Suppliers"
+			        }
+			      },
+			      "State": "Generated"
+			    }
+			  }
+			}
+		contentType: json

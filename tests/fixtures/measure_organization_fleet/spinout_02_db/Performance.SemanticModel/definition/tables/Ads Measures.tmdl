@@ -1,0 +1,27 @@
+table 'Ads Measures'
+	lineageTag: 0000b4b1-0000-0000-0000-00000000004e
+
+	/// Total paid clicks.
+	measure 'Total Clicks' = SUM(Ads[clicks])
+		lineageTag: 0000b4b1-0000-0000-0000-000000000049
+
+	/// Click-through rate.
+	measure 'CTR Rate' = DIVIDE([Total Clicks], 100)
+		lineageTag: 0000b4b1-0000-0000-0000-00000000004a
+
+	measure '-Margin Base' = 1
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-00000000004b
+
+	measure '-helper Basket' = 1
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-00000000004c
+
+	/// People through the door.
+	measure Footfall = 1
+		lineageTag: 0000b4b1-0000-0000-0000-00000000004d
+
+	partition 'Ads Measures' = calculated
+		mode: import
+		source = ROW("x", 1)
+

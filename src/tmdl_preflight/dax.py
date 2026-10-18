@@ -238,7 +238,7 @@ def _closed(region: str, quote: str) -> bool:
 
 _NAMEOF_RE = re.compile(
     r"NAMEOF\s*\(\s*"
-    r"(?:'(?P<qtable>(?:[^']|'')+)'|(?P<table>[A-Za-z_][\w ]*?))?"
+    r"(?:'(?P<qtable>(?:[^'\"]|'')+)'|(?P<table>[A-Za-z_][\w ]*?))?"
     r"\s*\[(?P<member>[^\]]+)\]\s*\)",
     re.IGNORECASE,
 )
