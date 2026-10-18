@@ -1,0 +1,35 @@
+table '_m Users'
+	lineageTag: 5eed0000-0000-0000-0000-000000000230
+
+	column legacy_flag
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-000000000231
+		summarizeBy: none
+		sourceColumn: legacy_flag
+
+	column signup_month
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-000000000232
+		summarizeBy: none
+		sourceColumn: signup_month
+
+	column user_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000233
+		summarizeBy: none
+		sourceColumn: user_id
+
+	column user_role
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-000000000234
+		summarizeBy: none
+		sourceColumn: user_role
+
+	partition '_m Users' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

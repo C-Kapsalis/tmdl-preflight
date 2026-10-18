@@ -1,0 +1,9 @@
+relationship 041e5913-6a87-5a22-9f0a-0eb975152723
+	fromColumn: Campaigns.service_account_x_id
+	toColumn: _Accounts.account_x_id
+
+relationship acad4b29-8d16-5329-85a6-b7393c670cb6
+	isActive: false
+	fromColumn: Ads.account_x_id
+	toColumn: _Accounts.account_x_id
+

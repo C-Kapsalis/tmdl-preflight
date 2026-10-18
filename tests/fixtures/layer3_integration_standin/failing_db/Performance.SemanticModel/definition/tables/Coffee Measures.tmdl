@@ -1,0 +1,44 @@
+table 'Coffee Measures'
+	lineageTag: 1bd6df82-8783-5a6a-a241-179e5363f3a7
+
+	/// Revenue net of refunds
+	measure 'Total Revenue' = SUM(Orders[amount])
+		displayFolder: Sales
+		lineageTag: b652f979-f106-5b1f-a350-b31766049eac
+
+	/// Number of shop visits
+	measure 'Visit Count' = SUM(Visits[visits])
+		displayFolder: Traffic
+		lineageTag: 770e05e2-8262-5497-980a-7908de5175fd
+
+	measure '-Base Cups' = COUNTROWS(Orders)
+		isHidden
+		lineageTag: b1f6fd95-04f1-5fb0-a58b-9c0610dac36c
+
+	/// Selected metric on the axis
+	measure Pick = SELECTEDVALUE('x-Selector 1'[Ordr])
+		displayFolder: Axis
+		lineageTag: dfa1d7fe-3051-5e65-9efb-1cc6f3208283
+
+	/// Selected dimension on the axis
+	measure 'Dim Pick' = SELECTEDVALUE('y-Selector 1'[Nope])
+		displayFolder: Axis
+		lineageTag: d7172b6c-b16c-5b06-ae78-d3ab27741ec6
+
+	measure 'Avg Ticket' = DIVIDE([Total Revenue], [Visit Count])
+		isHidden
+		lineageTag: 1cbb4494-6aa4-56e4-b56e-61c957f75a61
+
+	/// Refunded amount in the period
+	measure 'Refund Total' = SUM(Refunds[amt])
+		displayFolder: Sales
+		lineageTag: 7eca8e4d-d9c5-51fe-af7b-352cf76bf55a
+
+	partition 'Coffee Measures' = m
+		mode: import
+		source =
+				let
+				    Source = Table.RemoveColumns(Table.FromRows({{null}}, {"Dummy"}), {"Dummy"})
+				in
+				    Source
+

@@ -1,0 +1,29 @@
+table '_Attribution LM'
+	lineageTag: 5eed0000-0000-0000-0000-0000000001f3
+
+	column lead_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000001f4
+		summarizeBy: none
+		sourceColumn: lead_id
+
+	column lead_source
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-0000000001f5
+		summarizeBy: none
+		sourceColumn: lead_source
+
+	column merch_custom_group_advanced
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-0000000001f6
+		summarizeBy: none
+		sourceColumn: merch_custom_group_advanced
+
+	partition '_Attribution LM' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

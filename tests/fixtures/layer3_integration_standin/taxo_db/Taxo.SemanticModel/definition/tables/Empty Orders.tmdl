@@ -1,0 +1,11 @@
+table 'Empty Orders'
+	lineageTag: 5ad88372-b171-5d4e-ad86-5970922f81a2
+
+	partition 'Empty Orders' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

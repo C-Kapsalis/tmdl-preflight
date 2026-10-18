@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from typing import Callable
@@ -263,3 +264,63 @@ class RaggedRowWidthRule(_ConstructorRuleBase):
             f"rows of this table constructor have different widths ({detail}). "
             f"Check the odd row(s) for a missing or extra value."
         )
+
+
+_THREE_FIELD_RE = re.compile(r'\(\s*"(?P<label>[^"]*)"\s*,\s*NAMEOF\s*\([^()]*\)\s*,\s*-?\d+\s*\)')
+_FOUR_FIELD_RE = re.compile(
+    r'\(\s*"(?P<label>[^"]*)"\s*,\s*NAMEOF\s*\([^()]*\)\s*,\s*-?\d+,\s*"[^"]*"\s*\)'
+)
+
+
+class FieldParameterCategoryColumnRule(Rule):
+    id = "F005"
+    name = "fieldparam-category-column"
+    severity = Severity.ERROR
+    option_defaults = {"category_column_tables": [], "category_position": 4}
+    description = (
+        "In field parameters that carry a category column (configure "
+        "category_column_tables, names or globs), every row needs the "
+        "category: a 3-field row (label, NAMEOF, order) whose label has no "
+        "4-field twin in the same table silently drops out of every category "
+        "filter. Only fenced calculated sources are read. Not auto-fixable: "
+        "the category is a business decision. Inert until configured."
+    )
+
+    def check(self, ctx: Context) -> list[Violation]:
+        from fnmatch import fnmatchcase
+
+        patterns = self.options.get("category_column_tables") or []
+        if not patterns:
+            return []
+        out: list[Violation] = []
+        for model in ctx.models:
+            for table in model.table_list:
+                if not any(fnmatchcase(table.name, p) for p in patterns):
+                    continue
+                part = next((p for p in table.partitions if p.kind == "calculated" and p.source), None)
+                if part is None or not _is_fenced(part):
+                    continue
+                four = {m.group("label") for m in _FOUR_FIELD_RE.finditer(part.source)}
+                for m in _THREE_FIELD_RE.finditer(part.source):
+                    if m.group("label") in four:
+                        continue
+                    # the fenced body starts on the line after 'source = ```'
+                    line = (part.source_start_line or part.line) + 1 + part.source.count("\n", 0, m.start())
+                    out.append(self.violation(
+                        f"row \"{m.group('label')}\" of {table.name} has no category "
+                        f"(value {self.options['category_position']}); add it so the row "
+                        f"shows up under category filters.",
+                        file=part.file, line=line, obj=f"{table.name}[{m.group('label')}]",
+                    ))
+        return out
+
+
+def _is_fenced(part) -> bool:
+    try:
+        lines = part.file.read_text(encoding="utf-8-sig").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return False
+    for idx in range(part.line - 1, min(len(lines), (part.source_start_line or part.line) + 1)):
+        if lines[idx].strip().startswith("source") and "```" in lines[idx]:
+            return True
+    return False

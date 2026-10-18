@@ -1,0 +1,26 @@
+table Returns
+	lineageTag: 70d036eb-d181-58cb-8c54-5796aecc34ab
+
+	column return_id
+		dataType: int64
+		lineageTag: 33d9443f-e92d-50b3-8711-146ee245f80f
+		summarizeBy: none
+		sourceColumn: return_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column reason
+		dataType: string
+		lineageTag: 0cbe08dd-a389-51b7-936c-542cc2ed4a06
+		summarizeBy: none
+		sourceColumn: reason
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Returns = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from returns")
+				in
+				    Source

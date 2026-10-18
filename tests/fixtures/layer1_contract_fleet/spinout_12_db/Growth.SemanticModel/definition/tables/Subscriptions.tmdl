@@ -1,0 +1,65 @@
+table Subscriptions
+	lineageTag: 5eed0000-0000-0000-0000-0000000000fe
+
+	column event_date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-0000000000ff
+		summarizeBy: none
+		sourceColumn: event_date
+
+	column has_ar_on
+		dataType: boolean
+		lineageTag: 5eed0000-0000-0000-0000-000000000100
+		summarizeBy: none
+		sourceColumn: has_ar_on
+
+	column has_churn
+		dataType: boolean
+		lineageTag: 5eed0000-0000-0000-0000-000000000101
+		summarizeBy: none
+		sourceColumn: has_churn
+
+	column has_limbo
+		dataType: boolean
+		lineageTag: 5eed0000-0000-0000-0000-000000000102
+		summarizeBy: none
+		sourceColumn: has_limbo
+
+	column has_new
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000103
+		summarizeBy: none
+		sourceColumn: has_new
+
+	column has_renewal
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000104
+		summarizeBy: none
+		sourceColumn: has_renewal
+
+	column has_return
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000105
+		summarizeBy: none
+		sourceColumn: has_return
+
+	column offer_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000106
+		summarizeBy: none
+		sourceColumn: offer_id
+
+	column user_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000107
+		summarizeBy: none
+		sourceColumn: user_id
+
+	partition Subscriptions = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

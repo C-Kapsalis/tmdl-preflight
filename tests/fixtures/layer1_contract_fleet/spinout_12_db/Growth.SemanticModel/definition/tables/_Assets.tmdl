@@ -1,0 +1,23 @@
+table _Assets
+	lineageTag: 5eed0000-0000-0000-0000-0000000000b1
+
+	column asset_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000b2
+		summarizeBy: none
+		sourceColumn: asset_id
+
+	column content_report_group_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000b3
+		summarizeBy: none
+		sourceColumn: content_report_group_id
+
+	partition _Assets = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

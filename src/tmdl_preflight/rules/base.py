@@ -98,7 +98,32 @@ class Context:
         self.definition_dirs: list[Path] = self._keep(find_definition_dirs(self.root))
         self.report_dirs: list[Path] = self._keep(find_report_dirs(self.root))
         self._models: Optional[list[SemanticModel]] = None
+        # project-level sections of the configuration (for example
+        # ``contracts``), set by the CLI after the config is loaded
         self.options: dict[str, Any] = {}
+        # free-text notes rules want shown with the report (tighten hints)
+        self.notes: list[str] = []
+
+    def model_key(self, model: SemanticModel) -> str:
+        """The model's ``*.SemanticModel`` folder relative to the scan root
+        (POSIX), or the folder name when the scan root is inside it."""
+        folder = model.definition_path.parent
+        rel = self.scan_relative(folder)
+        if rel in (None, "", "."):
+            return folder.name
+        return rel
+
+    def model_matches(self, wanted: Optional[str], model: SemanticModel) -> bool:
+        """True when a configured model key names this model. Keys compare
+        with or without the ``.SemanticModel`` suffix; no key matches all."""
+        if not wanted:
+            return True
+        def norm(key: str) -> str:
+            key = key.replace("\\", "/").strip("/")
+            return key[: -len(".SemanticModel")] if key.endswith(".SemanticModel") else key
+        have = norm(self.model_key(model))
+        want = norm(wanted)
+        return have == want or have.endswith("/" + want)
 
     # -- exclusions --------------------------------------------------------
     def scan_relative(self, file: Path) -> Optional[str]:
@@ -175,6 +200,9 @@ class Rule:
     # partition's M source). They never run as part of a blanket ``fix``;
     # only when the rule is selected explicitly by id or name.
     safe: bool = True
+    # True for rules that encode one team's conventions (naming, placement).
+    # They run only when selected by id or name (--select or config select).
+    opt_in: bool = False
     # False for defects that must never be accepted into a baseline (they
     # stop the model from opening or deploying at all)
     baselinable: bool = True
@@ -226,6 +254,8 @@ class RuleSet:
             keys = {r.id.lower(), r.name.lower()}
             if select is not None and not (keys & select):
                 continue
+            if select is None and r.opt_in:
+                continue  # conventions rules run only when named
             if ignore is not None and (keys & ignore):
                 continue
             chosen.append(r)

@@ -1,0 +1,32 @@
+table 'z-Toggle Daily Calculation'
+	lineageTag: 5eed0000-0000-0000-0000-00000000005f
+
+	calculationGroup
+
+		calculationItem Daily = ```
+				VAR _name = SELECTEDMEASURENAME ()
+				VAR _isCount = CONTAINSSTRING ( _name, "#" )
+				VAR _isRatio = CONTAINSSTRING ( _name, "/" ) || CONTAINSSTRING ( _name, " per " )
+				VAR _dailySum = SUMX ( VALUES ( '__Calendar'[Date] ), SELECTEDMEASURE () )
+				VAR _additive = ISNUMBER ( SELECTEDMEASURE () ) && _dailySum = SELECTEDMEASURE ()
+				RETURN
+				    SWITCH ( TRUE (),
+				        _isRatio, SELECTEDMEASURE (),
+				        _isCount || _additive, AVERAGEX ( VALUES ( '__Calendar'[Date] ), SELECTEDMEASURE () ),
+				        SELECTEDMEASURE () )
+				```
+
+		calculationItem Total = SELECTEDMEASURE ()
+
+	column Name
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-000000000060
+		summarizeBy: none
+		sourceColumn: Name
+		sortByColumn: Ordinal
+
+	column Ordinal
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000061
+		summarizeBy: sum
+		sourceColumn: Ordinal

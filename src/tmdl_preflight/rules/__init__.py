@@ -11,21 +11,40 @@ from .dax_rules import (
     NameofResolutionRule,
 )
 from .field_parameters import (
+    FieldParameterCategoryColumnRule,
     FieldParameterCommaRunsRule,
     MissingRowSeparatorRule,
     RaggedRowWidthRule,
     TrailingRowCommaRule,
+)
+from .comments import CommentTicketRefsRule
+from .contracts import (
+    FieldParamRegistrationContractRule,
+    ModelContractObjectsRule,
+    ModelContractRelationshipsRule,
+    RequiredModelObjectsRule,
 )
 from .hygiene import (
     ModelAnnotationDuplicatesRule,
     SpaceIndentationRule,
     UndefinedQueryGroupRule,
 )
+from .organization import (
+    DeadFactTablesRule,
+    EmptyMeasureTablesRule,
+    FormatInferenceNamingRule,
+    HelperMeasurePlacementRule,
+    MeasuresInDimensionTablesRule,
+    MeasuresInFactTablesRule,
+    UserFacingInHelperTablesRule,
+    UserOnlyTablePurityRule,
+)
 from .relationships import (
     AmbiguousActivePairRule,
     AutodetectedRelationshipsRule,
     BidirectionalFilterRule,
     DuplicateRelationshipsRule,
+    FactConformedDimensionJoinRule,
     OrphanTablesRule,
     RelationshipCardinalityRule,
     RelationshipEndpointsRule,
@@ -88,21 +107,42 @@ ALL_RULES: list[type[Rule]] = [
     OrphanTablesRule,
     AmbiguousActivePairRule,
     AutodetectedRelationshipsRule,
+    FactConformedDimensionJoinRule,
     FieldParameterCommaRunsRule,
     MissingRowSeparatorRule,
     TrailingRowCommaRule,
     RaggedRowWidthRule,
+    FieldParameterCategoryColumnRule,
     BookmarkIntegerTypesRule,
     BookmarkVisualRefsRule,
     BookmarkOptionsSchemaRule,
     ReportDefinitionIntegrityRule,
     FormatStringPresenceRule,
     MeasureDescriptionRule,
+    FormatInferenceNamingRule,
+    CommentTicketRefsRule,
+    UserOnlyTablePurityRule,
+    HelperMeasurePlacementRule,
+    UserFacingInHelperTablesRule,
+    MeasuresInFactTablesRule,
+    MeasuresInDimensionTablesRule,
+    EmptyMeasureTablesRule,
+    DeadFactTablesRule,
+    RequiredModelObjectsRule,
+    ModelContractObjectsRule,
+    ModelContractRelationshipsRule,
+    FieldParamRegistrationContractRule,
 ]
 
 
-def default_ruleset() -> RuleSet:
+def full_ruleset() -> RuleSet:
+    """Every registered rule, opt-in ones included (the catalog)."""
     return RuleSet([cls() for cls in ALL_RULES])
+
+
+def default_ruleset() -> RuleSet:
+    """The rules a plain run executes: every rule except the opt-in ones."""
+    return RuleSet([cls() for cls in ALL_RULES if not cls.opt_in])
 
 
 __all__ = [
@@ -113,4 +153,5 @@ __all__ = [
     "Severity",
     "Violation",
     "default_ruleset",
+    "full_ruleset",
 ]

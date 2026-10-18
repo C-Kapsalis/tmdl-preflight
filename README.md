@@ -14,14 +14,17 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 
 ## Features
 
-- **41 rules** over the failure modes that reject imports or silently corrupt
+- **56 rules** over the failure modes that reject imports or silently corrupt
   results: duplicate lineage tags and object names, TMDL properties leaked
   into DAX, dangling `///` descriptions, tables with no partition, inline
   `#table` entity sources that force a composite model, DAX references to
   tables and columns that are gone, broken relationship endpoints and
   ambiguous active paths, stray or missing commas in field-parameter
-  sources, bookmark and report-definition defects, and more. The full
-  catalog is generated into [`docs/rules.md`](docs/rules.md).
+  sources, bookmark and report-definition defects, and more. Rules that
+  encode one team's conventions (measure placement, naming, ratchets) are
+  opt-in, and project contracts (required objects, pinned relationships,
+  field-parameter registrations) are declared in the configuration. The
+  full catalog is generated into [`docs/rules.md`](docs/rules.md).
 - **11 auto-fixers** for the defects whose repair is fully mechanical,
   applied via a check → fix → re-check loop that never lets a fixer vouch
   for itself.
@@ -123,6 +126,10 @@ commit.
 | M017 | structure lines indented with four spaces instead of tabs | error | no |
 | M018 | the same annotation name twice in one scope of `model.tmdl` | error | no |
 | M019 | a `queryGroup:` reference to a folder `model.tmdl` never declares | error | yes |
+| C001 | a required table (format calculation group, helper table ...) or required measure is missing (configured) | error | no |
+| C002 | a declared object contract broke: a table, column or measure is gone, a key changed type, a DAX shape changed | error | no |
+| C003 | a declared relationship contract broke: an unsanctioned axis edge, a guard that no longer matches the graph, a pinned edge changed | error | no |
+| C004 | a declared field-parameter registration broke: a missing label, an ordinal outside its gap, a duplicate ordinal | error | no |
 | D001 | unbalanced `()`, `{}`, `[]`, quotes in any DAX expression | error | no |
 | D002 | `NAMEOF()` references to missing tables, columns, or measures | error | no |
 | D003 | the same measure name declared in two tables (engine requires model-wide uniqueness, case-insensitive) | error | no |
@@ -135,20 +142,34 @@ commit.
 | R005 | data tables with no relationships (load leftovers) | info | no |
 | R006 | more than one active relationship between the same two tables | error | no |
 | R007 | relationships created by Desktop's autodetection (`AutoDetected_*` ids) | warning | no |
+| R008 | a fact table with no active relationship to the conformed dimension (configured; ratchet) | error | no |
 | F001 | stray commas in a field-parameter / calculated-table source; the model opens but its visuals fail | error | yes |
 | F002 | a missing comma between two rows of a `{ (...), (...) }` constructor | error | yes |
 | F003 | a trailing comma before the constructor's closing `}` | error | yes |
 | F004 | rows of one constructor with different numbers of values | warning | no |
+| F005 | a field-parameter row without its category value (configured tables) | error | no |
 | B001 | bookmark `howCreated`/`ComparisonKind`/`Version` stored as strings; the report loader rejects them | error | yes |
 | B002 | bookmarks referencing renamed or deleted visuals | error | no |
 | B003 | bookmark `options` keys outside the report schema | error | yes |
 | B004 | `definition.pbir` pointing at a missing model, `pages.json` naming missing pages, unparseable `visual.json` | error | no |
 | S001 | visible measures without a `formatString` | info | no |
 | S002 | visible measures without a real `///` description | info | no |
+| S003 | a visible measure whose name gives a format-picking calculation group nothing to go on (opt-in) | info | no |
+| S004 | ticket numbers (`#365`) in model comments above the recorded floor (opt-in ratchet) | error | no |
+| O001 | a helper measure in a user-only (`#`) table (opt-in) | warning | no |
+| O002 | a helper measure in the wrong table for its kind (opt-in; `profile = "lenient"` for infos) | warning | no |
+| O003 | a user-facing measure parked in a dimension or helper table (opt-in) | warning | no |
+| O004 | a user-facing measure homed on a fact table (opt-in) | warning | no |
+| O005 | measures on a dimension table (opt-in) | info | no |
+| O006 | a measures table with no measures (opt-in) | info | no |
+| O007 | a fact table no measure reads (opt-in ratchet) | error | no |
 
-Details, scopes, examples and severity semantics: see the rule catalog in
-the [documentation](#documentation) below. Print the same catalog from the
-tool: `tmdl-preflight rules` (or `--json`).
+Details, scopes, examples and severity semantics: see the generated
+[`docs/rules.md`](docs/rules.md) and the rule catalog in the
+[documentation](#documentation) below. Print the same catalog from the
+tool: `tmdl-preflight rules` (or `--json`, or `--format markdown --out
+FILE`, with `--check` to fail when a committed copy is stale). Opt-in rules
+run only when named in `--select` or the configuration's `select`.
 
 ## Selecting rules and other flags
 
@@ -222,7 +243,14 @@ M015, R006) can never be baselined.
 `tmdl-preflight stats <path>` (or `--json`) prints counts: tables, columns,
 measures, relationships, partitions by kind, calculation groups, field
 parameters, descriptions, display folders, and so on. No thresholds, just
-numbers worth watching in a pull request.
+numbers worth watching in a pull request. `stats --measures` adds how the
+measures are organised: user-facing vs helper names, helper kinds, which
+measures a field parameter surfaces, the busiest tables, and how many
+dash-prefixed helpers carry a description.
+
+`tmdl-preflight comment-refs <path>` counts ticket references (`#365`) in
+comments per model; `--floors FILE --tighten` lowers a ratchet file to
+today's counts and never raises it (rule S004 gates on the same file).
 
 ## In CI and pre-commit
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from conftest import run_cli
 from tmdl_preflight.catalog import cell, render_markdown_catalog, summary_line
-from tmdl_preflight.rules import default_ruleset
+from tmdl_preflight.rules import full_ruleset
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -25,13 +25,13 @@ def test_summary_line_skips_rule_lines():
 def test_counts_match_rules_json():
     code, out, _ = run_cli("rules", "--json")
     rules = json.loads(out)
-    page = render_markdown_catalog(default_ruleset())
+    page = render_markdown_catalog(full_ruleset())
     fixable = sum(1 for r in rules if r["fixable"])
     baselinable = sum(1 for r in rules if r["baselinable"])
     assert (f"Rules: **{len(rules)}** · auto-fixable: **{fixable}** · "
             f"baselinable: **{baselinable}**.") in page
     assert page.endswith("|\n") and not page.endswith("\n\n")
-    assert render_markdown_catalog(default_ruleset()) == page
+    assert render_markdown_catalog(full_ruleset()) == page
 
 
 def test_check_reports_missing_and_drift(tmp_path):

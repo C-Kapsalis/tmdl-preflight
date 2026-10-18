@@ -1,0 +1,17 @@
+table 'Active Promos'
+	lineageTag: 5eed0000-0000-0000-0000-00000000010b
+
+	column user_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000010c
+		summarizeBy: none
+		sourceColumn: user_id
+
+	partition 'Active Promos' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

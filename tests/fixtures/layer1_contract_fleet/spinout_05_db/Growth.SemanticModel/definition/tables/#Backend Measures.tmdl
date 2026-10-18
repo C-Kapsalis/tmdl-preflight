@@ -1,0 +1,47 @@
+table '#Backend Measures'
+	lineageTag: 5eed0000-0000-0000-0000-000000000213
+
+	/// Spend including the finance restatement.
+	measure Cost = SUM ( Spend[cost] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000214
+
+	/// Spend, cost-layer masked.
+	measure '^Cost' = CALCULATE ( [Cost], KEEPFILTERS ( Spend[layer] = "primary" ) )
+		lineageTag: 5eed0000-0000-0000-0000-000000000215
+
+	/// Leads.
+	measure '^Leads #' = COUNTROWS ( Leads )
+		lineageTag: 5eed0000-0000-0000-0000-000000000216
+
+	/// False at grains where cost and leads do not scope together.
+	measure '-helper Cost Grain Valid' = ```
+			VAR blockedTables = ISFILTERED( '_Attribution LM' ) || ISFILTERED( '_Accounts' ) || ISFILTERED( '_Campaigns' ) || ISFILTERED( '_Devices' ) || ISFILTERED( '_Landing Pages' )
+			VAR blockedCols = ISINSCOPE( '_Attribution LM'[lead_source] ) || ISINSCOPE( '_Accounts'[account_name] ) || ISINSCOPE( '_Campaigns'[campaign_name] ) || ISINSCOPE( '_Devices'[device] ) || ISINSCOPE( '_Landing Pages'[page_url] )
+			RETURN NOT ( blockedTables || blockedCols )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000217
+
+	/// Lets cost per lead render under the population policy slicer only.
+	measure '-helper Lead Policy Filter Only' = ```
+			VAR coverageFloor = 0.95
+			VAR policyOnSlicer = ISFILTERED( '_Attribution LM'[merch_custom_group_advanced] ) && NOT ISINSCOPE( '_Attribution LM'[merch_custom_group_advanced] )
+			VAR recheck =
+			    CALCULATE( [-helper Cost Grain Valid], REMOVEFILTERS( '_Attribution LM'[merch_custom_group_advanced] ) )
+			VAR coverage = DIVIDE( [^Leads #], CALCULATE( [^Leads #], REMOVEFILTERS( '_Attribution LM'[merch_custom_group_advanced] ) ) )
+			RETURN
+			    policyOnSlicer && recheck = 1 && coverage >= coverageFloor
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000218
+
+	/// Cost per lead.
+	measure 'Cost/ Lead' = ```
+			IF ( [-helper Cost Grain Valid] || [-helper Lead Policy Filter Only], DIVIDE ( [^Cost], [^Leads #] ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000219
+
+	/// Cost per merchant.
+	measure 'Cost/ Merchant' = ```
+			IF ( [-helper Cost Grain Valid], DIVIDE ( [^Cost], [^Leads #] ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-00000000021a
+

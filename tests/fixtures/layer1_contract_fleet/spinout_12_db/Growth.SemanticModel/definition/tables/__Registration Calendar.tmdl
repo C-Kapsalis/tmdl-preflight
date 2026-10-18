@@ -1,0 +1,23 @@
+table '__Registration Calendar'
+	lineageTag: 5eed0000-0000-0000-0000-000000000111
+
+	column Date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-000000000112
+		summarizeBy: none
+		sourceColumn: Date
+
+	column 'Registration Cohort Date'
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-000000000113
+		summarizeBy: none
+		sourceColumn: Registration Cohort Date
+
+	partition '__Registration Calendar' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

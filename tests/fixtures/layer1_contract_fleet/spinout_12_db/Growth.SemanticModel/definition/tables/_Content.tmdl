@@ -1,0 +1,17 @@
+table _Content
+	lineageTag: 5eed0000-0000-0000-0000-0000000000a4
+
+	column content_group_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000a5
+		summarizeBy: none
+		sourceColumn: content_group_id
+
+	partition _Content = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

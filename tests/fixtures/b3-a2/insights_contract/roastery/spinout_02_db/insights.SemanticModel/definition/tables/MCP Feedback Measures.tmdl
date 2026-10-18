@@ -1,0 +1,67 @@
+table 'MCP Feedback Measures'
+	lineageTag: 8e1971b4-4eeb-5b9e-ae3d-f92ea1d3f7c5
+
+	measure 'MCP Feedback #' = CALCULATE(COUNTROWS('MCP Feedback'), USERELATIONSHIP(__Calendar[Date], 'MCP Feedback'[date]))
+		formatString: 0
+		displayFolder: Feedback
+		lineageTag: a6c675cd-e01b-5313-92ad-88fd73f91b92
+
+	measure 'MCP Feedback Open #' = [MCP Feedback #]
+		formatString: 0
+		displayFolder: Feedback
+		lineageTag: 7b6b0509-04e7-50bf-8e8b-0f2a1367f63f
+
+	measure 'MCP Feedback Bugs #' = [MCP Feedback #]
+		formatString: 0
+		displayFolder: Feedback
+		lineageTag: 6c6feaef-4a7a-5fed-8237-445bb06db51e
+
+	measure 'MCP Feedback Feature Requests #' = [MCP Feedback #]
+		formatString: 0
+		displayFolder: Feedback
+		lineageTag: 61fc9aee-1654-51a8-9266-e5ad137060d2
+
+	measure 'MCP Customer Feedback #' = [MCP Feedback #]
+		formatString: 0
+		displayFolder: Feedback
+		lineageTag: c4e8f22b-604f-5ce9-a20e-6b7bb237d175
+
+	measure 'MCP Feedback Orgs #' = [MCP Feedback #]
+		formatString: 0
+		displayFolder: Feedback
+		lineageTag: e5b10a69-1786-548b-abdc-d2d189e3c029
+
+	measure 'MCP Feedback Oldest Open (days)' = [MCP Feedback #]
+		formatString: 0
+		displayFolder: Feedback
+		lineageTag: 6577435d-3119-5b02-9bfb-44ab0b8ade28
+
+	measure 'MCP Feedback Unlinked #' =
+			VAR Total = [MCP Feedback #]
+			RETURN IF(ISBLANK(Total), BLANK(), COALESCE(CALCULATE([MCP Feedback #], ISBLANK('MCP Feedback'[last_tool_call_id])), 0))
+		formatString: 0
+		displayFolder: Feedback
+		lineageTag: cb91d12e-ec7f-5438-a8c6-8dd6139dcf9b
+
+	measure 'MCP Feedback Untrusted Text #' = [MCP Feedback #]
+		formatString: 0
+		displayFolder: Feedback
+		lineageTag: b868d445-ada9-5048-a08e-43080dfb1a12
+
+	measure 'MCP Feedback Uncategorized #' =
+			VAR Total = [MCP Feedback #]
+			RETURN IF(ISBLANK(Total), BLANK(), COALESCE(CALCULATE([MCP Feedback #], ISBLANK('MCP Feedback'[Analysis Category at Submit])), 0))
+		formatString: 0
+		displayFolder: Feedback
+		lineageTag: 54b79ed9-5ef4-57a5-9836-470d2a2e45bd
+
+	measure 'MCP Feedback per 100 Tool Calls' =
+			VAR Calls = IF(ISFILTERED('MCP Feedback'[Analysis Category at Submit]), CALCULATE(COUNTROWS('MCP Tool Calls'), TREATAS(VALUES('MCP Feedback'[Analysis Category at Submit]), 'MCP Tool Calls'[Analysis Category])), COUNTROWS('MCP Tool Calls'))
+			RETURN DIVIDE([MCP Feedback #] * 100, Calls)
+		formatString: 0.00
+		displayFolder: Feedback
+		lineageTag: f043d942-4dbe-585e-b990-aa60d77d6f8a
+
+	partition 'MCP Feedback Measures' = calculated
+		mode: import
+		source = ROW("x", 1)

@@ -1,0 +1,17 @@
+table _Queries
+	lineageTag: 5eed0000-0000-0000-0000-00000000001c
+
+	column query_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000001d
+		summarizeBy: none
+		sourceColumn: query_id
+
+	partition _Queries = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

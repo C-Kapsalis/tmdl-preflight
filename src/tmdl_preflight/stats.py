@@ -59,3 +59,67 @@ def render_stats(stats: dict[str, Any]) -> str:
             value = ", ".join(f"{k}: {v}" for k, v in value.items()) or "none"
         lines.append(f"{key.replace('_', ' '):<{width}}  {value}")
     return "\n".join(lines)
+
+
+def measure_summary(ctx: Context, field_parameter_tables=None, options=None) -> dict[str, Any]:
+    """How measures are organised: name classes, field-parameter surfacing,
+    helper subcategories, top tables, described dash helpers. Informational
+    only; there are no thresholds besides the surfacing advisory."""
+    from .measure_classes import classify_measure_name
+    from .roles import surfaced_measures
+
+    measures = [m for model in ctx.models for m in model.all_measures()]
+    classes = [classify_measure_name(m.name, options) for m in measures]
+    user = {c.name for c in classes if not c.is_helper}
+    surfaced: set[str] = set()
+    for model in ctx.models:
+        surfaced |= surfaced_measures(model, field_parameter_tables)
+    subcats = Counter(c.subcategory or "unknown_helper" for c in classes if c.is_helper)
+    per_table = Counter(m.table for m in measures)
+    dash = [m for m in measures if m.name.startswith("-")]
+    total = len(measures)
+    users = sum(1 for c in classes if not c.is_helper)
+    inter = len(surfaced & user)
+    return {
+        "total": total,
+        "user_facing": users,
+        "helpers": total - users,
+        "user_facing_pct": round(100.0 * users / total, 1) if total else 0.0,
+        "helpers_pct": round(100.0 * (total - users) / total, 1) if total else 0.0,
+        "surfaced": len(surfaced),
+        "surfaced_user_facing": inter,
+        "not_surfaced": len(user - surfaced),
+        "advisory": bool(users) and inter < users * 0.5,
+        "subcategories": dict(sorted(subcats.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "top_tables": [[name, n] for name, n in sorted(per_table.items(), key=lambda kv: (-kv[1], kv[0]))[:10]],
+        "dash_helpers": len(dash),
+        "dash_helpers_described": sum(1 for m in dash if (m.description or "").strip()),
+    }
+
+
+def render_measure_summary(s: dict[str, Any]) -> str:
+    if not s["total"]:
+        return "No measures in model."
+    pct = lambda n: f"{100.0 * n / s['total']:.1f}%"  # noqa: E731
+    lines = [
+        f"measures: {s['total']}",
+        f"  user-facing: {s['user_facing']} ({pct(s['user_facing'])})",
+        f"  helpers: {s['helpers']} ({pct(s['helpers'])})",
+        f"field-parameter surfacing: {s['surfaced']} measure(s) surfaced, "
+        f"{s['surfaced_user_facing']} of them user-facing, {s['not_surfaced']} user-facing "
+        f"measure(s) not surfaced",
+    ]
+    if s["advisory"]:
+        lines.append("  advisory: fewer than half of the user-facing measures are surfaced "
+                     "by a field parameter")
+    lines.append("helper subcategories:")
+    for name, n in s["subcategories"].items():
+        lines.append(f"  {name}: {n} ({pct(n)})")
+    lines.append("top tables by measure count:")
+    for name, n in s["top_tables"]:
+        lines.append(f"  {name}: {n}")
+    described = s["dash_helpers_described"]
+    share = f"{100.0 * described / s['dash_helpers']:.1f}%" if s["dash_helpers"] else "n/a"
+    lines.append(f"dash-prefixed helpers: {s['dash_helpers']}, with a description: "
+                 f"{described} ({share})")
+    return "\n".join(lines)

@@ -1,0 +1,29 @@
+table _Accounts
+	lineageTag: 92fe3676-c970-5736-849a-729581c1e69d
+
+	column account_x_id
+		dataType: string
+		lineageTag: c0f8440c-3646-5d2f-8a12-228a738bda2a
+		summarizeBy: none
+		sourceColumn: account_x_id
+
+	column 'Account Name'
+		dataType: string
+		lineageTag: 33d76f42-98d7-5f98-8982-47f1dc2863b4
+		summarizeBy: none
+		sourceColumn: Account Name
+
+	column 'Account Service'
+		dataType: string
+		lineageTag: 26f57da2-9401-5be4-9f0b-1994295f6fe2
+		summarizeBy: none
+		sourceColumn: Account Service
+
+	partition '_Accounts' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

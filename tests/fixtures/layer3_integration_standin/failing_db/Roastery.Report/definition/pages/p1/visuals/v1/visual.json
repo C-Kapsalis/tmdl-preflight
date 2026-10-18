@@ -1,0 +1,32 @@
+{
+  "name": "v1",
+  "visual": {
+    "visualType": "lineChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "HierarchyLevel": {
+                  "Expression": {
+                    "Hierarchy": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "__Calendar"
+                        }
+                      },
+                      "Hierarchy": "Date Hierarchy"
+                    },
+                    "Level": "Month"
+                  }
+                }
+              },
+              "queryRef": "__Calendar.Date Hierarchy.Month"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

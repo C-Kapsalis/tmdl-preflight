@@ -79,6 +79,8 @@ class PreflightReport:
     skipped: list[str] = field(default_factory=list)
     # fix --dry-run: what a real fix would repair, per rule
     would_fix: list[str] = field(default_factory=list)
+    # free-text notes from the rules (for example ratchet tighten hints)
+    notes: list[str] = field(default_factory=list)
 
     def by_severity(self, severity: Severity) -> list[Violation]:
         return [v for v in self.violations if v.severity == severity]
@@ -119,6 +121,7 @@ class PreflightReport:
             "skipped": self.skipped,
             "skipped_fixers": self.skipped_fixers,
             "would_fix": self.would_fix,
+            "notes": self.notes,
             "violations": [v.to_dict() for v in self.violations],
             "scanned": self.scanned,
         }
@@ -139,9 +142,14 @@ class PreflightReport:
 def check(ctx: Context, ruleset: RuleSet) -> PreflightReport:
     """Pure-read pass: run every rule, collect violations, mutate nothing."""
     report = PreflightReport()
+    ctx.notes = []
     for rule in ruleset.rules:
+        if getattr(rule, "disabled_by_policy", lambda: False)():
+            report.skipped.append(rule.name)
+            continue
         report.violations.extend(rule.check(ctx))
     report.scanned = scan_summary(ctx)
+    report.notes = list(dict.fromkeys(ctx.notes))
     return report
 
 
@@ -174,6 +182,8 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
     second = check(ctx, ruleset)
     report.violations = second.violations
     report.scanned = second.scanned
+    report.notes = second.notes
+    report.skipped = second.skipped
     return report
 
 

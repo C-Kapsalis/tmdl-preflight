@@ -1,0 +1,24 @@
+table Visits
+	isHidden
+	lineageTag: a4a739da-efb5-51b2-b31b-4c225f3951f0
+
+	column visit_date
+		dataType: dateTime
+		lineageTag: e43d85e3-bfb0-5b74-97af-48dcedf177a4
+		summarizeBy: none
+		sourceColumn: visit_date
+
+	column visits
+		dataType: int64
+		lineageTag: 62b40a82-0cea-5a91-942b-19b3195137ca
+		summarizeBy: none
+		sourceColumn: visits
+
+	partition 'Visits' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

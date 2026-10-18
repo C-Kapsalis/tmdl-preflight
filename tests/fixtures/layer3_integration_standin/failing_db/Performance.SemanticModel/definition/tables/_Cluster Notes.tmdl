@@ -1,0 +1,17 @@
+table '_Cluster Notes'
+	lineageTag: ecb8929c-ea87-5bce-9d89-27f4c8c50d0a
+
+	column label
+		dataType: string
+		lineageTag: 71813809-f635-5079-9a7a-162935e097fb
+		summarizeBy: none
+		sourceColumn: label
+
+	partition '_Cluster Notes' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

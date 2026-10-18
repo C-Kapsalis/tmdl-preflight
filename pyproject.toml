@@ -46,3 +46,9 @@ packages = ["src/tmdl_preflight"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-p no:cacheprovider"
+markers = [
+    "p0: a gate the ported suite treated as release-blocking",
+    "p1: a gate the ported suite treated as important",
+    "layer1: a structural (layer 1) gate of the ported suite",
+    "client: a gate the ported suite ran per client model",
+]

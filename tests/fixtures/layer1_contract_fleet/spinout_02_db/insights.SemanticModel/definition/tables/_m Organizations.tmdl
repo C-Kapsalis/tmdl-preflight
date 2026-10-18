@@ -1,0 +1,29 @@
+table '_m Organizations'
+	lineageTag: 5eed0000-0000-0000-0000-00000000022c
+
+	column org_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000022d
+		summarizeBy: none
+		sourceColumn: org_id
+
+	column org_name
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-00000000022e
+		summarizeBy: none
+		sourceColumn: org_name
+
+	column org_tier
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-00000000022f
+		summarizeBy: none
+		sourceColumn: org_tier
+
+	partition '_m Organizations' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

@@ -36,7 +36,7 @@ from .baseline import (
 from .config import Config, ConfigError, load_config
 from .engine import PreflightReport, apply_policy, check, fix
 from .output import FORMATS, render
-from .rules import default_ruleset
+from .rules import default_ruleset, full_ruleset
 from .rules.base import Context, RuleSet
 from .stats import collect_stats, render_stats
 
@@ -69,7 +69,7 @@ def _harden_output_streams() -> None:
 
 
 def _print_rules(as_json: bool) -> None:
-    ruleset = default_ruleset()
+    ruleset = full_ruleset()
     if as_json:
         print(
             json.dumps(
@@ -82,6 +82,7 @@ def _print_rules(as_json: bool) -> None:
                         "description": r.description,
                         "baselinable": r.baselinable,
                         "safe": r.safe if r.fixable else None,
+                        "opt_in": r.opt_in,
                         "options": r.option_defaults,
                     }
                     for r in ruleset.rules
@@ -92,7 +93,8 @@ def _print_rules(as_json: bool) -> None:
         return
     for r in ruleset.rules:
         fixable = "auto-fixable" if r.fixable else "check-only"
-        print(f"{r.id}  {r.name:30s} {r.severity.value:8s} {fixable}")
+        opt = "  (opt-in)" if r.opt_in else ""
+        print(f"{r.id}  {r.name:30s} {r.severity.value:8s} {fixable}{opt}")
         print(f"      {r.description}")
         print()
 
@@ -165,6 +167,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_stats = sub.add_parser("stats", help="print an inventory of the project (counts only)")
     p_stats.add_argument("path", help=path_help)
     p_stats.add_argument("--json", action="store_true", help="machine-readable output")
+    p_stats.add_argument("--measures", action="store_true",
+                         help="add the measure-organisation summary (classes, "
+                              "field-parameter surfacing, top tables)")
+    p_stats.add_argument("--field-parameter-tables", metavar="NAMES",
+                         help="comma-separated table names or globs whose NAMEOF rows "
+                              "count as surfaced (default: detected field parameters)")
+
+    p_refs = sub.add_parser("comment-refs",
+                            help="count ticket references (#123) in model comments")
+    p_refs.add_argument("path", help=path_help)
+    p_refs.add_argument("--list", nargs="?", const="", metavar="PREFIX",
+                        help="list every reference (optionally only models whose key "
+                             "starts with PREFIX)")
+    p_refs.add_argument("--json", action="store_true", help="machine-readable output")
+    p_refs.add_argument("--floors", metavar="FILE", help="the ratchet file to compare with")
+    p_refs.add_argument("--tighten", action="store_true",
+                        help="lower the floors in FILE to today's counts (never raises)")
 
     p_rules = sub.add_parser("rules", help="list the rule catalog")
     p_rules.add_argument("--json", action="store_true", help="machine-readable output")
@@ -246,11 +265,12 @@ def _effective_ruleset(full: RuleSet, cfg: Config, args) -> RuleSet:
 
 
 def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
-    full = default_ruleset()
+    full = full_ruleset()
     if not Path(args.path).exists():
         _context(args.path)  # raises the path error before any config error
     cfg = _load_config(args, full)
     ctx = _context(args.path, cfg.exclude)
+    ctx.options = dict(cfg.sections)
     ruleset = _effective_ruleset(full, cfg, args)
     if mode == "fix" and not getattr(args, "dry_run", False):
         report = fix(ctx, ruleset, explicit=_parse_id_list(args.select))
@@ -372,7 +392,7 @@ def _cmd_rules_markdown(args) -> int:
     if args.check and not args.out:
         print("tmdl-preflight: --check needs --out FILE", file=sys.stderr)
         return 2
-    payload = render_markdown_catalog(default_ruleset())
+    payload = render_markdown_catalog(full_ruleset())
     if not args.out:
         sys.stdout.write(payload)
         return 0
@@ -399,7 +419,75 @@ def _cmd_rules_markdown(args) -> int:
 def _cmd_stats(args) -> int:
     ctx = _context(args.path)
     stats = collect_stats(ctx)
+    if args.measures:
+        from .stats import measure_summary, render_measure_summary
+
+        patterns = _parse_list(args.field_parameter_tables)
+        summary = measure_summary(ctx, patterns)
+        if args.json:
+            stats["measures"] = summary
+        else:
+            print(render_stats(stats))
+            print()
+            print(render_measure_summary(summary))
+            return 0
     print(json.dumps(stats, indent=2) if args.json else render_stats(stats))
+    return 0
+
+
+def _parse_list(raw: Optional[str]) -> Optional[list[str]]:
+    if not raw:
+        return None
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+
+def _cmd_comment_refs(args) -> int:
+    from .ratchet import RatchetFileError, load_floors, write_floors
+    from .rules.comments import CLASSES, count_by_class, model_ticket_refs
+
+    ctx = _context(args.path)
+    counts: dict[str, dict[str, int]] = {}
+    hits: dict[str, list] = {}
+    for model in ctx.models:
+        key = ctx.model_key(model)
+        refs = model_ticket_refs(model.definition_path, ctx)
+        counts[key] = count_by_class(refs)
+        hits[key] = refs
+    if args.tighten:
+        if not args.floors:
+            raise UsageError("--tighten needs --floors FILE")
+        try:
+            floors = load_floors(args.floors, missing_ok=True)
+        except RatchetFileError as exc:
+            raise UsageError(str(exc)) from exc
+        seeded = not Path(args.floors).exists()
+        new: dict[str, dict[str, int]] = {}
+        for key, entry in floors.items():
+            now = counts.get(key)
+            if now is None:
+                continue  # the model is gone: its entry goes with it
+            new[key] = {c: min(int(entry.get(c, 0)), now[c]) for c in CLASSES}
+        if seeded:
+            new = {k: dict(v) for k, v in counts.items()}
+        new = {k: v for k, v in sorted(new.items()) if any(v.values())}
+        write_floors(args.floors, new)
+        print(f"tmdl-preflight: floors written to {args.floors} ({len(new)} model(s))")
+        return 0
+    if args.json:
+        payload: dict = {"counts": counts}
+        if args.list is not None:
+            payload["refs"] = [
+                {"model": k, "file": str(r.file), "line": r.line, "class": r.cls, "ref": r.ref}
+                for k, refs in hits.items() if k.startswith(args.list) for r in refs
+            ]
+        print(json.dumps(payload, indent=2))
+        return 0
+    for key in sorted(counts):
+        c = counts[key]
+        print(f"{key}: description {c['description']}, inline {c['inline']}")
+        if args.list is not None and key.startswith(args.list):
+            for r in hits[key]:
+                print(f"  {r.file.name}:{r.line} [{r.cls}] {r.ref}  {r.text}")
     return 0
 
 
@@ -416,7 +504,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 0
 
     handlers = {"check": _cmd_check, "fix": _cmd_check, "baseline": _cmd_baseline,
-                "stats": _cmd_stats}
+                "stats": _cmd_stats, "comment-refs": _cmd_comment_refs}
     handler = handlers.get(args.command)
     if handler is None:
         parser.print_help()

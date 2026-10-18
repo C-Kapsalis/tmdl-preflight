@@ -1,0 +1,17 @@
+table _Shops
+	lineageTag: 08ed59d8-aad7-5c14-8346-cced00f6c579
+
+	column shop_id
+		dataType: int64
+		lineageTag: 5660ded3-02c3-5c93-95f6-bde785233f5d
+		summarizeBy: none
+		sourceColumn: shop_id
+
+	partition '_Shops' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

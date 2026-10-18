@@ -1,0 +1,65 @@
+table 'Traffic Report'
+	lineageTag: 5eed0000-0000-0000-0000-0000000000e6
+
+	column account_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000e7
+		summarizeBy: none
+		sourceColumn: account_id
+
+	column ad_group_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000e8
+		summarizeBy: none
+		sourceColumn: ad_group_x_id
+
+	column ad_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000e9
+		summarizeBy: none
+		sourceColumn: ad_id
+
+	column country_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000ea
+		summarizeBy: none
+		sourceColumn: country_id
+
+	column device_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000eb
+		summarizeBy: none
+		sourceColumn: device_id
+
+	column event_date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-0000000000ec
+		summarizeBy: none
+		sourceColumn: event_date
+
+	column keyword_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000ed
+		summarizeBy: none
+		sourceColumn: keyword_id
+
+	column landing_page_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000ee
+		summarizeBy: none
+		sourceColumn: landing_page_x_id
+
+	column query_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000ef
+		summarizeBy: none
+		sourceColumn: query_id
+
+	partition 'Traffic Report' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

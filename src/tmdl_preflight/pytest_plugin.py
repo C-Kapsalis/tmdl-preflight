@@ -31,7 +31,7 @@ from typing import Optional
 import pytest
 
 from .engine import PreflightReport, check, fix
-from .rules import default_ruleset
+from .rules import full_ruleset
 from .rules.base import Context, Severity
 
 
@@ -48,7 +48,7 @@ class PreflightRunner:
         if autofix is None:
             autofix = os.getenv("TMDL_PREFLIGHT_AUTOFIX", "0") == "1"
         ctx = Context(Path(path))
-        ruleset = default_ruleset().select(
+        ruleset = full_ruleset().select(
             {s.lower() for s in select} if select else None,
             {s.lower() for s in ignore} if ignore else None,
         )

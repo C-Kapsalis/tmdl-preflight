@@ -1,0 +1,17 @@
+table _Offers
+	lineageTag: 5eed0000-0000-0000-0000-00000000010d
+
+	column offer_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000010e
+		summarizeBy: none
+		sourceColumn: offer_id
+
+	partition _Offers = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

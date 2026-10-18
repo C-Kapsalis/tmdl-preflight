@@ -1,0 +1,24 @@
+table Refunds
+	isHidden
+	lineageTag: b1796a88-c238-501f-9979-26cd3a2fa9f3
+
+	column refund_date
+		dataType: dateTime
+		lineageTag: 774938ef-5cf3-5ed3-bfe4-964447157668
+		summarizeBy: none
+		sourceColumn: refund_date
+
+	column amt
+		dataType: double
+		lineageTag: 60edd5d6-4eaf-5e64-b458-e660af5bbb61
+		summarizeBy: none
+		sourceColumn: amt
+
+	partition 'Refunds' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

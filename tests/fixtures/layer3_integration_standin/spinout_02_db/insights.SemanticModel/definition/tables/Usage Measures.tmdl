@@ -1,0 +1,16 @@
+table 'Usage Measures'
+	lineageTag: c1d10a1c-3c19-5302-bea0-a34b3529c51f
+
+	/// Distinct members using the app
+	measure 'User Count' = COUNTROWS(Members)
+		displayFolder: Users
+		lineageTag: 7cd7f154-9b6f-5e0b-be3c-f0391a6fb484
+
+	partition 'Usage Measures' = m
+		mode: import
+		source =
+				let
+				    Source = Table.RemoveColumns(Table.FromRows({{null}}, {"Dummy"}), {"Dummy"})
+				in
+				    Source
+

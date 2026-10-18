@@ -1,0 +1,47 @@
+table 'GA4 Conversions'
+	lineageTag: 5eed0000-0000-0000-0000-000000000001
+
+	column account_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000002
+		summarizeBy: none
+		sourceColumn: account_id
+
+	column ad_group_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000003
+		summarizeBy: none
+		sourceColumn: ad_group_x_id
+
+	column country_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000004
+		summarizeBy: none
+		sourceColumn: country_id
+
+	column device_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000005
+		summarizeBy: none
+		sourceColumn: device_id
+
+	column event_date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-000000000006
+		summarizeBy: none
+		sourceColumn: event_date
+
+	column landing_page_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000007
+		summarizeBy: none
+		sourceColumn: landing_page_x_id
+
+	partition 'GA4 Conversions' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

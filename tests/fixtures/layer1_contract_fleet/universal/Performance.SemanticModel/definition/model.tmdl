@@ -1,0 +1,24 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+
+ref table '#Report Measures'
+ref table 'Ads Report'
+ref table 'Crawl Report'
+ref table 'Email Report'
+ref table 'GA4 Conversions'
+ref table 'Helper Measures'
+ref table 'Keywords Report'
+ref table 'Queries Paid'
+ref table 'Traffic Report'
+ref table _Accounts
+ref table _Ads
+ref table _Campaigns
+ref table _Countries
+ref table _Devices
+ref table _Keywords
+ref table '_Landing Pages'
+ref table _Queries
+ref table __Calendar
+ref table '__Comparison Calendar'
+ref table 'z-Toggle Daily Calculation'

@@ -1,0 +1,65 @@
+table 'Email Report'
+	lineageTag: 5eed0000-0000-0000-0000-00000000004a
+
+	column account_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000004b
+		summarizeBy: none
+		sourceColumn: account_id
+
+	column ad_group_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000004c
+		summarizeBy: none
+		sourceColumn: ad_group_x_id
+
+	column ad_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000004d
+		summarizeBy: none
+		sourceColumn: ad_id
+
+	column country_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000004e
+		summarizeBy: none
+		sourceColumn: country_id
+
+	column device_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000004f
+		summarizeBy: none
+		sourceColumn: device_id
+
+	column event_date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-000000000050
+		summarizeBy: none
+		sourceColumn: event_date
+
+	column keyword_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000051
+		summarizeBy: none
+		sourceColumn: keyword_id
+
+	column landing_page_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000052
+		summarizeBy: none
+		sourceColumn: landing_page_x_id
+
+	column query_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000053
+		summarizeBy: none
+		sourceColumn: query_id
+
+	partition 'Email Report' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

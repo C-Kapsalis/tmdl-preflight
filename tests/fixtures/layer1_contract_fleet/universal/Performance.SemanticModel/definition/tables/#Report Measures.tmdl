@@ -1,0 +1,26 @@
+table '#Report Measures'
+	lineageTag: 5eed0000-0000-0000-0000-00000000005b
+
+	/// Spend.
+	measure Cost = SUM ( 'Ads Report'[cost] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000005c
+
+	/// Clicks.
+	measure Clicks = SUM ( 'Ads Report'[clicks] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000005d
+
+	/// Cost per click; Performance Max rows are dropped at search-term grain only.
+	measure CPC = ```
+			VAR _grain = [-helper Grain]
+			RETURN
+			    SWITCH (
+			        _grain,
+			        "search_term", DIVIDE ( CALCULATE ( [Cost], KEEPFILTERS ( NOT _Campaigns[Campaign Type] IN { "performance_max", "performance max" } ) ), CALCULATE ( [Clicks], KEEPFILTERS ( NOT _Campaigns[Campaign Type] IN { "performance_max", "performance max" } ) ) ),
+			        "keyword", DIVIDE ( [Cost], [Clicks] ),
+			        "ad", DIVIDE ( [Cost], [Clicks] ),
+			        "campaign", DIVIDE ( [Cost], [Clicks] ),
+			        BLANK ( )
+			    )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-00000000005e
+

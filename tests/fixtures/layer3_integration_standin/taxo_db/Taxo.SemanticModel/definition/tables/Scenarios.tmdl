@@ -1,0 +1,13 @@
+table Scenarios
+	lineageTag: 3c661d8b-d561-5af5-ae24-98196799ab85
+
+	column s
+		dataType: string
+		lineageTag: 4512b2ae-fc9a-5ee4-9f07-2b73311dd501
+		summarizeBy: none
+		sourceColumn: s
+
+	partition Scenarios = calculated
+		mode: import
+		source = {1}
+

@@ -1,0 +1,30 @@
+table 'f-Filters'
+	lineageTag: cdb6a0ea-d5c4-5329-b232-d63c41218be5
+
+	measure 'f-Orders' = INT(NOT ISEMPTY('Orders'))
+		isHidden
+		lineageTag: 11c8cf32-0f2f-5277-b30b-c3aac578a976
+
+	measure 'f-Visits' = INT(NOT ISEMPTY('Visits'))
+		isHidden
+		lineageTag: 373957f6-6515-58ff-b6ce-9c925095a9bb
+
+	measure 'f-All' = [f-Orders] + [f-Visits]
+		lineageTag: 80e958a6-e96b-5379-8bdb-a36c29cc47d8
+
+	measure 'f-Router' = SWITCH(TRUE(), [f-Orders] = 1, 1, 0)
+		isHidden
+		lineageTag: 292afcef-9a2b-56e3-9bb9-ddf39b00e8a7
+
+	measure 'f-Odd' = 1
+		isHidden
+		lineageTag: e5ca547d-b731-5f2f-ac55-5393dc89068f
+
+	partition 'f-Filters' = m
+		mode: import
+		source =
+				let
+				    Source = Table.RemoveColumns(Table.FromRows({{null}}, {"Dummy"}), {"Dummy"})
+				in
+				    Source
+

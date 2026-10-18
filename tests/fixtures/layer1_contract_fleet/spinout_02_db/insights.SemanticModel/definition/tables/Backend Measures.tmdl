@@ -1,0 +1,15 @@
+table 'Backend Measures'
+	lineageTag: 5eed0000-0000-0000-0000-000000000235
+
+	/// Accounts; blank below account grain.
+	measure '^Accounts #' = ```
+			IF ( ISINSCOPE( '_m Organizations'[org_name] ) || ISINSCOPE('_m Organizations'[org_tier]) || ISINSCOPE( '_m Users'[user_role] ) || ISINSCOPE( '_m Users'[signup_month] ), BLANK (), DISTINCTCOUNT ( 'Account Events'[account_id] ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000236
+
+	/// Companies; blank below organisation grain.
+	measure '^ALL HS Companies #' = ```
+			IF ( ISINSCOPE( '_m Users'[user_role] ) || ISINSCOPE( '_m Users'[signup_month] ), BLANK (), DISTINCTCOUNT ( 'Account Events'[org_id] ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000237
+

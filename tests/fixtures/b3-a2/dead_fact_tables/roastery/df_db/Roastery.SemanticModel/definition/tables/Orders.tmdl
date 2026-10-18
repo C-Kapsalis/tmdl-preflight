@@ -1,0 +1,26 @@
+table Orders
+	lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b09d8a
+
+	column order_id
+		dataType: int64
+		lineageTag: 1e2f12b5-bd71-5913-bad1-6617b6c3668d
+		summarizeBy: none
+		sourceColumn: order_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column qty
+		dataType: int64
+		lineageTag: 557f41d2-1aea-5c1e-a636-7c7e7935b311
+		summarizeBy: none
+		sourceColumn: qty
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Orders = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from orders")
+				in
+				    Source

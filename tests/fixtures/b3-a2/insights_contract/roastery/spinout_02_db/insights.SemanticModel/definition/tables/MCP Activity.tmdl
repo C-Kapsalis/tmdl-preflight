@@ -1,0 +1,26 @@
+table 'MCP Activity'
+	lineageTag: 688637df-5480-5784-bc99-d61765a75d4e
+
+	column id
+		dataType: int64
+		lineageTag: 6a30bd52-a502-5ea0-8339-3322484e6038
+		summarizeBy: none
+		sourceColumn: id
+
+		annotation SummarizationSetBy = Automatic
+
+	column user_id
+		dataType: int64
+		lineageTag: f9c5b1e0-7fe0-5aa9-82b9-776e7cf1a50f
+		summarizeBy: none
+		sourceColumn: user_id
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'MCP Activity' = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from activity")
+				in
+				    Source

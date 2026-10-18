@@ -1,0 +1,23 @@
+table 'z-Selector Time Intelligence Function'
+	lineageTag: 5748f473-3e63-57ae-a216-7e1203713ac4
+
+	calculationGroup
+
+		calculationItem Current = SELECTEDMEASURE()
+
+	column Name
+		dataType: string
+		lineageTag: 862d29d6-db56-551c-9327-31bd2c3ab6b8
+		summarizeBy: none
+		sourceColumn: Name
+		sortByColumn: Ordinal
+
+	column Ordinal
+		dataType: int64
+		isHidden
+		lineageTag: edc18884-183d-567b-a02f-328ac20fc156
+		summarizeBy: sum
+		sourceColumn: Ordinal
+
+	partition 'z-Selector Time Intelligence Function' = calculationGroup
+

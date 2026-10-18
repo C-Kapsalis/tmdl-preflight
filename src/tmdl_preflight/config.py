@@ -32,10 +32,15 @@ CONFIG_FILENAMES = (".tmdl-preflight.toml", ".tmdl-preflight.json")
 PYPROJECT = "pyproject.toml"
 TOOL_KEY = "tmdl-preflight"
 
+# Project-level sections some rules read as a whole (declared contracts,
+# refresh-policy settings, live-check options, the advisory list for the
+# pytest plugin). Their content is validated by the rules that use them.
+SECTION_KEYS = {"contracts", "refresh_policy", "live", "advisory", "table_roles", "measure_classes"}
+
 _TOP_LEVEL_KEYS = {
     "select", "ignore", "strict", "severity_overrides", "exclude", "rules",
     "exemptions", "profiles",
-}
+} | SECTION_KEYS
 _PROFILE_KEYS = _TOP_LEVEL_KEYS - {"profiles"}
 _EXEMPTION_KEYS = {"rule", "reason", "path", "object", "until"}
 
@@ -96,6 +101,7 @@ class Config:
     exclude: list[str] = field(default_factory=list)
     rule_options: dict[str, dict[str, Any]] = field(default_factory=dict)
     exemptions: list[Exemption] = field(default_factory=list)
+    sections: dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -273,10 +279,14 @@ def _parse_date(value: Any, where: str) -> _dt.date:
 
 
 def _option_type_ok(default: Any, value: Any) -> bool:
+    if default is None:
+        return True  # free-form option (a path, a table, a structured list)
     if isinstance(default, bool):
         return isinstance(value, bool)
     if isinstance(default, int):
         return isinstance(value, int) and not isinstance(value, bool)
+    if isinstance(default, float):
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
     if isinstance(default, list):
         return isinstance(value, list) and all(isinstance(v, type(default[0])) for v in value) if default else isinstance(value, list)
     return isinstance(value, type(default))
@@ -311,6 +321,9 @@ def build_config(raw: dict, ruleset: RuleSet, source: Optional[Path] = None,
     lookup = _rule_lookup(ruleset)
     rules_by_id = {r.id: r for r in ruleset.rules}
     cfg = Config(source=source)
+    for key in SECTION_KEYS:
+        if key in data:
+            cfg.sections[key] = data[key]
 
     if "select" in data:
         cfg.select = [_resolve_rule(lookup, v, f"{label}: select")

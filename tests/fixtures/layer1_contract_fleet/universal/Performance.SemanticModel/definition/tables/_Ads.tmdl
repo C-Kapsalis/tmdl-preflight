@@ -1,0 +1,17 @@
+table _Ads
+	lineageTag: 5eed0000-0000-0000-0000-000000000020
+
+	column ad_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000021
+		summarizeBy: none
+		sourceColumn: ad_id
+
+	partition _Ads = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

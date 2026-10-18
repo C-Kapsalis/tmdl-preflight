@@ -1,0 +1,37 @@
+/// One row per roastery order line.
+table Orders
+	isHidden
+	lineageTag: 476682cb-22e2-5d90-acf1-5b4cfe354894
+
+	column order_id
+		dataType: int64
+		lineageTag: 2e7dda45-620f-5dbe-b334-ee32237466f9
+		summarizeBy: none
+		sourceColumn: order_id
+
+	column order_date
+		dataType: dateTime
+		lineageTag: 2ed2d491-3b34-5e44-b025-08f34e2e952e
+		summarizeBy: none
+		sourceColumn: order_date
+
+	column account_x_id
+		dataType: string
+		lineageTag: 6b3136b5-df4a-53c0-8465-fc24ce1f343a
+		summarizeBy: none
+		sourceColumn: account_x_id
+
+	column amount
+		dataType: double
+		lineageTag: cf942795-754f-5a70-95a0-6ef2e3911321
+		summarizeBy: none
+		sourceColumn: amount
+
+	partition 'Orders' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

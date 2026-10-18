@@ -1,0 +1,44 @@
+/// Date dimension.
+table __Calendar
+	lineageTag: cc6ef2ac-17b1-5e6d-8135-af3be66c0b5d
+
+	column Date
+		dataType: dateTime
+		lineageTag: b3cb13c2-cd4f-54c3-92de-d2578530d152
+		summarizeBy: none
+		sourceColumn: Date
+
+	column Year
+		dataType: int64
+		lineageTag: 1a6d3236-57f0-58bd-9035-a577821ab8ed
+		summarizeBy: none
+		sourceColumn: Year
+
+	column Quarter
+		dataType: int64
+		lineageTag: d4f84da1-0038-5aca-a07e-26eb6a32b9eb
+		summarizeBy: none
+		sourceColumn: Quarter
+
+	column Month
+		dataType: int64
+		lineageTag: 43fcf328-1707-5ea7-985a-56db6fdce5d7
+		summarizeBy: none
+		sourceColumn: Month
+
+	column Week
+		dataType: int64
+		lineageTag: ef4c18d8-b7c8-5698-857d-820c4a5b76aa
+		summarizeBy: none
+		sourceColumn: Week
+
+	column Day
+		dataType: int64
+		lineageTag: 04a47764-9367-5b1d-9b80-a44a81d4ad0f
+		summarizeBy: none
+		sourceColumn: Day
+
+	partition '__Calendar' = calculated
+		mode: import
+		source = CALENDARAUTO()
+

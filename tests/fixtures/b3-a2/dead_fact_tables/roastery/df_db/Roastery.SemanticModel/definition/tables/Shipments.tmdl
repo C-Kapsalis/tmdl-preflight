@@ -1,0 +1,26 @@
+table Shipments
+	lineageTag: 15d7d9b5-ecad-5378-a680-389367999097
+
+	column shipment_id
+		dataType: int64
+		lineageTag: 92bfe486-241a-524f-b840-590a7e253c95
+		summarizeBy: none
+		sourceColumn: shipment_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column carrier
+		dataType: string
+		lineageTag: e515e61e-3fdb-50dc-a87a-acb0b1e6fdfe
+		summarizeBy: none
+		sourceColumn: carrier
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Shipments = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from shipments")
+				in
+				    Source

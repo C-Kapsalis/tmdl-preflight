@@ -289,3 +289,84 @@ class AutodetectedRelationshipsRule(Rule):
                         )
                     )
         return out
+
+
+class FactConformedDimensionJoinRule(Rule):
+    id = "R008"
+    name = "fact-conformed-dimension-join"
+    severity = Severity.ERROR
+    option_defaults = {
+        "dimension_table": None,
+        "key_column": None,
+        "exempt": {},
+        "baseline": None,
+        "fail_without_baseline_entry": False,
+    }
+    description = (
+        "Every fact table must actively join a conformed dimension (configure "
+        "dimension_table and key_column, for example an accounts table and "
+        "its key): an ACTIVE relationship from the fact to "
+        "dimension_table[key_column], whatever the fact's column is called. "
+        "Without it a filter on that dimension silently returns unfiltered "
+        "data. Offenders are classified 'missing relationship' (the fact has "
+        "the key column) or 'missing key column'. 'exempt' maps tables to a "
+        "mandatory reason; 'baseline' ratchets existing offenders per model. "
+        "Facts follow the shared table-role law. Inert until configured."
+    )
+
+    def check(self, ctx: Context) -> list[Violation]:
+        from ..ratchet import RatchetFileError, entry_for, load_floors
+        from ..roles import fact_tables
+
+        dim = self.options.get("dimension_table")
+        key = self.options.get("key_column")
+        if not dim or not key:
+            return []
+        exempt = self.options.get("exempt") or {}
+        out: list[Violation] = []
+        floors = None
+        if self.options.get("baseline"):
+            try:
+                floors = load_floors(self.options["baseline"], missing_ok=True)
+            except RatchetFileError as exc:
+                return [self.violation(str(exc))]
+        for model in ctx.models:
+            mkey = ctx.model_key(model)
+            accepted: set[str] = set()
+            if floors is not None:
+                found, value = entry_for(floors, mkey)
+                if not found and self.options.get("fail_without_baseline_entry"):
+                    out.append(self.violation(
+                        f"model {mkey} has no entry in the baseline; record its accepted "
+                        f"offenders deliberately (an empty list means none).",
+                        file=model.definition_path / "relationships.tmdl", obj=mkey,
+                    ))
+                accepted = set(value or [])
+            flagged = []
+            for name in fact_tables(model):
+                if name in exempt:
+                    continue
+                joined = any(
+                    r.is_active and r.from_table == name and r.to_table == dim and r.to_column == key
+                    for r in model.relationships
+                )
+                if joined:
+                    continue
+                t = model.tables[name]
+                flagged.append(name)
+                if name in accepted:
+                    continue
+                cls = "missing relationship" if t.find_column(key) else "missing key column"
+                out.append(self.violation(
+                    f"fact table {name} has no active relationship to {dim}[{key}] "
+                    f"({cls}), so filtering by {dim} returns unfiltered data. Create "
+                    f"the active relationship" + (" (adding the key column first)." if
+                                                  cls == "missing key column" else "."),
+                    file=t.file, line=t.line, obj=name,
+                ))
+            for name in sorted(accepted - set(flagged)):
+                ctx.notes.append(
+                    f"fact-conformed-dimension-join: {mkey}: {name} is in the baseline but "
+                    f"now joins {dim}; tighten the baseline by removing it."
+                )
+        return out

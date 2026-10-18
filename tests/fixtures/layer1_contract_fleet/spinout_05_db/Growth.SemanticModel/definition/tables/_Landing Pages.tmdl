@@ -1,0 +1,23 @@
+table '_Landing Pages'
+	lineageTag: 5eed0000-0000-0000-0000-000000000207
+
+	column landing_page_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000208
+		summarizeBy: none
+		sourceColumn: landing_page_x_id
+
+	column page_url
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-000000000209
+		summarizeBy: none
+		sourceColumn: page_url
+
+	partition '_Landing Pages' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

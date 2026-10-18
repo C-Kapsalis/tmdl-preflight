@@ -113,7 +113,9 @@ def render_text(report: PreflightReport, root: Path) -> str:
 
 
 def _notes(report: PreflightReport) -> list[str]:
-    notes: list[str] = []
+    notes: list[str] = list(report.notes)
+    for name in report.skipped:
+        notes.append(f"skipped: {name} (turned off by its policy option)")
     if report.excluded:
         notes.append(f"excluded: {len(report.excluded)} violation(s) in excluded paths")
     if report.exempted:

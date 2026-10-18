@@ -1,0 +1,23 @@
+table '__Acquiring Cohort Calendar'
+	lineageTag: 5eed0000-0000-0000-0000-000000000114
+
+	column 'Acquiring Cohort Date'
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-000000000115
+		summarizeBy: none
+		sourceColumn: Acquiring Cohort Date
+
+	column Date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-000000000116
+		summarizeBy: none
+		sourceColumn: Date
+
+	partition '__Acquiring Cohort Calendar' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

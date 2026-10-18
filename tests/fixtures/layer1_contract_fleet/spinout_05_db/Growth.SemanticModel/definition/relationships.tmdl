@@ -1,0 +1,35 @@
+relationship 5eed0000-0000-0000-0000-000000000220
+	fromColumn: Leads.lead_id
+	toColumn: '_Attribution LM'.lead_id
+
+relationship 5eed0000-0000-0000-0000-000000000221
+	fromColumn: Leads.country_id
+	toColumn: _Countries.country_id
+
+relationship 5eed0000-0000-0000-0000-000000000222
+	fromColumn: Spend.ad_group_x_id
+	toColumn: _Campaigns.ad_group_x_id
+
+relationship 5eed0000-0000-0000-0000-000000000223
+	fromColumn: Spend.device_id
+	toColumn: _Devices.device_id
+
+relationship 5eed0000-0000-0000-0000-000000000224
+	fromColumn: Spend.landing_page_x_id
+	toColumn: '_Landing Pages'.landing_page_x_id
+
+relationship 5eed0000-0000-0000-0000-000000000225
+	fromColumn: Spend.account_id
+	toColumn: _Accounts.account_id
+
+relationship 5eed0000-0000-0000-0000-000000000226
+	fromColumn: Spend.country_id
+	toColumn: _Countries.country_id
+
+relationship 5eed0000-0000-0000-0000-000000000227
+	fromColumn: Leads.event_date
+	toColumn: __Calendar.Date
+
+relationship 5eed0000-0000-0000-0000-000000000228
+	fromColumn: Spend.event_date
+	toColumn: __Calendar.Date

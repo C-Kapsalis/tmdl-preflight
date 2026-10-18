@@ -1,0 +1,26 @@
+table Ads
+	lineageTag: 5c6a1e80-8db7-5137-bb9d-938da64bf6bc
+
+	column ad_id
+		dataType: int64
+		lineageTag: 6ccbb41f-05f3-524c-be88-36144cb0193f
+		summarizeBy: none
+		sourceColumn: ad_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column account_x_id
+		dataType: int64
+		lineageTag: 614903a4-a9d1-51e6-a252-fbe076ab554c
+		summarizeBy: none
+		sourceColumn: account_x_id
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Ads = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from ads")
+				in
+				    Source

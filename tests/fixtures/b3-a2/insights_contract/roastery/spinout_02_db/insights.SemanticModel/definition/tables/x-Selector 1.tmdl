@@ -1,0 +1,64 @@
+table 'x-Selector 1'
+	lineageTag: d184ce53-8560-5107-bbb9-234a4602c957
+
+	column 'x-Selector 1'
+		lineageTag: d472638a-20c2-5002-8453-e35a5d0481b8
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+		relatedColumnDetails
+			groupByColumn: 'x-Selector 1 Fields'
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'x-Selector 1 Fields'
+		lineageTag: bdc5e9ad-7d5b-53dd-b07a-9d0700d83897
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+		extendedProperty ParameterMetadata =
+				{
+				  "version": 3,
+				  "kind": 2
+				}
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'x-Selector 1 Order'
+		lineageTag: 240daef5-cdb3-56b8-864f-669a4b04697b
+		summarizeBy: none
+		sourceColumn: [Value3]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'x-Selector 1 Group'
+		lineageTag: 629b1874-05a6-5524-8d71-343bfa6a499d
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'x-Selector 1 Category'
+		lineageTag: 2a765b7d-76e6-5565-b2a8-eff28922e316
+		summarizeBy: none
+		sourceColumn: [Value5]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'x-Selector 1' = calculated
+		mode: import
+		source = ```
+				{
+				("MCP Feedback #", NAMEOF('MCP Feedback Measures'[MCP Feedback #]), 1616, "mcp_feedback_x", "Other"),
+				("MCP Feedback Open #", NAMEOF('MCP Feedback Measures'[MCP Feedback Open #]), 1617, "mcp_feedback_x", "Other"),
+				("MCP Feedback Bugs #", NAMEOF('MCP Feedback Measures'[MCP Feedback Bugs #]), 1618, "mcp_feedback_x", "Other"),
+				("MCP Feedback Feature Requests #", NAMEOF('MCP Feedback Measures'[MCP Feedback Feature Requests #]), 1619, "mcp_feedback_x", "Other"),
+				("MCP Customer Feedback #", NAMEOF('MCP Feedback Measures'[MCP Customer Feedback #]), 1620, "mcp_feedback_x", "Other"),
+				("MCP Feedback Orgs #", NAMEOF('MCP Feedback Measures'[MCP Feedback Orgs #]), 1621, "mcp_feedback_x", "Other"),
+				("MCP Feedback Oldest Open (days)", NAMEOF('MCP Feedback Measures'[MCP Feedback Oldest Open (days)]), 1622, "mcp_feedback_x", "Other"),
+				("MCP Feedback Unlinked #", NAMEOF('MCP Feedback Measures'[MCP Feedback Unlinked #]), 1623, "mcp_feedback_x", "Other"),
+				("MCP Feedback Untrusted Text #", NAMEOF('MCP Feedback Measures'[MCP Feedback Untrusted Text #]), 1624, "mcp_feedback_x", "Other"),
+				("MCP Feedback Uncategorized #", NAMEOF('MCP Feedback Measures'[MCP Feedback Uncategorized #]), 1625, "mcp_feedback_x", "Other"),
+				("MCP Feedback per 100 Tool Calls", NAMEOF('MCP Feedback Measures'[MCP Feedback per 100 Tool Calls]), 1626, "mcp_feedback_x", "Other")
+				}
+				```

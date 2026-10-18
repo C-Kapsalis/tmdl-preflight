@@ -1,0 +1,26 @@
+table '_Accounts'
+	lineageTag: 7caaccef-4420-5f7f-a87a-eb404749330e
+
+	column account_x_id
+		dataType: int64
+		lineageTag: a61b6bd5-54a6-582e-9a65-38e6e306b455
+		summarizeBy: none
+		sourceColumn: account_x_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column account_name
+		dataType: string
+		lineageTag: 5f0b4166-7bff-51fa-bfb4-d0f9b3c220a5
+		summarizeBy: none
+		sourceColumn: account_name
+
+		annotation SummarizationSetBy = Automatic
+
+	partition '_Accounts' = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from accounts")
+				in
+				    Source

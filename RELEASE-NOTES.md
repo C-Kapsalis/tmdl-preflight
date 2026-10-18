@@ -29,6 +29,27 @@ the example model with one defect each. Where that evidence and the
 | M017 | space-indentation | error | no |
 | M018 | model-annotation-duplicates | error | no |
 | M019 | undefined-query-group | error | yes |
+| C001 | required-model-objects | error | no |
+| C002 | model-contract-objects | error | no |
+| C003 | model-contract-relationships | error | no |
+| C004 | fieldparam-registration-contract | error | no |
+| R008 | fact-conformed-dimension-join | error | no |
+| F005 | fieldparam-category-column | error | no |
+| S003 | format-inference-naming (opt-in) | info | no |
+| S004 | comment-ticket-refs (opt-in) | error | no |
+| O001 | user-only-table-purity (opt-in) | warning | no |
+| O002 | helper-measure-placement (opt-in) | warning (info in the lenient profile) | no |
+| O003 | user-facing-in-helper-tables (opt-in) | warning | no |
+| O004 | measures-in-fact-tables (opt-in) | warning (info for advisories) | no |
+| O005 | measures-in-dimension-tables (opt-in) | info | no |
+| O006 | empty-measure-tables (opt-in) | info | no |
+| O007 | dead-fact-tables (opt-in) | error | no |
+
+Rules that encode one team's conventions are **opt-in**: they run only when
+named in `--select` or in the configuration's `select` (`rules` marks them).
+Contract rules (C001-C004, R008, F005) read their contracts from the
+configuration (`contracts` section or rule options) and report nothing
+until configured.
 
 ### Changed rules
 
@@ -79,6 +100,21 @@ the example model with one defect each. Where that evidence and the
 - `fix --clear-cache` deletes `<Model>.SemanticModel/.pbi/cache.abf` after
   lineage tags changed; without it the tool prints a hint when the cache
   exists.
+- `stats --measures` summarises how measures are organised (name classes,
+  helper kinds, field-parameter surfacing, top tables, described helpers).
+- `comment-refs <path> [--list] [--json] [--floors FILE] [--tighten]`
+  counts ticket references in comments; `--tighten` only ever lowers floors
+  and drops all-zero entries.
+- Ratchet files for O007, R008 and S004 keep the shape teams already use: a
+  JSON object keyed by the `*.SemanticModel` folder relative to the scanned
+  root (with or without the suffix). Recorded entries that no longer fail
+  produce a tighten hint in the report's `notes`.
+- New Python API: `tmdl_preflight.measure_classes.classify_measure_name`
+  (helper vs user-facing names, helper subcategory, scaffolding noise) and
+  `tmdl_preflight.roles.fact_tables` (the shared fact-table law).
+- The configuration accepts project sections (`contracts`,
+  `refresh_policy`, `live`, `advisory`); rule options whose default is
+  unset accept any JSON value.
 - Rules carry a `safe` flag (`rules --json`). A fixer marked `safe: false`
   (it changes data or regenerates content) never runs in a blanket `fix`;
   select its rule explicitly to run it. The JSON payload lists such
@@ -105,6 +141,9 @@ the stricter of test and rule wins; DESKTOP: Power BI Desktop evidence).
 - Port convention: `test_p0_tmdl_guardian` turns on M016's opt-in
   `check_line_endings` (off by default because Windows checkouts are often
   CRLF) to reproduce the original verdicts.
+- BUGFIX: `test_naming_conventions::TestHelperMeasuresFollowConventions`
+  counts 2 described dash helpers where the original printed 1 (its index
+  dropped the description of a measure that directly follows another).
 - Existing tests updated for the severity changes above: M011 is an error
   and its fixer targets the first property slot; M013 at end of file is an
   error and keeps blank lines before the run; the M002 fence message

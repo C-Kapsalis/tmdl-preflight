@@ -1,0 +1,21 @@
+table 'Price Styles'
+	lineageTag: dbc3956d-a2f9-5b76-bfdb-29907445685a
+
+	calculationGroup
+
+		calculationItem Current = SELECTEDMEASURE()
+
+	column Name
+		dataType: string
+		lineageTag: 2498f5a6-db5b-5152-8ad2-2f09554d03a8
+		summarizeBy: none
+		sourceColumn: Name
+		sortByColumn: Ordinal
+
+	column Ordinal
+		dataType: int64
+		isHidden
+		lineageTag: bf10b339-8278-5991-8026-67d9cd50b5cf
+		summarizeBy: sum
+		sourceColumn: Ordinal
+

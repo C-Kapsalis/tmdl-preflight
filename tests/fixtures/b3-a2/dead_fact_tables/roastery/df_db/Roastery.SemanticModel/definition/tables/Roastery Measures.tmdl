@@ -1,0 +1,16 @@
+table 'Roastery Measures'
+	lineageTag: c4bb6eaa-5fe2-5ca7-8f84-4517426bb170
+
+	measure 'Cups Sold' = SUM(Orders[qty])
+		formatString: 0
+		lineageTag: ba186d78-62c2-5248-897d-fdf1dbb9266b
+
+	measure 'Return Filter Active' = IF(ISFILTERED(Returns[reason]), 1, 0)
+		lineageTag: 2030555b-f15a-58de-a477-72cc2b4332e8
+
+	measure 'Shipping Note' = 1 -- Shipments are tracked elsewhere
+		lineageTag: 50f9b0b3-a527-5340-a3d7-b3b70a9d454f
+
+	partition 'Roastery Measures' = calculated
+		mode: import
+		source = ROW("x", 1)

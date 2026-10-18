@@ -1,0 +1,47 @@
+table _Users
+	lineageTag: 5eed0000-0000-0000-0000-0000000000b4
+
+	column acquiring_date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-0000000000b5
+		summarizeBy: none
+		sourceColumn: acquiring_date
+
+	column first_landing_content_group_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000b6
+		summarizeBy: none
+		sourceColumn: first_landing_content_group_id
+
+	column first_view_content_group_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000b7
+		summarizeBy: none
+		sourceColumn: first_view_content_group_id
+
+	column registration_date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-0000000000b8
+		summarizeBy: none
+		sourceColumn: registration_date
+
+	column segment
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-0000000000b9
+		summarizeBy: none
+		sourceColumn: segment
+
+	column user_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000ba
+		summarizeBy: none
+		sourceColumn: user_id
+
+	partition _Users = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

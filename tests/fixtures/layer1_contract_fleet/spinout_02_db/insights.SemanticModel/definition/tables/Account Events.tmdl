@@ -1,0 +1,23 @@
+table 'Account Events'
+	lineageTag: 5eed0000-0000-0000-0000-000000000229
+
+	column org_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000022a
+		summarizeBy: none
+		sourceColumn: org_id
+
+	column user_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000022b
+		summarizeBy: none
+		sourceColumn: user_id
+
+	partition 'Account Events' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

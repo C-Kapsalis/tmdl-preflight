@@ -1,0 +1,26 @@
+table Transactions
+	lineageTag: 32a5199f-f939-52f2-a42b-ff5b775537e4
+
+	column transaction_id
+		dataType: int64
+		lineageTag: 8974535e-4596-5383-b18a-100b72eb5673
+		summarizeBy: none
+		sourceColumn: transaction_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column account_net_amount
+		dataType: string
+		lineageTag: 62146d9d-63ba-59d9-8bc6-c10b36ef90b3
+		summarizeBy: none
+		sourceColumn: account_net_amount
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Transactions = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from transactions")
+				in
+				    Source

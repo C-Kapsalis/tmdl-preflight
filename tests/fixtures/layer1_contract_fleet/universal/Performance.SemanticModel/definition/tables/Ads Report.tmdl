@@ -1,0 +1,65 @@
+table 'Ads Report'
+	lineageTag: 5eed0000-0000-0000-0000-00000000002c
+
+	column account_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000002d
+		summarizeBy: none
+		sourceColumn: account_id
+
+	column ad_group_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000002e
+		summarizeBy: none
+		sourceColumn: ad_group_x_id
+
+	column ad_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000002f
+		summarizeBy: none
+		sourceColumn: ad_id
+
+	column country_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000030
+		summarizeBy: none
+		sourceColumn: country_id
+
+	column device_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000031
+		summarizeBy: none
+		sourceColumn: device_id
+
+	column event_date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-000000000032
+		summarizeBy: none
+		sourceColumn: event_date
+
+	column keyword_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000033
+		summarizeBy: none
+		sourceColumn: keyword_id
+
+	column landing_page_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000034
+		summarizeBy: none
+		sourceColumn: landing_page_x_id
+
+	column query_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000035
+		summarizeBy: none
+		sourceColumn: query_id
+
+	partition 'Ads Report' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

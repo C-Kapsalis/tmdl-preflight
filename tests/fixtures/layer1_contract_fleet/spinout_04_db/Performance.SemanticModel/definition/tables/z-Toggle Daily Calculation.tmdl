@@ -1,0 +1,21 @@
+table 'z-Toggle Daily Calculation'
+	lineageTag: 5eed0000-0000-0000-0000-000000000240
+
+	calculationGroup
+
+		calculationItem Daily = if(isnumber(selectedmeasure()), AVERAGEX('__Calendar', SELECTEDMEASURE()), selectedmeasure())
+
+		calculationItem Total = SELECTEDMEASURE ()
+
+	column Name
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-000000000241
+		summarizeBy: none
+		sourceColumn: Name
+		sortByColumn: Ordinal
+
+	column Ordinal
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000242
+		summarizeBy: sum
+		sourceColumn: Ordinal

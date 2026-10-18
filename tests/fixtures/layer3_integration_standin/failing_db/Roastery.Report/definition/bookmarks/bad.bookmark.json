@@ -1,0 +1,33 @@
+{
+  "name": "bad",
+  "displayName": "Spotlight",
+  "options": {
+    "targetVisualNames": [
+      "v1"
+    ]
+  },
+  "explorationState": {
+    "version": "1.3",
+    "activeSection": "p1",
+    "sections": {
+      "p1": {
+        "visualContainers": {
+          "v1": {
+            "singleVisual": {
+              "visualType": "lineChart"
+            }
+          }
+        }
+      }
+    },
+    "visualContainers": [
+      {
+        "singleVisual": {
+          "visualName": "v9"
+        }
+      }
+    ]
+  },
+  "howCreated": "0",
+  "Version": "2"
+}

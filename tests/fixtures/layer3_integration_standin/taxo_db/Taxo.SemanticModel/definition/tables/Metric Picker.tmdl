@@ -1,0 +1,17 @@
+table 'Metric Picker'
+	lineageTag: 48c9d709-861c-5939-8f38-a8191d81ea95
+
+	column 'Metric Picker Fields'
+		sourceColumn: [Value2]
+
+		relatedColumnDetails
+			groupByColumn: 'Metric Picker Fields'
+
+	partition 'Metric Picker' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

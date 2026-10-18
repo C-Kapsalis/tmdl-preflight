@@ -1,0 +1,17 @@
+table _Accounts
+	lineageTag: 5eed0000-0000-0000-0000-00000000000e
+
+	column account_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000000f
+		summarizeBy: none
+		sourceColumn: account_id
+
+	partition _Accounts = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

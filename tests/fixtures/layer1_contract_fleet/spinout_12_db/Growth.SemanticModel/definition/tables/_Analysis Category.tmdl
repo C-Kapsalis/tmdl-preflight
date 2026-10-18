@@ -1,0 +1,17 @@
+table '_Analysis Category'
+	lineageTag: 5eed0000-0000-0000-0000-00000000011a
+
+	column 'Analysis Category'
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-00000000011b
+		summarizeBy: none
+		sourceColumn: Analysis Category
+
+	partition '_Analysis Category' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

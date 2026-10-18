@@ -1,0 +1,23 @@
+table 'z-Selector Format'
+	lineageTag: a6eddc35-5e23-5ac2-98d2-874607bb1773
+
+	calculationGroup
+
+		calculationItem Current = SELECTEDMEASURE()
+
+	column Name
+		dataType: string
+		lineageTag: 2a1e656c-82a6-5144-95ba-d52ff08fc4fd
+		summarizeBy: none
+		sourceColumn: Name
+		sortByColumn: Ordinal
+
+	column Ordinal
+		dataType: int64
+		isHidden
+		lineageTag: a488921e-69b6-5a9b-beb9-474db14495df
+		summarizeBy: sum
+		sourceColumn: Ordinal
+
+	partition 'z-Selector Format' = calculationGroup
+

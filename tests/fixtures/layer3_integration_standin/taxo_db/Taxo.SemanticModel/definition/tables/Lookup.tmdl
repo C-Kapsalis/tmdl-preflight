@@ -1,0 +1,17 @@
+table Lookup
+	lineageTag: 1bf28238-ebe4-509f-b184-94b969271807
+
+	column l
+		dataType: string
+		lineageTag: 0d0f1e82-288e-5346-afba-65ed1c5750f7
+		summarizeBy: none
+		sourceColumn: l
+
+	partition 'Lookup' = m
+		mode: import
+		source =
+				let
+				    Source = Table.FromRows({{"a"}}, {"l"})
+				in
+				    Source
+
