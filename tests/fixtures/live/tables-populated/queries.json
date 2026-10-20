@@ -1,0 +1,74 @@
+[
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('_Beans'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 120
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('_Shops'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('_Days'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 30
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('Sales'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 5000
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

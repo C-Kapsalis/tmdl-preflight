@@ -3,7 +3,7 @@
 
 # tmdl-preflight rule catalog
 
-Rules: **104** · auto-fixable: **21** · baselinable: **99**.
+Rules: **105** · auto-fixable: **21** · baselinable: **100**.
 
 | Rule | Name | Severity | Fix | Description |
 |---|---|---|---|---|
@@ -80,6 +80,7 @@ Rules: **104** · auto-fixable: **21** · baselinable: **99**.
 | M020 | calculated-column-expression-present | error | no | A column declared with '=' is a calculated column and needs an expression. 'column X =' followed directly by its properties declares a calculated column with no definition, which the engine rejects. Write the expression or drop the '='. |
 | M021 | culture-orphan-bindings | error | yes | Q&A linguistic metadata in cultures/*.tmdl binds nodes to tables (ConceptualEntity). A binding to a table file that no longer exists does not break queries, but it is dead metadata and a sign the table was removed without a cleanup (dangling DAX references are likely too). Option tables names entities to treat as removed. Auto-fix deletes the nodes bound to missing tables and nothing else. |
 | M022 | diagram-layout-blank | warning | yes | Opt-in: diagramLayout.json must be the blank layout (one 'All tables' diagram with no table boxes). Power BI never prunes the layout when tables are renamed or removed, so stale boxes pile up and clutter the Model view; a blank layout cannot go stale and the Model view arranges the tables itself. Auto-fix writes the blank layout. Leave the rule off if your team curates layouts. |
+| N020 | dimension-prefix-floor | warning | no | Opt-in and disabled by default (select it and set enabled = true): count the tables whose name starts with the dimension prefix and warn when there are fewer than min_dimension_tables. Useful for a template whose convention is a fixed set of dimensions; a copy that lost some fails here before anything is published. |
 | O001 | user-only-table-purity | warning | no | Tables whose name starts with the user-only prefix (default '#') are meant to hold only measures report authors drag onto visuals. A helper measure there (by name: '-helper ...', 'i-...', '_...', a 'test' measure) pollutes the field list. Opt-in; nothing fails in Power BI. |
 | O002 | helper-measure-placement | warning | no | Each helper measure belongs in a table for its kind: measure helpers in the helper table, visual helpers there or in a w- table, diagnostics in a helper or diagnostic table, slicer helpers in the slicer table, intermediary helpers in a measures table. Profile 'strict' (warnings) also bans helpers from user-only (#) and dimension (_) tables and exempts field-parameter tables; profile 'lenient' (infos) judges only slicer, '-helper', visual and diagnostic helpers. Opt-in; the symptom is a confusing field list. |
 | O003 | user-facing-in-helper-tables | warning | no | A user-facing measure (by name) should not live in a dimension (_) table or a helper table (f-, w-, i- by default): report authors do not find it there, and it often gets hidden with the scaffolding around it. z- tables, user-only tables, measure containers, facts and field-parameter tables may host anything. Opt-in. |

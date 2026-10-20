@@ -291,6 +291,27 @@ def build_parser() -> argparse.ArgumentParser:
     p_refs2.add_argument("--loose", action="store_true",
                          help="count NAME] and NAME\" (closing delimiter only; over-counts)")
 
+    p_live = sub.add_parser("live", help="opt-in checks against the published dataset "
+                                         "(Power BI REST; --replay answers from recordings)")
+    p_live.add_argument("model", help="the local *.SemanticModel folder")
+    p_live.add_argument("--workspace", required=True, help="workspace (group) id")
+    p_live.add_argument("--dataset", required=True, help="dataset id")
+    p_live.add_argument("--checks", help="comma-separated live check ids (default: all)")
+    p_live.add_argument("--json", action="store_true", help="machine-readable output")
+    p_live.add_argument("--strict", action="store_true", help="exit 1 on warnings too")
+    p_live.add_argument("--record", metavar="DIR", help="write every response to DIR")
+    p_live.add_argument("--replay", metavar="DIR", help="answer from responses recorded in DIR "
+                                                         "(no network)")
+    p_live.add_argument("--no-coupling-check", action="store_true",
+                        help="run even when the dataset name does not match the local model")
+    p_live.add_argument("--expect-name", help="accept the dataset when this text is part of "
+                                              "the workspace name")
+    p_live.add_argument("--non-interactive", action="store_true",
+                        help="never open a sign-in prompt (service principal only)")
+    p_live.add_argument("--cache-ttl", type=float, default=300.0,
+                        help="seconds to cache dataset metadata (default 300)")
+    _add_config_options(p_live)
+
     p_rules = sub.add_parser("rules", help="list the rule catalog")
     p_rules.add_argument("--json", action="store_true", help="machine-readable output")
     p_rules.add_argument("--format", choices=("text", "json", "markdown"), default=None,
@@ -808,6 +829,57 @@ def _cmd_refs(args) -> int:
     return 0
 
 
+def _cmd_live(args) -> int:
+    from . import live
+
+    model_dir = Path(args.model)
+    if not (model_dir / "definition").is_dir():
+        raise UsageError(f"{model_dir} has no definition/ folder; pass the local *.SemanticModel")
+    options: dict = {}
+    if not args.no_config:
+        try:
+            cfg = load_config(full_ruleset(), start=model_dir,
+                              explicit=Path(args.config) if args.config else None,
+                              profile=args.profile)
+        except ConfigError as exc:
+            raise UsageError(f"configuration error: {exc}") from exc
+        options = dict(cfg.sections.get("live") or {})
+    ids = _parse_list(args.checks) or list(live.CHECKS)
+    unknown = [c for c in ids if c not in live.CHECKS]
+    if unknown:
+        raise UsageError(f"unknown live check(s): {', '.join(unknown)}; known: "
+                         f"{', '.join(live.CHECKS)}")
+    if args.replay:
+        client = live.ReplayClient(Path(args.replay))
+    else:
+        try:
+            token = live.token_provider(interactive=not args.non_interactive)
+        except live.LiveUsageError as exc:
+            raise UsageError(str(exc)) from exc
+        client = live.RestClient(args.workspace, args.dataset, token, args.cache_ttl)
+    if args.record:
+        client = live.RecordingClient(client, Path(args.record))
+    dataset = client.dataset()
+    if not args.no_coupling_check and not live.coupled(dataset, model_dir, args.expect_name):
+        print(f"tmdl-preflight: the live dataset '{dataset.get('name')}' (workspace "
+              f"'{dataset.get('workspaceName')}') does not look like the local model "
+              f"{model_dir.name}; pass --expect-name or --no-coupling-check if it is the same "
+              f"model.", file=sys.stderr)
+        return 1
+    ctx = live.LiveContext(client, live.read_local_model(model_dir), options)
+    results = live.run_checks(ctx, ids)
+    if args.json:
+        print(json.dumps({"dataset": dataset,
+                          "checks": [{"id": r.id, "outcome": r.outcome, "message": r.message,
+                                      "details": r.details} for r in results]},
+                         indent=2, default=str))
+    else:
+        print(f"dataset: {dataset.get('name')} (workspace {dataset.get('workspaceName')})")
+        for r in results:
+            print(f"{r.outcome:5s}  {r.id}: {r.message}")
+    return live.exit_code(results, args.strict)
+
+
 def _cmd_stats(args) -> int:
     ctx = _context(args.path)
     stats = collect_stats(ctx)
@@ -899,7 +971,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "stats": _cmd_stats, "comment-refs": _cmd_comment_refs,
                 "report": _cmd_report, "format-resolve": _cmd_format_resolve,
                 "grain": _cmd_grain, "info": _cmd_info, "fieldparam": _cmd_fieldparam,
-                "manifest": _cmd_manifest, "schema-check": _cmd_schema_check, "refs": _cmd_refs}
+                "manifest": _cmd_manifest, "schema-check": _cmd_schema_check, "refs": _cmd_refs, "live": _cmd_live}
     handler = handlers.get(args.command)
     if handler is None:
         parser.print_help()

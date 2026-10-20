@@ -1,0 +1,16 @@
+table _Channels
+	lineageTag: ff49f2d3-fbbd-59e6-93a3-c98d22f70241
+
+	column Key
+		dataType: int64
+		lineageTag: 55be33d4-c75b-54fa-a980-edc4a14b7a42
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition _Channels = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

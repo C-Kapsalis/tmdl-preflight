@@ -1,0 +1,16 @@
+table _Milks
+	lineageTag: c71a4ba6-2a94-5e63-a573-0ce0c3e3cc76
+
+	column Key
+		dataType: int64
+		lineageTag: 283c85ad-603f-5729-b9fd-435317a0ae23
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition _Milks = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

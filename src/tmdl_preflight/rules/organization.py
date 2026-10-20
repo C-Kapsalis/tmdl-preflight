@@ -464,3 +464,35 @@ class DeadFactTablesRule(Rule):
                     f"longer dead; tighten the baseline by removing it."
                 )
         return out
+
+
+class DimensionPrefixFloorRule(Rule):
+    id = "N020"
+    name = "dimension-prefix-floor"
+    severity = Severity.WARNING
+    opt_in = True
+    option_defaults = {"enabled": False, "min_dimension_tables": 20, "dimension_prefix": "_"}
+    description = (
+        "Opt-in and disabled by default (select it and set enabled = true): "
+        "count the tables "
+        "whose name starts with the dimension prefix and warn when there are "
+        "fewer than min_dimension_tables. Useful for a template whose "
+        "convention is a fixed set of dimensions; a copy that lost some "
+        "fails here before anything is published."
+    )
+
+    def disabled_by_policy(self) -> bool:
+        return not self.options.get("enabled")
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        floor = int(self.options["min_dimension_tables"])
+        prefix = self.options["dimension_prefix"]
+        for model in ctx.models:
+            n = sum(1 for t in model.table_list if t.name.startswith(prefix))
+            if n < floor:
+                out.append(self.violation(
+                    f"the model has {n} dimension table(s) (names starting with '{prefix}'), "
+                    f"fewer than the {floor} the convention expects.",
+                    file=model.definition_path / "tables", obj=ctx.model_key(model)))
+        return out

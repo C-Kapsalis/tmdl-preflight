@@ -1,0 +1,16 @@
+table '_Cup Sizes'
+	lineageTag: 2cd46bf4-46f0-59b2-b80c-8f754edb9672
+
+	column Key
+		dataType: int64
+		lineageTag: de315be8-6c88-56bb-8a1a-352be43fcf05
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition '_Cup Sizes' = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

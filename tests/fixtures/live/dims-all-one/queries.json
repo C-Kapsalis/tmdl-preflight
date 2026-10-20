@@ -1,0 +1,92 @@
+[
+  {
+    "query": "EVALUATE ROW(\"Count\", COUNTROWS('_Accounts'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Count]": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"Count\", COUNTROWS('_Campaigns'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Count]": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"Count\", COUNTROWS('_Conversions'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Count]": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"Count\", COUNTROWS('_Devices'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Count]": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"Count\", COUNTROWS('_Countries'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Count]": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

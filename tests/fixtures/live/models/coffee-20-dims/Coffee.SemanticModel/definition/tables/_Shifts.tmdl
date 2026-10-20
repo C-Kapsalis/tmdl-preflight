@@ -1,0 +1,16 @@
+table _Shifts
+	lineageTag: 803de5b5-0fa0-52b9-adf9-c5d6b8fe2125
+
+	column Key
+		dataType: int64
+		lineageTag: 6b3e5f6c-d23c-5909-99e7-e773f0f06e06
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition _Shifts = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

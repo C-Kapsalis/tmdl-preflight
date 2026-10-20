@@ -1,0 +1,22 @@
+table Sales
+	lineageTag: 87994e8b-63d1-5869-ad23-d0b6b2feed92
+
+	column Cups
+		dataType: int64
+		lineageTag: 5d30ecdf-0172-5e92-82b9-5859695b361f
+		summarizeBy: none
+		sourceColumn: Cups
+
+	column Amount
+		dataType: double
+		lineageTag: 10efdaf0-4864-595d-bf1c-9606abbc24ca
+		summarizeBy: none
+		sourceColumn: Amount
+
+	partition Sales = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Cups"}, {})
+			in
+			    Source

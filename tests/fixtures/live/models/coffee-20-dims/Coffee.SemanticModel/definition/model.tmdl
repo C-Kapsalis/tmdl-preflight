@@ -1,0 +1,26 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+
+ref table _Origins
+ref table _Roasts
+ref table _Grinds
+ref table '_Brew Methods'
+ref table '_Cup Sizes'
+ref table _Milks
+ref table _Syrups
+ref table _Baristas
+ref table _Shifts
+ref table _Regions
+ref table _Cities
+ref table _Shops
+ref table _Suppliers
+ref table _Farms
+ref table _Harvests
+ref table _Packages
+ref table _Channels
+ref table _Promotions
+ref table '_Loyalty Tiers'
+ref table _Days
+ref table Sales
+ref table 'Coffee Measures'

@@ -1,0 +1,16 @@
+table '_Loyalty Tiers'
+	lineageTag: cf2e3270-a980-5577-8417-5b31d47bb419
+
+	column Key
+		dataType: int64
+		lineageTag: 35436b37-e609-5363-9dc1-be8cca12a958
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition '_Loyalty Tiers' = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

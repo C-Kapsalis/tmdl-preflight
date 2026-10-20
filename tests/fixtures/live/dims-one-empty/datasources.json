@@ -1,0 +1,9 @@
+[
+  {
+    "datasourceType": "Sql",
+    "connectionDetails": {
+      "server": "warehouse.example.com",
+      "database": "coffee"
+    }
+  }
+]

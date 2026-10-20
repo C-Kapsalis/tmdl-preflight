@@ -81,6 +81,7 @@ from .hygiene import (
     UndefinedQueryGroupRule,
 )
 from .organization import (
+    DimensionPrefixFloorRule,
     DeadFactTablesRule,
     EmptyMeasureTablesRule,
     FormatInferenceNamingRule,
@@ -231,6 +232,7 @@ ALL_RULES: list[type[Rule]] = [
     MeasuresInDimensionTablesRule,
     EmptyMeasureTablesRule,
     DeadFactTablesRule,
+    DimensionPrefixFloorRule,
     RequiredModelObjectsRule,
     ModelContractObjectsRule,
     ModelContractRelationshipsRule,

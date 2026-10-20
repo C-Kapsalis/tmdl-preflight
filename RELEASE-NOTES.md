@@ -44,6 +44,7 @@ the example model with one defect each. Where that evidence and the
 | O005 | measures-in-dimension-tables (opt-in) | info | no |
 | O006 | empty-measure-tables (opt-in) | info | no |
 | O007 | dead-fact-tables (opt-in) | error | no |
+| N020 | dimension-prefix-floor (opt-in, disabled by default) | warning | no |
 | D010 | calc-dax-blocks-present (opt-in) | warning | no |
 | D011 | calc-item-blind-average | error | no |
 | X001 | cross-fact-multirow-key-join | error | no |
@@ -233,6 +234,21 @@ until configured.
 - `refs NAME [PATH ...] [--files] [--include-history] [--loose]` counts
   the anchored references to a name, model side and report side, live and
   archived.
+- `live <MODEL> --workspace ID --dataset ID [--checks ...] [--strict]
+  [--record DIR | --replay DIR]` (opt-in, the only command that uses the
+  network): checks the published dataset over the Power BI REST API.
+  Checks: `live-refresh-status`, `live-freshness`, `live-table-sample`,
+  `live-dimension-rows`, `live-measure-sample`,
+  `live-parameter-table-measures` (off unless `live.parameter_table_measures`),
+  `live-uniform-row-limit`, `live-calendar-rows`, `live-dimension-multirow`,
+  `live-calendar-scan`, `live-calendar-vs-parameters`, `live-parameter-audit`,
+  `live-identity`, `live-filter-compare`, `live-metadata`,
+  `live-filter-diagnostic`, `live-smoke` and `live-bpa`. Outcomes are pass,
+  warn, fail, skip or error; exit 1 on fail or error (and on warn with
+  `--strict`). The dataset name must match the local model folder unless
+  `--expect-name` or `--no-coupling-check` is given. Recordings are keyed
+  on the whitespace-normalised query text. Settings: config section `live`.
+  Python API: `tmdl_preflight.live` (`ReplayClient`, `LiveBPA`, ...).
 - The pytest plugin demotes test-body failures on the models listed in the
   configuration's `advisory` list to expected failures; passes stay passes
   and setup failures stay failures.
@@ -295,6 +311,11 @@ and rule wins; DESKTOP: Power BI Desktop evidence).
 - STRICTER: `test_reference_integrity_xselector::test_calculated_column_with_empty_expression_fails`:
   `column X =` followed directly by a property line is a calculated column
   with an empty expression (M020).
+- BUGFIX: `test_connection_parameters::test_generate_connection_parameter_audit_report[limit-100]`:
+  only `LIMIT 1` itself is CRITICAL; `LIMIT 10` and `LIMIT 100` are warnings.
+- BUGFIX: `test_fabric_bpa_validation::TestBPAPerformanceRules::test_calculated_columns_detected`:
+  calculated columns are found by the integer column type (the text
+  comparison found none).
 - Test convention: `test_fixers_config_contract` lists the unsafe fixers by
   their rule names: refresh-policy-repair, dax-reference-resolution and
   autodetected-relationships.

@@ -1,0 +1,39 @@
+[
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('__Calendar'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE TOPN(50, '__Calendar')",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "__Calendar[Date]": "2025-01-01T00:00:00",
+                  "__Calendar[Year]": 2025
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

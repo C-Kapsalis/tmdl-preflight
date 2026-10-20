@@ -14,7 +14,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 
 ## Features
 
-- **104 rules** over the failure modes that reject imports or silently corrupt
+- **105 rules** over the failure modes that reject imports or silently corrupt
   results: duplicate lineage tags and object names, TMDL properties leaked
   into DAX, dangling `///` descriptions, tables with no partition, inline
   `#table` entity sources that force a composite model, DAX references to
@@ -211,6 +211,7 @@ commit.
 | O004 | a user-facing measure homed on a fact table (opt-in) | warning | no |
 | O005 | measures on a dimension table (opt-in) | info | no |
 | O006 | a measures table with no measures (opt-in) | info | no |
+| N020 | fewer `_` dimension tables than the template's floor (opt-in, disabled by default) | warning | no |
 | O007 | a fact table no measure reads (opt-in ratchet) | error | no |
 
 Details, scopes, examples and severity semantics: see the generated
@@ -329,6 +330,18 @@ declare. `tmdl-preflight schema-check --manifest M --schema SNAPSHOT
 warehouse lost fail; columns the model does not import are informational), and
 `schema-check --sql-dir DIR --entries FILE` proves from view SQL files that the
 views expose the columns a model needs. Nothing connects to a warehouse.
+
+`tmdl-preflight live <Model.SemanticModel> --workspace ID --dataset ID
+[--checks ...]` is the one command that talks to the Power BI service: it
+asks the published dataset whether its tables hold rows (a row-limit
+parameter left at `LIMIT 1` imports one row per table), whether measures
+evaluate, whether the last refresh succeeded and the data is fresh, and runs
+a best-practice pass over the published metadata. It signs in as a service
+principal (`PBI_TENANT_ID`, `PBI_CLIENT_ID`, `PBI_CLIENT_SECRET`) or, with
+the optional `msal` package, interactively; credentials are never stored.
+It refuses to run when the dataset name does not match the local model.
+`--record DIR` saves every response and `--replay DIR` answers from such a
+folder without any network access.
 
 `tmdl-preflight refs NAME [PATH ...] [--files]` counts every place a table,
 column or measure name appears, model side and report side, before a rename

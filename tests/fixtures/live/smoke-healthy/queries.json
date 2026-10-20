@@ -1,0 +1,169 @@
+[
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('_Beans'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 120
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('_Shops'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('_Days'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 30
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('Sales'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 5000
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"Value\", [!Cups Sold], \"IsBlank\", ISBLANK([!Cups Sold]) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Value]": 42,
+                  "[IsBlank]": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"Value\", [!Revenue], \"IsBlank\", ISBLANK([!Revenue]) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Value]": 42,
+                  "[IsBlank]": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"Value\", [Avg Ticket], \"IsBlank\", ISBLANK([Avg Ticket]) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Value]": 42,
+                  "[IsBlank]": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"Value\", [Beans Roasted], \"IsBlank\", ISBLANK([Beans Roasted]) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Value]": 42,
+                  "[IsBlank]": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"Value\", [Shop Count], \"IsBlank\", ISBLANK([Shop Count]) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Value]": null,
+                  "[IsBlank]": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]
