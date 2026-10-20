@@ -1,12 +1,12 @@
-"""P0 relationship validation, ported from the layer-1 suite.
+"""P0 relationship validation.
 
 Every relationship's endpoints exist, cardinalities are valid, bidirectional
 relationships and orphan tables are surfaced, active cycles are reported, and no
 two ACTIVE relationships share a table pair.
 
-The original ran on every registered client model; here each case runs on a
+The earlier check ran on every registered client model; here each case runs on a
 stand-in under ``tests/fixtures/relationships_standins/<id>/Model.SemanticModel``.
-The original kernel relationship parser and ``index`` are replaced by
+The earlier check kernel relationship parser and ``index`` are replaced by
 ``tmdl-preflight check --select <rule> --json``:
 
 * relationships-presence (new, opt-in) - file exists and declares >= 1 relationship
@@ -62,7 +62,7 @@ def test_relationships_file_exists(stand_in, sid, verdict):
 )
 def test_relationship_endpoints_exist(stand_in, sid, verdict):
     model = _model(stand_in, sid)
-    # --strict kept from the port; casing mismatches are errors (DECISIONS 5)
+    # --strict kept; casing mismatches are errors (project decision)
     code, payload = run_check(model, "R001", config=ENDPOINT_CONFIG, strict=True)
     found = violations(payload, "R001")
     if verdict == "pass":
@@ -77,7 +77,7 @@ def test_relationship_endpoints_exist(stand_in, sid, verdict):
     elif sid == "rel_missing_column":
         assert "store_id" in msgs and "not found" in msgs.lower()
         assert any(v["severity"] == "error" for v in found)
-    else:  # rel_casing: DECISIONS 5 makes a casing mismatch an ERROR
+    else:  # rel_casing: the project decision makes a casing mismatch an ERROR
         assert [v["severity"] for v in found] == ["error"]
         assert "casing" in msgs.lower()
         code_default, _ = run_check(model, "R001", config=ENDPOINT_CONFIG)
@@ -132,7 +132,7 @@ def test_no_circular_dependencies(stand_in, sid):
 @pytest.mark.p0
 @pytest.mark.parametrize(
     "sid, verdict",
-    # STRICTER: rel_reverse_pair (A->B and B->A both active) passed the original
+    # STRICTER: rel_reverse_pair (A->B and B->A both active) passed the earlier check
     # (directional key); R006 keys the pair unordered and fails it.
     _cases({"rel_dup_active", "rel_dup_mixed"}, {"rel_reverse_pair": "fail"}),
 )

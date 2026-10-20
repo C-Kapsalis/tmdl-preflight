@@ -1,18 +1,18 @@
-"""Measure organization (placement axis), ported from the layer-1 suite.
+"""Measure organization (placement axis).
 
 Placement of measures by NAME class (user-facing vs helper, and the helper
-subcategory). The original tests ran on every registered model; here they run
+subcategory). The earlier check tests ran on every registered model; here they run
 on the stand-in fleet ``tests/fixtures/measure_organization_fleet``:
 
-* ``universal`` - every measure correctly placed (original verdict: pass);
+* ``universal`` - every measure correctly placed (earlier verdict: pass);
 * ``spinout_02_db``  - one helper in the ``#`` table, one measure helper in a
   domain measures table, one user-facing measure in a dimension table
-  (original verdict: fail).
+  (earlier verdict: fail).
 
 Rules (new, selected by name): user-only-table-purity,
 helper-measure-placement, user-facing-in-helper-tables; the summary is the
 ``stats --measures`` report (B-measure-organization-summary).
-The placement rules are WARNINGs; the original tests failed on them, so the
+The placement rules are WARNINGs; the earlier check tests failed on them, so the
 verdict is taken with ``--strict``.
 """
 
@@ -30,7 +30,7 @@ MODELS = {
     "spinout-02": "spinout_02_db/Performance.SemanticModel",
 }
 
-# The original hard-coded the two axis field-parameter prefixes; the tool
+# The earlier check hard-coded the two axis field-parameter prefixes; the tool
 # takes them from configuration (both axis families are exempt).
 FIELD_PARAMETER_PREFIXES = ["x-Selector", "y-Selector", "x-Plot Specific", "y-Plot Specific"]
 
@@ -63,7 +63,7 @@ class TestHashPrefixedTablesPurity:
         assert "measure_helper" in found[0]["message"]
 
     def test_model_without_hash_table_reports_nothing(self, stand_in):
-        # original: pytest.skip("No '#'-prefixed tables in this model")
+        # earlier check: pytest.skip("No '#'-prefixed tables in this model")
         model = _model(stand_in, "spinout-02")
         (model / "definition" / "tables" / "#Report Measures.tmdl").unlink()
         code, payload = run_check(model, "user-only-table-purity", strict=True)
@@ -113,7 +113,7 @@ class TestNoUserFacingInForbiddenTables:
 
 class TestOrganizationRulesSummary:
     """test_organization_rules_summary: informational; always passes. The
-    numbers below are the ones the original printed for the stand-ins."""
+    numbers below are the ones the earlier check printed for the stand-ins."""
 
     @staticmethod
     def _summary(model):

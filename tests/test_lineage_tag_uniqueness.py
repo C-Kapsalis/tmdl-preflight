@@ -1,7 +1,7 @@
 """Lineage tags are unique and well-formed (spec H-duplicate-lineage-tags).
 
 A repeated lineageTag makes Power BI reject the import ("An object with
-lineage-tag already exists in the collection"). The original scanned the
+lineage-tag already exists in the collection"). The earlier check scanned the
 template's tables folder with a regex; the port runs M003 (uniqueness) and
 M004 (canonical UUID format) through `tmdl-preflight check`.
 
@@ -48,10 +48,10 @@ def test_no_duplicate_lineage_tags_across_all_files(stand_in, variant, verdict):
     ("clean", "pass"), ("dup_across", "pass"), ("dup_helper", "pass"), ("placeholder", "fail"),
 ])
 def test_lineage_tag_format_validity(stand_in, variant, verdict):
-    """The original was a non-strict xfail (known placeholder debug measure);
+    """The earlier check was a non-strict xfail (known placeholder debug measure);
     the port expects a plain M004 finding, no xfail. DESKTOP: M004 stays a
     WARNING because Power BI Desktop opened a model whose only defect was a
-    placeholder tag (DECISIONS 6), so the finding is asserted as a warning."""
+    placeholder tag (project decision), so the finding is asserted as a warning."""
     _root, payload = _tags(stand_in, variant)
     bad = violations(payload, "M004")
     if verdict == "pass":

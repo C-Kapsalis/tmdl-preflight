@@ -19,7 +19,7 @@ generated enumeration line (`ISFILTERED('T') || ISINSCOPE('T'[c]) || ...`)
 naming the dead table is dropped. Its safety class is `safe: false`, so it runs
 only when D004 is selected explicitly.
 
-Ported: the script subprocess is replaced by `tmdl-preflight check --select D004`
+Implementation: the script subprocess is replaced by `tmdl-preflight check --select D004`
 and `tmdl-preflight fix --select D004`; model discovery by the stand-in
 `tests/fixtures/test_dax_parsable_bikeshop` and its variants; the repair switch
 `PBI_AUTOFIX` by an explicit `autofix` parameter (the generic env knob is
@@ -98,9 +98,9 @@ def _snapshot(root):
     ("escaped_quote_table", True, "pass", []),
     ("leaked_sort_by_line", False, "pass", []),
     ("leaked_sort_by_line", True, "pass", []),
-    # STRICTER (DECISIONS 5): a reference spelled with other casing still
+    # STRICTER (project decision): a reference spelled with other casing still
     # resolves in DAX, but casing mismatches are D004 errors, and the narrow
-    # fixer never rewrites them. The original verdict was pass.
+    # fixer never rewrites them. The earlier verdict was pass.
     ("reference_casing", False, "fail", []),
     ("reference_casing", True, "fail", []),
 ])

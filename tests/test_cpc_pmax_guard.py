@@ -18,7 +18,7 @@ _MUTATIONS = json.loads((FIXTURES / f"{FLEET}.mutations.json").read_text(encodin
 
 
 def mutate(root: Path, name: str) -> None:
-    """Apply one recorded stand-in mutation (the same edit the parity run used)."""
+    """Apply one recorded stand-in mutation (the same edit the reference run used)."""
     for edit in _MUTATIONS[name]:
         rel, old, new = edit[:3]
         nth = edit[3] if len(edit) > 3 else None
@@ -101,7 +101,7 @@ def test_pmax_literal_set_is_exactly_the_two_spellings(stand_in, model):
 
 class TestNegativeControls:
     def test_pmax_guard_moved_to_keyword_arm(self, stand_in):
-        """Original: present_on_search_term_arm and absent_from_other_arms both fail."""
+        """Earlier check: present_on_search_term_arm and absent_from_other_arms both fail."""
         root = stand_in(FLEET)
         mutate(root, "cpc_guard_on_keyword")
         code, payload = run_check(root, RULE, config=CONFIG)

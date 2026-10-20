@@ -1,8 +1,8 @@
-"""Naming-convention checks, ported from the layer-1 suite.
+"""Naming-convention checks.
 
 Run on the stand-in fleet ``tests/fixtures/measure_organization_fleet``:
-``universal`` (clean; every original test passed) and ``spinout_02_db``
-(original: the three blocking tests fail, the advisory tests pass and list
+``universal`` (clean; every earlier test passed) and ``spinout_02_db``
+(earlier check: the three blocking tests fail, the advisory tests pass and list
 offenders).
 
 Rules (new, selected by name): required-model-objects,
@@ -33,14 +33,14 @@ def _non_info(payload):
     return [v for v in violations(payload) if v["severity"] != "info"]
 
 
-# The original hard-coded these objects; the tool takes them from configuration.
+# The earlier check hard-coded these objects; the tool takes them from configuration.
 REQUIRED = {"rules": {"required-model-objects": {
     "tables": ["z-Selector Format", "z-Selector Time Intelligence Function"],
     "measures": [{"table_prefix": "z-Selector", "contains": ["Currency", "Selector"], "advisory": True}],
 }}}
 
 CATEGORY = {"rules": {"fieldparam-category-column": {
-    # original: XREPORT_TABLE_RANGE = range(1, 10) over "x-Selector <i>"
+    # earlier check: XREPORT_TABLE_RANGE = range(1, 10) over "x-Selector <i>"
     "category_column_tables": [f"x-Selector {i}" for i in range(1, 10)],
     "category_position": 4,
 }}}
@@ -108,7 +108,7 @@ class TestNoUserFacingMeasuresInFactTables:
         assert code == 0
         assert _non_info(payload) == []
         advisories = sorted(v["message"] for v in violations(payload))
-        # original printed: Ads[countrows check] [diagnostic, lowercase]; Ads[Total Revenue] [hidden]
+        # earlier versions printed: Ads[countrows check] [diagnostic, lowercase]; Ads[Total Revenue] [hidden]
         assert len(advisories) == 2
         assert any("Ads[countrows check]" in m for m in advisories)
         assert any("Ads[Total Revenue]" in m and "hidden" in m for m in advisories)
@@ -163,7 +163,7 @@ class TestHelperMeasuresFollowConventions:
         assert code == 0
         s = json.loads(out)["measures"]
         assert s["dash_helpers"] == 4
-        # BUGFIX: original printed 1 (its index dropped the `///` description
+        # BUGFIX: earlier versions printed 1 (its index dropped the `///` description
         # of the second consecutive measure); both helper measures carry one.
         assert s["dash_helpers_described"] == 2
 
@@ -172,7 +172,7 @@ class TestHelperMeasuresFollowConventions:
         assert code == 0
         s = json.loads(out)["measures"]
         assert s["dash_helpers"] == 6
-        assert s["dash_helpers_described"] == 2  # BUGFIX: original printed 1
+        assert s["dash_helpers_described"] == 2  # BUGFIX: earlier versions printed 1
 
 
 class TestMeasureNamesEnableFormatInference:

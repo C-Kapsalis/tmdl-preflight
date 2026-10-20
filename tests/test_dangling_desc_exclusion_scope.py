@@ -1,6 +1,6 @@
 """Scan exclusions match the path RELATIVE TO THE SCAN ROOT, never the absolute one.
 
-Ported from the original suite's exclusion-scope tests (spec
+Exclusion scope (spec
 A-scan-exclusions-relative). Archived and backup trees are skipped by folder
 name; matching that against an absolute path also matches any ANCESTOR folder,
 so a checkout under ``~/legacy/`` (or a worktree named ``rm-legacy-m``) would
@@ -8,7 +8,7 @@ exclude everything and the check would pass having scanned zero files: a false
 clean that looks exactly like a clean run.
 
 Each test plants an ``expressions.tmdl`` with one orphan ``///`` run (an M013
-finding) and runs ``tmdl-preflight check --select M013`` with the parity
+finding) and runs ``tmdl-preflight check --select M013`` with the legacy
 exclude list; the JSON summary's ``files_scanned`` / ``excluded`` counts say
 what was looked at.
 """
@@ -21,9 +21,9 @@ import pytest
 
 from conftest import run_check, violations
 
-# Parity profile of the original gate: a relative path segment CONTAINING
+# Exclude profile of the earlier gate: a relative path segment CONTAINING
 # legacy, _backup or _b2.
-PARITY_EXCLUDES = {"exclude": ["**/*legacy*/**", "**/*_backup*/**", "**/*_b2*/**"]}
+LEGACY_EXCLUDES = {"exclude": ["**/*legacy*/**", "**/*_backup*/**", "**/*_b2*/**"]}
 
 
 def _plant(definition: Path) -> Path:
@@ -35,8 +35,8 @@ def _plant(definition: Path) -> Path:
 
 
 def _scan(root: Path, tmp_path: Path):
-    cfg = tmp_path / "parity-excludes.json"
-    cfg.write_text(json.dumps(PARITY_EXCLUDES), encoding="utf-8")
+    cfg = tmp_path / "legacy-excludes.json"
+    cfg.write_text(json.dumps(LEGACY_EXCLUDES), encoding="utf-8")
     return run_check(root, "M013", config=cfg, strict=True)
 
 

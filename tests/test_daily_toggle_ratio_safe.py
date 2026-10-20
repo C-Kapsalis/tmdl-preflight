@@ -18,7 +18,7 @@ _MUTATIONS = json.loads((FIXTURES / f"{FLEET}.mutations.json").read_text(encodin
 
 
 def mutate(root: Path, name: str) -> None:
-    """Apply one recorded stand-in mutation (the same edit the parity run used)."""
+    """Apply one recorded stand-in mutation (the same edit the reference run used)."""
     for edit in _MUTATIONS[name]:
         rel, old, new = edit[:3]
         nth = edit[3] if len(edit) > 3 else None
@@ -63,7 +63,7 @@ def test_daily_item_guards_ratios(stand_in, model):
         assert mentioning(payload) == [] and code == 0
         pytest.skip("model has no z-Toggle Daily Calculation table")
     if model in LEGACY:
-        # legacy blind-average form: the original gate fails this model
+        # legacy blind-average form: the earlier check gate fails this model
         assert code == 1
         assert len(violations(payload)) >= 1
         assert "Daily" in violations(payload)[0]["message"]

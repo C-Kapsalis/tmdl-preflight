@@ -3,7 +3,7 @@
 A comment that cites an issue (`#365`) instead of explaining the model
 rots: the reader needs the tracker to understand the DAX. Existing references
 are recorded per model and class in a floors file (same shape as the
-original: ``{"<folder>/<Model>.SemanticModel": {"description": n, "inline": n}}``);
+earlier check: ``{"<folder>/<Model>.SemanticModel": {"description": n, "inline": n}}``);
 a rise fails, a fall prints a tighten hint, and tightening only ever lowers.
 
 Classes: a `///` line is a description; `--`, `//` and `/* ... */` text is
@@ -11,7 +11,7 @@ inline (a block may span lines). A reference is `#` + digits not followed by
 a word character, so colours (`#FF00AA`) and names (`#Report Measures`) are
 not references; text inside double-quoted strings is ignored.
 
-No original test exercised this (the original was a script); these are the
+No earlier test exercised this (the earlier check was a script); these are the
 spec's stand-in cases. The floors file is generated per test.
 """
 from __future__ import annotations

@@ -1,7 +1,6 @@
 """Zero AutoDetected relationships, and no two ACTIVE relationships on one table pair.
 
-Ported from the layer-1 suite (the original was scoped to one client model,
-spinout_02_db/insights, via a module constant; the tool checks every model it scans).
+The tool checks every model it scans.
 Power BI Desktop re-enables "Autodetect new relationships after data is loaded"
 after updates, so the setting is no defence: each refresh can write
 ``AutoDetected_<guid>`` relationships nobody chose. A wrong one is deleted in
@@ -9,9 +8,7 @@ Model view; a right one is ADOPTED by stripping the marker, leaving the bare GUI
 
 Rules: R007 autodetected-relationships (error; id CONTAINS ``autodetected``, any
 case) and R006 ambiguous-active-pair (unordered, case-insensitive).
-Stand-ins: ``tests/fixtures/insights_autodetected_relationships/<variant>``; each
-variant's relationships.tmdl was placed at the original's constant path and the
-original test run unmodified (verdicts in parity-expected.json).
+Stand-ins: ``tests/fixtures/insights_autodetected_relationships/<variant>``.
 """
 
 from __future__ import annotations
@@ -35,7 +32,7 @@ def _model(stand_in, variant):
         ("ad_adopted", "pass", 0),
         ("ad_first_line", "fail", 1),      # regression pin: block on line 1
         ("ad_inactive", "fail", 1),        # inactive ones are traps too
-        # STRICTER: original matched only ids STARTING with AutoDetected -> pass
+        # STRICTER: earlier versions matched only ids STARTING with AutoDetected -> pass
         ("ad_mid_lowercase", "fail", 1),
         ("ad_no_underscore", "fail", 1),
         ("dup_active_paths", "pass", 0),
@@ -69,7 +66,7 @@ def test_insights_has_no_autodetected_relationships(stand_in, variant, verdict, 
         ("ad_no_underscore", "pass"),
         ("dup_active_paths", "fail"),
         ("dup_second_inactive", "pass"),
-        # STRICTER: Orders->Stores plus Stores->Orders, both active. The original
+        # STRICTER: Orders->Stores plus Stores->Orders, both active. The earlier check
         # keyed the pair directionally and passed; R006 keys it unordered.
         ("dup_reverse_pair", "fail"),
     ],

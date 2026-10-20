@@ -3,7 +3,7 @@ definition with A-table-roles): name law plus structure law.
 
 API: ``tmdl_preflight.roles.fact_tables(model)`` over a model parsed with
 ``tmdl_preflight.parser.parse_model``. Stand-in tables cover spec cases 1-9;
-only ``Orders`` is a fact (recorded from the original classifier).
+only ``Orders`` is a fact (recorded from the earlier check classifier).
 """
 from __future__ import annotations
 

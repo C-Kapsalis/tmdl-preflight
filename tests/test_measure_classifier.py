@@ -3,8 +3,7 @@ classifier behind the helper / user-facing / noise checks.
 
 API: ``tmdl_preflight.measure_classes.classify_measure_name(name, options=None)``
 returning an object with ``is_helper`` (bool), ``subcategory`` (str | None)
-and ``is_noise`` (bool). Expected values were recorded from the original
-classifier on these exact names (see parity-expected.json).
+and ``is_noise`` (bool). Expected values are pinned on these exact names.
 """
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 """TMDL `///` description comments must not dangle (M013).
 
-Ported from the original suite's dangling-description gate (spec
+Dangling-description gate (spec
 A-dangling-description; fixer behaviour B-dangling-description-fixer).
 
 A `///` run must be immediately followed by the declaration it documents,
@@ -12,7 +12,7 @@ the whole dataset:
     TMDL Format Error: Parsing error type - InvalidLineType
     Detailed error - Unexpected line type: Empty!  Document - './expressions'
 
-The original ran the repair script in check mode, failed with "no
+The earlier check ran the repair script in check mode, failed with "no
 auto-repair" unless a repair switch was set, and otherwise ran fix + re-check.
 Here ``check`` is the read-only gate and ``fix`` the explicit repair.
 
@@ -30,7 +30,7 @@ from conftest import run_check, run_fix, violations
 
 STAND_INS = "b3-a2/dangling_description_comments"
 
-# (stand-in, model folder, original verdict with the repair switch unset)
+# (stand-in, model folder, earlier verdict with the repair switch unset)
 MODELS = [
     pytest.param("dd_bad", "dd_bad_db/Roastery.SemanticModel", "fail", id="dd_bad_db/Roastery"),
     pytest.param("dd_ok", "dd_ok_db/Roastery.SemanticModel", "pass", id="dd_ok_db/Roastery"),
@@ -55,22 +55,22 @@ def test_no_dangling_description_comments(stand_in, name, folder, verdict):
         assert code == 0 and found == []
         return
 
-    # STRICTER (DECISIONS 3): an end-of-file run is an ERROR, so the default
+    # STRICTER (project decision): an end-of-file run is an ERROR, so the default
     # profile fails without --strict.
     assert code == 1
     assert len(found) == 1 and found[0]["severity"] == "error"
-    # read-only: "no auto-repair" in the original == check never writes
+    # read-only: "no auto-repair" in the earlier check == check never writes
     assert (definition / "expressions.tmdl").read_bytes() == before
 
 
 def test_dangling_description_repair_is_opt_in(stand_in):
-    """Original repair branch (switch = 1): fix, then a clean re-check."""
+    """Repair branch (switch = 1): fix, then a clean re-check."""
     definition = _definition(stand_in, "dd_bad", "dd_bad_db/Roastery.SemanticModel")
     code, payload = run_fix(definition, "M013")
     assert code == 0, payload
     text = (definition / "expressions.tmdl").read_text(encoding="utf-8")
     assert "US Format" not in text
-    # the run and the single blank line after it are removed (original bytes)
+    # the run and the single blank line after it are removed (earlier bytes)
     assert text.endswith('IsParameterQueryRequired=true]\n\n')
     code, payload = run_check(definition, "M013")
     assert code == 0 and violations(payload, "M013") == []

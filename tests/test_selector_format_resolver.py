@@ -11,7 +11,7 @@ arms, and on `spinout-05_db/Growth` — where `"/ "` maps to whole euros for
 Client-e's thousands-scale per-merchant amounts — the naive outcome was
 `#,##0 €`, rendering a real €0.53 cost-per-conversion as "1 €".
 
-Ported: `selector_format_resolver.resolve_format` -> `tmdl_preflight.format_resolver.resolve`
+Implementation: `selector_format_resolver.resolve_format` -> `tmdl_preflight.format_resolver.resolve`
 (returns `(format, unresolved)`), `sfr.UNKNOWN` -> `format_resolver.UNKNOWN`,
 `sfr.decimals` -> `format_resolver.decimals` (specs E-format-string-resolver,
 E-format-min-decimals). The repository glob of the last test is replaced by the
@@ -178,7 +178,7 @@ def test_renamed_cost_per_conversion_keeps_its_decimals(stand_in, client, verdic
 
 
 def test_scan_exclusions_skip_legacy_backup_and_demo_folders(stand_in):
-    """The original only visited live top-level folders; on the whole tree the
+    """The earlier check only visited live top-level folders; on the whole tree the
     exclude globs leave the compact selector of client_compact as the only finding
     source (the skipped folders hold the same failing selector)."""
     tree = stand_in(TREE)

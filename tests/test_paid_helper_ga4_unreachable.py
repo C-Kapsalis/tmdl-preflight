@@ -1,14 +1,14 @@
 """`-helper y-drilldown paid performance` never blanks the paid surface on
 _Queries / _Keywords.
 
-Ported from the layer-1 suite. Per model that declares the paid helper:
+Per model that declares the paid helper:
   1. the paid helper names neither `_Queries` nor `_Keywords`;
   2. the model declares `-helper y-drilldown ga4 unreachable`, naming both;
   3. every GA4 consumer that blanks on "non_compatible" also blanks on the
      GA4 helper.
 
 Rule (new, selected by name): measure-reference-contract, configured with
-the original contracts. The registry universe and the block extractor are
+the earlier check contracts. The registry universe and the block extractor are
 replaced by the stand-in fleet and the tool's model loader.
 """
 
@@ -61,7 +61,7 @@ def test_paid_helper_never_names_queries_or_keywords(stand_in, model_rel):
         assert code == 0
         assert found == []
     else:
-        # original: "the paid helper names ['_Queries']"
+        # earlier check: "the paid helper names ['_Queries']"
         assert len(found) == 1 and "_Queries" in found[0]["message"]
         assert code == 1
 
@@ -73,7 +73,7 @@ def test_ga4_helper_carries_the_unreachable_tables(stand_in, model_rel):
         assert code == 0
         assert found == []
     else:
-        # original: "[-helper y-drilldown ga4 unreachable] does not name ['_Keywords']"
+        # earlier check: "[-helper y-drilldown ga4 unreachable] does not name ['_Keywords']"
         # (a `--` comment line naming the table does not count)
         assert len(found) == 1 and "_Keywords" in found[0]["message"]
         assert code == 1
@@ -90,6 +90,6 @@ def test_ga4_consumers_blank_on_the_ga4_helper(stand_in, model_rel):
         assert code == 0
         assert bare == []
     else:
-        # original: '1 GA4 consumer(s) blank only on "non_compatible"'
+        # earlier check: '1 GA4 consumer(s) blank only on "non_compatible"'
         assert len(bare) == 1
         assert code == 1

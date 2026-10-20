@@ -11,7 +11,7 @@ Flagged facts are classified: the fact carries ``account_x_id`` but no active
 join ("missing relationship") or carries neither ("missing key column").
 Declared exemptions (with a mandatory reason) pass.
 
-Ratchet (same shape as the original floor file,
+Ratchet (same shape as the earlier check floor file,
 ``{"<folder>/<Model>": [table, ...]}``): recorded offenders do not fail, new
 ones do, a model with no entry at all fails ("record it deliberately"), fixed
 offenders print a tighten hint.

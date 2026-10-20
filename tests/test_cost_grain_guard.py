@@ -2,7 +2,7 @@
 depth (B-dax-or-chain-depth), raw-cost ratios (B-measure-reference-contract) and the
 narrow population-policy exception (B-grain-policy-exception).
 
-Two originals rename to this file: the generic two-model gate (class TestGeneric)
+Two earlier tests map to this file: the generic two-model gate (class TestGeneric)
 and the one-model copy for the spinout-05 Growth model (class TestOneModel).
 Both run on the fictional stand-in fleet.
 """
@@ -24,7 +24,7 @@ _MUTATIONS = json.loads((FIXTURES / f"{FLEET}.mutations.json").read_text(encodin
 
 
 def mutate(root: Path, name: str) -> None:
-    """Apply one recorded stand-in mutation (the same edit the parity run used)."""
+    """Apply one recorded stand-in mutation (the same edit the reference run used)."""
     for edit in _MUTATIONS[name]:
         rel, old, new = edit[:3]
         nth = edit[3] if len(edit) > 3 else None
@@ -86,7 +86,7 @@ CLIENTS = {
                         "Never Started from New Accounts #"],
     ),
 }
-# Tables with no registered axis column in the stand-in: the original skips them
+# Tables with no registered axis column in the stand-in: the earlier check skips them
 # (require_registered_columns = false).
 UNREGISTERED = {("spinout-12", t) for t in CLIENTS["spinout-12"]["blocked_tables"]
                 if t not in ("_Campaigns", "_Devices", "_Countries")}
@@ -321,7 +321,7 @@ class TestOneModelNegativeControls:
         assert len(violations(payload)) == 1
 
     def test_whitespace_inside_terms_is_free(self, stand_in):
-        """BUGFIX (DECISIONS 2): the one-model copy matched only `ISINSCOPE( 'T'[c] )`
+        """BUGFIX (project decision): the one-model copy matched only `ISINSCOPE( 'T'[c] )`
         with single spaces; `ISINSCOPE ( 'T'[c] )` is the same DAX and passes."""
         root = stand_in(FLEET)
         guard_file = root / GROWTH_E / "definition" / "tables" / "#Backend Measures.tmdl"

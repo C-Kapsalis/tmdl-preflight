@@ -7,7 +7,7 @@ looks like ownership to anything that derives categories by containment, so the
 table survives forever.
 
 Ratcheted, not hard: some models carry legitimately measure-free data-only
-tables. A baseline (same shape as the original floor file:
+tables. A baseline (same shape as the earlier check floor file:
 ``{"<folder>/<Model>.SemanticModel": [table, ...]}``) records the known
 population; the rule fails only on GROWTH. A baseline entry that is no longer
 dead prints a tighten hint and does not fail. A missing baseline file fails.
@@ -27,7 +27,7 @@ from conftest import run_check, violations
 RULE = "dead-fact-tables"
 MODEL = "df_db/Roastery.SemanticModel"
 
-# baseline content -> original verdict (recorded on the stand-in)
+# baseline content -> earlier verdict (recorded on the stand-in)
 FLOORS = [
     pytest.param({}, "fail", ["Returns", "Shipments"], id="empty-floor"),
     pytest.param({MODEL: ["Returns", "Shipments"]}, "pass", [], id="full-floor"),

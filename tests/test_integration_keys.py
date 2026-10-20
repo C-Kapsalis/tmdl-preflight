@@ -3,8 +3,8 @@
 * C-dimension-key-columns (test_dimension_tables_have_primary_keys): each
   ``_`` dimension has a key-pattern column (info, advisory).
 * B-relationship-endpoints / R001 (test_relationship_key_columns_valid): the
-  original printed the invalid relationships and never failed; the tool
-  reports each as an R001 ERROR (stricter wins). Parity is on the list.
+  earlier versions printed the invalid relationships and never failed; the tool
+  reports each as an R001 ERROR (stricter wins). 
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ class TestDimensionKeyColumns:
 
     def test_dimension_without_key_is_one_info_finding(self, stand_in):
         code, payload = run_check(_model(stand_in, "failing_db"), self.RULE, strict=True)
-        assert code == 0  # advisory despite the original P1 label
+        assert code == 0  # advisory despite the earlier check P1 label
         found = violations(payload)
         assert len(found) == 1
         assert found[0]["severity"] == "info"
@@ -52,7 +52,7 @@ class TestRelationshipKeyColumnsValid:
                          "\tfromColumn: Orders.order_id\n\ttoColumn: _Shops.order_id\n\n",
                        encoding="utf-8")
         code, payload = run_check(model, "R001")
-        assert code == 1  # STRICTER: original only printed it
+        assert code == 1  # STRICTER: earlier check only printed it
         found = violations(payload, "R001")
         assert len(found) == 1
         assert "order_id" in found[0]["message"]

@@ -4,7 +4,8 @@
 A column present in the model but registered in no field parameter is
 silently unreachable: nothing fails, the dimension simply never appears in
 any slicer or query tool that resolves fields through the field parameters.
-The original pinned this with module constants pointing at one model; the port
+The earlier check pinned this with module constants pointing at one model;
+the tool
 expresses the same two assertions as declared contracts in the tool config.
 
 Stand-in: tests/fixtures/b3-a2/insights_contract/roastery (model

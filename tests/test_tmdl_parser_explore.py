@@ -1,15 +1,14 @@
 """Parser conformance (spec H-parser-conformance).
 
-Ported from the original parser-exploration suite: only its two asserting tests
-(crash freedom and whole-model performance) carry over; the print-only
+Two asserting tests (crash freedom and whole-model performance) are kept; the print-only
 exploration tests are developer tooling. The README edge-case library
 (EC-001..EC-021) becomes one fixture table per case in
 `tests/fixtures/test_tmdl_parser_explore_edge_cases/EdgeCases.SemanticModel`,
 with the expected parse result. Cases the README marked LIMITATION are TARGETS
-(named `..._target`): the original parser was not expected to pass them, the
+(named `..._target`): the earlier check parser was not expected to pass them, the
 tool must.
 
-The original kernel index and its private table-file parser are replaced by
+The earlier check kernel index and its private table-file parser are replaced by
 `tmdl_preflight.parser.parse_table_file` / `parse_model`; the registry-selected
 model by the edge-case stand-in; the performance model is generated.
 """
@@ -42,7 +41,7 @@ def _table(model, name):
 
 
 # ---------------------------------------------------------------------------
-# Original tests
+# Kept tests
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("tmdl_path", TABLE_FILES, ids=lambda p: p.stem)
@@ -184,8 +183,8 @@ def test_ec015_very_long_expression_then_properties(model):
 
 
 def test_ec016_expression_with_no_whitespace(model):
-    """BUGFIX: the README marks this HANDLED but the original parser drops the
-    measure when `=` has no surrounding spaces (DECISIONS 2)."""
+    """BUGFIX: the README marks this HANDLED but the earlier check parser drops the
+    measure when `=` has no surrounding spaces (project decision)."""
     m = _table(model, "EC016 No Whitespace").measures["Compact"]
     assert m.expression.strip() == "[Sales]+[Returns]-[Discounts]"
     bare = [r.member for r in extract_references(m.expression) if r.kind == "bare"]

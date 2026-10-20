@@ -16,13 +16,13 @@ This does NOT validate:
 - Reference validity
 - Code quality or style
 
-Ported: the registry-driven model is replaced by the stand-in
+Implementation: the registry-driven model is replaced by the stand-in
 `tests/fixtures/test_dax_parsable_bikeshop` and its variants; the expression
 extractor + balance checker by rule D001 (`check --select D001 --json`) and
 `tmdl_preflight.dax.check_balanced_delimiters`; the statistics helper by
 `report complexity --json` (spec E-report-measure-complexity). The expression
 count floor against the template baseline (test_dax_expressions_exist) belongs
-to E-template-count-floor and is not ported here.
+to E-template-count-floor and is not covered here.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def _materialize(stand_in, variant):
 
 
 def _all_expressions(model_dir: Path):
-    """Measures and calculated columns (what the original extractor saw)."""
+    """Measures and calculated columns (what the earlier check extractor saw)."""
     model = parse_model(model_dir / "definition")
     return [b for b in model.dax_blocks() if b.kind in ("measure", "calculated_column")]
 
@@ -76,7 +76,7 @@ def _delimiter_findings(model_dir: Path, word: str):
 
 @pytest.mark.parametrize("variant", [None, "one_unmatched_paren"])
 def test_dax_balanced_parentheses(stand_in, variant):
-    """Informational in the original (P1): reports, never fails."""
+    """Informational in the earlier check (P1): reports, never fails."""
     model_dir = _materialize(stand_in, variant)
     _delimiter_findings(model_dir, "parenthes")
     code, payload = run_check(model_dir, "D001")
@@ -115,7 +115,7 @@ def test_dax_balanced_brackets(stand_in, variant, verdict):
 
 @pytest.mark.parametrize("variant", [None])
 def test_dax_balanced_quotes(stand_in, variant):
-    """Informational in the original (P1): reports, never fails."""
+    """Informational in the earlier check (P1): reports, never fails."""
     model_dir = _materialize(stand_in, variant)
     _delimiter_findings(model_dir, "quote")
 
@@ -127,7 +127,7 @@ def test_dax_comprehensive_syntax_check(stand_in, variant):
     """Clean share of measures + calculated columns must be >= the configured
     `dax_parsing.min_success_rate` (default 0.90).
 
-    STRICTER (DECISIONS 3): every unbalanced expression is still a D001 error
+    STRICTER (project decision): every unbalanced expression is still a D001 error
     whatever the share; the share threshold is kept as a separate assertion."""
     model_dir = _materialize(stand_in, variant)
     total = len(_all_expressions(model_dir))
@@ -151,7 +151,7 @@ def test_dax_comprehensive_syntax_check(stand_in, variant):
 
 def test_dax_expression_statistics(stand_in):
     """Report statistics about DAX expressions (informational, always passes
-    in the original; the keys it printed must exist)."""
+    in the earlier check; the keys it printed must exist)."""
     model_dir = _materialize(stand_in, None)
     code, out, err = run_cli("report", "complexity", model_dir, "--json")
     assert code == 0, err

@@ -19,7 +19,7 @@ _MUTATIONS = json.loads((FIXTURES / f"{FLEET}.mutations.json").read_text(encodin
 
 
 def mutate(root: Path, name: str) -> None:
-    """Apply one recorded stand-in mutation (the same edit the parity run used)."""
+    """Apply one recorded stand-in mutation (the same edit the reference run used)."""
     for edit in _MUTATIONS[name]:
         rel, old, new = edit[:3]
         nth = edit[3] if len(edit) > 3 else None

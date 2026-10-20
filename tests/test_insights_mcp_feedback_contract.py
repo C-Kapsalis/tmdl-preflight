@@ -19,7 +19,8 @@ Invariants the model would otherwise lose silently:
 5. The measures and dimensions are registered in the field parameters inside
    their free ordinal gaps, with no duplicate ordinals.
 
-The original pinned these on one model through module constants; the port
+The earlier check pinned these on one model through module constants;
+the tool
 expresses each as a declared contract in the tool config and asserts the
 contract rule is clean on the stand-in (tests/fixtures/b3-a2/insights_contract,
 model ``spinout_02_db/insights``, fictional rows). Each test also breaks the

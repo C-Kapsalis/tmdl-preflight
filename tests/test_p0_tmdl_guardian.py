@@ -1,6 +1,6 @@
 """P0 TMDL guardian: pre-import sanity of a semantic model.
 
-Ported from the layer-1 suite. Three checks:
+Three checks:
   1. the helper-measures table file: validator errors, root-level comment
      indented under a tab, unpaired DAX fences;
   2. every .tmdl parses cleanly, has no NUL bytes, and the core files have no
@@ -8,7 +8,7 @@ Ported from the layer-1 suite. Three checks:
   3. the folder structure is intact (definition/, tables/, model.tmdl,
      database.tmdl, the required helper-measures table file).
 
-Rule (new, selected by name): tmdl-file-sanity, configured with the original
+Rule (new, selected by name): tmdl-file-sanity, configured with the earlier check
 required table; lineage-tag format is the existing M004.
 Stand-ins: ``universal`` (clean) and ``spinout_02_db`` (CRLF model.tmdl, no
 database.tmdl, an indented root comment in the helper-measures file).
@@ -23,7 +23,7 @@ CLEAN = "universal/Performance.SemanticModel"
 BROKEN = "spinout_02_db/Performance.SemanticModel"
 RULE = "tmdl-file-sanity"
 # The line-ending check is opt-in in the tool (Windows checkouts are often
-# CRLF); the port turns it on to reproduce the original's verdicts.
+# CRLF); the test turns it on to reproduce the earlier check's verdicts.
 CONFIG = {"rules": {RULE: {"required_tables": ["Helper Measures"], "check_line_endings": True}}}
 
 
@@ -33,13 +33,13 @@ def _helper_findings(payload):
 
 class TestP0TmdlGuardian:
     def test_p0_helper_measures_syntax_validation_clean(self, stand_in):
-        # original verdict: XPASS (xfail strict=False; the stand-in has valid tags)
+        # earlier verdict: XPASS (xfail strict=False; the stand-in has valid tags)
         code, payload = run_check(stand_in(FLEET) / CLEAN, RULE, "M004", config=CONFIG)
         assert code == 0
         assert _helper_findings(payload) == []
 
     def test_p0_helper_measures_syntax_validation_broken(self, stand_in):
-        # original verdict: XFAIL (fails on the indented root comment)
+        # earlier verdict: XFAIL (fails on the indented root comment)
         code, payload = run_check(stand_in(FLEET) / BROKEN, RULE, "M004", config=CONFIG)
         found = _helper_findings(payload)
         assert len(found) == 1
@@ -52,7 +52,7 @@ class TestP0TmdlGuardian:
         assert violations(payload) == []
 
     def test_p0_all_tmdl_files_parseable_broken(self, stand_in):
-        # BUGFIX: the original read files with universal newlines, so its CRLF
+        # BUGFIX: the earlier check read files with universal newlines, so its CRLF
         # check could never fire (verdict pass); the tool reports the CRLF.
         code, payload = run_check(stand_in(FLEET) / BROKEN, RULE, config=CONFIG)
         assert code == 1
@@ -74,7 +74,7 @@ class TestP0TmdlGuardian:
         assert not [v for v in violations(payload) if "missing" in v["message"]]
 
     def test_p0_model_structure_integrity_broken(self, stand_in):
-        # original: "required files missing: ['database.tmdl']"
+        # earlier check: "required files missing: ['database.tmdl']"
         code, payload = run_check(stand_in(FLEET) / BROKEN, RULE, config=CONFIG)
         assert code == 1
         missing = [v for v in violations(payload) if "missing" in v["message"]]

@@ -1,16 +1,16 @@
 """No TMDL metadata leaked INTO a DAX expression; no simple property after the
 annotation / child-block section.
 
-Ported from the layer-1 suite. A property line (isHidden, displayFolder,
+A property line (isHidden, displayFolder,
 lineageTag, detailRows, kpi, ...) inside an expression region makes Power BI
 reject the model ("UnknownKeyword ... neither a property nor an object in the
 current context"); a simple property after an annotation / changedProperty /
 formatStringDefinition / kpi / detailRows / relatedColumnDetails block fails the
 same way.
 
-The original parametrised over every tables/*.tmdl of the fleet; here over the
+The earlier check parametrised over every tables/*.tmdl of the fleet; here over the
 stand-in files in ``tests/fixtures/tmdl_metadata_in_expression`` (the same files
-were placed under ``sample_db/Sample.SemanticModel`` for the original run).
+were placed under ``sample_db/Sample.SemanticModel`` for the earlier check run).
 Kernel recognizers -> ``check --select M010`` / ``--select M011``, filtered by file.
 """
 

@@ -19,7 +19,7 @@ _MUTATIONS = json.loads((FIXTURES / f"{FLEET}.mutations.json").read_text(encodin
 
 
 def mutate(root: Path, name: str) -> None:
-    """Apply one recorded stand-in mutation (the same edit the parity run used)."""
+    """Apply one recorded stand-in mutation (the same edit the reference run used)."""
     for edit in _MUTATIONS[name]:
         rel, old, new = edit[:3]
         nth = edit[3] if len(edit) > 3 else None
@@ -79,7 +79,7 @@ def test_content_axis_carries_exactly_the_recorded_edges(stand_in):
 
 
 class TestNegativeControls:
-    """The same assertions on mutated stand-ins (the original fails on each)."""
+    """The same assertions on mutated stand-ins (the earlier check fails on each)."""
 
     def test_no_landing_pages_edge_on_the_content_axis(self, stand_in):
         root = stand_in(FLEET)

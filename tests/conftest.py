@@ -1,14 +1,14 @@
 """Shared fixtures: a clean fictional model ("Pedal & Sprocket Bike Co.")
 plus a helper that copies it into tmp_path so tests can break it safely.
 
-Ported-suite helpers (added with the test port):
+Stand-in helpers:
 
 * ``stand_in(name)`` copies ``tests/fixtures/<name>`` into ``tmp_path`` and
   returns the copy, so a test may mutate it.
 * ``run_check(path, *rules, config=None, strict=False, args=())`` runs
   ``tmdl-preflight check --json`` through the CLI entry point and returns
   ``(exit_code, payload)``. ``rules`` are passed to ``--select``: an
-  existing rule id (``M013``) or a rule name. Rules added by the port are
+  existing rule id (``M013``) or a rule name. Newer rules are usually
   selected by their name, which is the spec id without its chunk letter
   (``A-dead-fact-tables`` -> ``dead-fact-tables``).
 * ``run_fix(...)`` does the same for ``fix``.
@@ -72,7 +72,7 @@ def replace_in():
 
 
 # ---------------------------------------------------------------------------
-# Ported-suite helpers
+# Stand-in helpers
 # ---------------------------------------------------------------------------
 
 

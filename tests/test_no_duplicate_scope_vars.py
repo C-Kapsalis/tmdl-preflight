@@ -15,9 +15,9 @@ Incident: a branch merge stacked two top-level `VAR temp_alt` blocks in one
 f-All measure; the model imported but every visual bound to it errored on
 refresh.
 
-Ported: the kernel finder is replaced by rule D005 (`check --select D005`);
+Implementation: the kernel finder is replaced by rule D005 (`check --select D005`);
 the registry model by the stand-in `tests/fixtures/test_dax_parsable_bikeshop`.
-The original asserts zero vs non-zero only; D005 reports one finding per
+The earlier check asserts zero vs non-zero only; D005 reports one finding per
 re-declaration (three declarations -> 2 findings).
 """
 

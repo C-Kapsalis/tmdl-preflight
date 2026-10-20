@@ -69,7 +69,7 @@ class TestCalendarStandardColumns:
 
     def test_missing_week_is_one_info_finding(self, stand_in):
         code, payload = run_check(_model(stand_in, "failing_db"), self.RULE)
-        assert code == 0  # advisory: never fails (original asserted nothing)
+        assert code == 0  # advisory: never fails (earlier versions asserted nothing)
         found = violations(payload)
         assert len(found) == 1
         assert found[0]["severity"] == "info"

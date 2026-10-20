@@ -1,6 +1,6 @@
 """Verification is read-only unless repair is requested explicitly.
 
-Ported from the suite's own autofix-default pins (spec A-check-is-read-only):
+Autofix-default pins (spec A-check-is-read-only):
 ``check`` never writes, ``fix`` is the explicit write verb, and no environment
 variable or default flag turns a read-only command into a writer.
 """
@@ -72,7 +72,7 @@ def test_deliberate_violation_is_byte_identical_by_default_and_repairs_opt_in(tm
 def test_every_python_autofix_callsite_defaults_off(project, definition, monkeypatch):
     """Every registered fixer is reachable only through the explicit write verb.
 
-    The original counted the suite's own repair-switch call sites (at least 11, all
+    The earlier check counted the suite's own repair-switch call sites (at least 11, all
     defaulting off). Here: every fixable rule is known, no option of the read-only
     ``check`` command enables writing, and no environment variable turns ``check``
     into a writer.
