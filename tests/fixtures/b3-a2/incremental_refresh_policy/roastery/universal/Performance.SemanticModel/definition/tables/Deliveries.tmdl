@@ -1,0 +1,27 @@
+table Deliveries
+	lineageTag: 6ad5213d-362c-5c3e-9ee5-bb5324b3a364
+
+	column deliveries_id
+		dataType: int64
+		lineageTag: f8e29891-65ed-5401-9ce2-34f6a6487ef0
+		summarizeBy: none
+		sourceColumn: deliveries_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_date
+		dataType: dateTime
+		lineageTag: e3d9a289-0175-5318-8b69-6d7f45e72f70
+		summarizeBy: none
+		sourceColumn: order_date
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Deliveries = m
+		mode: import
+		source =
+				let
+				    ir_dfilter = " order_date >= '" & Date.ToText(DateTime.Date(RangeStart), "yyyy-MM-dd") & "' and order_date < '" & Date.ToText(DateTime.Date(RangeEnd), "yyyy-MM-dd") & "'",
+				    Source = Value.NativeQuery(Warehouse, "select * from orders_n where " & ir_dfilter)
+				in
+				    Source

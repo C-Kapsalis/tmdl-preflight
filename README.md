@@ -14,7 +14,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 
 ## Features
 
-- **91 rules** over the failure modes that reject imports or silently corrupt
+- **94 rules** over the failure modes that reject imports or silently corrupt
   results: duplicate lineage tags and object names, TMDL properties leaked
   into DAX, dangling `///` descriptions, tables with no partition, inline
   `#table` entity sources that force a composite model, DAX references to
@@ -25,7 +25,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
   opt-in, and project contracts (required objects, pinned relationships,
   field-parameter registrations) are declared in the configuration. The
   full catalog is generated into [`docs/rules.md`](docs/rules.md).
-- **18 auto-fixers** for the defects whose repair is fully mechanical,
+- **20 auto-fixers** for the defects whose repair is fully mechanical,
   applied via a check → fix → re-check loop that never lets a fixer vouch
   for itself.
 - **Surgical, verified edits.** Fixers rewrite single lines or single JSON
@@ -82,7 +82,8 @@ tmdl-preflight: 2 error(s), 2 warning(s), 1 info(s)
 Exit code 1. The four defects carry the `(auto-fixable)` marker; the S001
 style nudge does not (info never blocks). `check` is strictly read-only.
 `fix` repairs what it safely can, then re-checks from disk (`fix --dry-run`
-shows the plan without writing):
+shows the plan without writing; `fix --check` writes nothing and exits with
+the number of objects the selected fixers would act on):
 
 ```console
 $ cp -r examples/bike-shop-broken /tmp/bike-shop
@@ -127,6 +128,8 @@ commit.
 | M018 | the same annotation name twice in one scope of `model.tmdl` | error | no |
 | M019 | a `queryGroup:` reference to a folder `model.tmdl` never declares | error | yes |
 | M020 | a calculated column declared with `=` but no expression | error | no |
+| P001 | a `refreshPolicy` placed after its partition, with out-of-domain values, a `sourceExpression` that differs from the partition source, or an unwindowed source | error | yes (unsafe: only when selected; copies the partition source) |
+| P002 | an incremental-refresh-eligible fact with no `refreshPolicy` and no backlog entry (opt-in; `refresh_policy` config) | warning | yes (unsafe: only when selected) |
 | C001 | a required table (format calculation group, helper table ...) or required measure is missing (configured) | error | no |
 | C002 | a declared object contract broke: a table, column or measure is gone, a key changed type, a DAX shape changed | error | no |
 | C003 | a declared relationship contract broke: an unsanctioned axis edge, a guard that no longer matches the graph, a pinned edge changed | error | no |
@@ -177,6 +180,7 @@ commit.
 | F012 | measures and dimensions no axis exposes, helpers an axis does expose (opt-in) | info | no |
 | F013 | a measure parked on a field-parameter table | error | no |
 | F014 | a selector SWITCH branch that calls a measure that no longer exists | error | yes |
+| F015 | an axis table that is not an import-mode `("label", NAMEOF(...))` field parameter (opt-in) | info | no |
 | A001 | the category-mapping table or one of its key columns is missing (opt-in) | error | no |
 | A002 | inventory of axis group ids and mapping-table relationships (opt-in) | info | no |
 | A003 | an account-filterable category whose mapping rows lack the account groups (opt-in) | error | yes |

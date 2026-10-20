@@ -74,6 +74,9 @@ the example model with one defect each. Where that evidence and the
 | F012 | fieldparam-coverage (opt-in) | info | no |
 | F013 | field-parameter-table-no-measures | error | no |
 | F014 | selector-branch-resolution | error | yes |
+| F015 | field-parameter-partition-shape (opt-in) | info | no |
+| P001 | refresh-policy-repair | error | yes (unsafe) |
+| P002 | refresh-policy-coverage (opt-in) | warning | yes (unsafe) |
 | A001 | mapping-table-required-columns (opt-in) | error | no |
 | A002 | mapping-table-info-reports (opt-in) | info | no |
 | A003 | mapping-category-required-keys (opt-in) | error | yes |
@@ -186,6 +189,12 @@ until configured.
   spacers and the standard calendar groups excluded) and `fact_tables`
   maps every fact table to the categories its metric-axis measures reach.
   Python API: `tmdl_preflight.categories`.
+- `fix --check` writes nothing and exits with the number of objects the
+  selected fixers would act on (capped at 255); `fix --only missing|invalid`
+  narrows the refresh-policy fixers. The project section `refresh_policy`
+  holds `loader_function`, `window_markers` (default `["RangeEnd"]`),
+  `window`, `exempt`, `backlog` (per model), `etl_stamp_columns` and
+  `inline_template`.
 - `fieldparam retag <files> --names N1,N2 --from OLD --to NEW` changes the
   category value of the named live rows across sibling tables; a name not
   found live under OLD fails with "retag incomplete" and nothing is written.

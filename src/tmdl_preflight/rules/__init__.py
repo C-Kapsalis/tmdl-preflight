@@ -33,6 +33,7 @@ from .fp_axes import (
     FieldParameterCoverageRule,
     FieldParameterLevelConsistencyRule,
     FieldParameterNoMeasuresRule,
+    FieldParameterPartitionShapeRule,
     FieldParameterRetagRule,
     SelectorBranchResolutionRule,
 )
@@ -43,6 +44,7 @@ from .mapping import (
     MappingTableInfoReportsRule,
     MappingTableRequiredColumnsRule,
 )
+from .refresh_policy import RefreshPolicyCoverageRule, RefreshPolicyRepairRule
 from .comments import CommentTicketRefsRule
 from .contract_patterns import (
     GuardedRatioWrapperRule,
@@ -145,6 +147,8 @@ ALL_RULES: list[type[Rule]] = [
     ModelAnnotationDuplicatesRule,
     UndefinedQueryGroupRule,
     CalculatedColumnExpressionRule,
+    RefreshPolicyRepairRule,
+    RefreshPolicyCoverageRule,
     DaxDelimiterBalanceRule,
     NameofResolutionRule,
     DuplicateMeasureNamesRule,
@@ -184,6 +188,7 @@ ALL_RULES: list[type[Rule]] = [
     FieldParameterCoverageRule,
     FieldParameterNoMeasuresRule,
     SelectorBranchResolutionRule,
+    FieldParameterPartitionShapeRule,
     MappingTableRequiredColumnsRule,
     MappingTableInfoReportsRule,
     MappingCategoryRequiredKeysRule,

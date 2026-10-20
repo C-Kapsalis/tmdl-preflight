@@ -147,6 +147,12 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--clear-cache", action="store_true",
                            help="after lineage tags change, delete the model's "
                                 ".pbi/cache.abf so Desktop does not reuse old tags")
+            p.add_argument("--check", action="store_true",
+                           help="write nothing; exit with the number of objects the "
+                                "selected fixers would act on (capped at 255)")
+            p.add_argument("--only", choices=("missing", "invalid"),
+                           help="refresh-policy fixers: only add missing policies, or "
+                                "only realign invalid ones")
         _add_config_options(p)
 
     p_base = sub.add_parser(
@@ -331,8 +337,10 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
     cfg = _load_config(args, full)
     ctx = _context(args.path, cfg.exclude)
     ctx.options = dict(cfg.sections)
+    if getattr(args, "only", None):
+        ctx.options["_fix_only"] = args.only
     ruleset = _effective_ruleset(full, cfg, args)
-    if mode == "fix" and not getattr(args, "dry_run", False):
+    if mode == "fix" and not getattr(args, "dry_run", False) and not getattr(args, "check", False):
         report = fix(ctx, ruleset, explicit=_parse_id_list(args.select))
     else:
         report = check(ctx, ruleset)
@@ -355,6 +363,13 @@ def _cmd_check(args) -> int:
     if args.json and args.format not in (None, "json"):
         raise UsageError(f"--json conflicts with --format {args.format}")
     report, ruleset, cfg, _ctx = _run(args, args.command)
+    if args.command == "fix" and getattr(args, "check", False):
+        fixable = {r.id for r in ruleset.rules if r.fixable}
+        pending = {(v.rule_id, v.obj or v.path or "") for v in report.violations
+                   if v.rule_id in fixable and v.fixable and v.severity.value != "info"}
+        fmt = "json" if args.json else (args.format or "text")
+        print(render(fmt, report, Path(args.path), ruleset))
+        return min(len(pending), 255)
     if args.baseline:
         try:
             known = load_baseline(Path(args.baseline))

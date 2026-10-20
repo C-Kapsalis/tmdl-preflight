@@ -534,3 +534,57 @@ class SelectorBranchResolutionRule(Rule):
                 applied.append(f"{table.file.name}: removed {len(dead)} dangling selector "
                                f"branch(es)")
         return applied
+
+
+# ---------------------------------------------------------------------------
+# F015 axis partition shape (advisory)
+# ---------------------------------------------------------------------------
+
+_MODE_RE = re.compile(r"^\s*mode:\s*(import|directQuery)\b", re.IGNORECASE | re.MULTILINE)
+_TUPLE_RE = re.compile(r'\(\s*"(?:[^"]|"")*"\s*,\s*NAMEOF\b', re.IGNORECASE)
+_FENCED_SOURCE_RE = re.compile(r"source\s*=\s*```(.*?)```", re.DOTALL)
+
+
+class FieldParameterPartitionShapeRule(Rule):
+    id = "F015"
+    name = "field-parameter-partition-shape"
+    severity = Severity.INFO
+    opt_in = True
+    option_defaults = {"axis_globs": ["x-Selector [1-9]", "y-Selector [1-9]"],
+                       "validate_field_parameter_pattern": True}
+    description = (
+        "Advisory shape check of the numbered axis tables: an import-mode "
+        "calculated partition whose fenced source lists (\"label\", "
+        "NAMEOF(...), ...) tuples. A DirectQuery or unknown mode, or a source "
+        "without such tuples, means the table is not the field parameter the "
+        "axis visuals expect. validate_field_parameter_pattern = false skips "
+        "the rule."
+    )
+
+    def disabled_by_policy(self) -> bool:
+        return self.options.get("validate_field_parameter_pattern") is False
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        for model in ctx.models:
+            for table in _matching(model, self.options["axis_globs"]):
+                tf = _read(table)
+                if tf is None:
+                    out.append(self.violation(f"'{table.name}': no partition (file unreadable)",
+                                              file=table.file, obj=table.name))
+                    continue
+                m = _MODE_RE.search(tf.text)
+                mode = m.group(1) if m else "unknown"
+                if mode.lower() != "import":
+                    out.append(self.violation(
+                        f"'{table.name}' partition mode is {mode}, not import; axis field "
+                        f"parameters are import-mode calculated tables.",
+                        file=table.file, obj=table.name))
+                    continue
+                body = _FENCED_SOURCE_RE.search(tf.text)
+                if body is None or not _TUPLE_RE.search(body.group(1)):
+                    out.append(self.violation(
+                        f"'{table.name}' source has no (\"label\", NAMEOF(...), ...) tuple "
+                        f"(no tuple pattern); it is not a field parameter.",
+                        file=table.file, obj=table.name))
+        return out

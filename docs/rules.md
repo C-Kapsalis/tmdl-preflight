@@ -3,7 +3,7 @@
 
 # tmdl-preflight rule catalog
 
-Rules: **91** · auto-fixable: **18** · baselinable: **86**.
+Rules: **94** · auto-fixable: **20** · baselinable: **89**.
 
 | Rule | Name | Severity | Fix | Description |
 |---|---|---|---|---|
@@ -49,6 +49,7 @@ Rules: **91** · auto-fixable: **18** · baselinable: **86**.
 | F012 | fieldparam-coverage | info | no | Advisory audit of what the axis field parameters expose: user-facing measures on no metric axis, helper measures that are on one, dimension tables on no dimension axis, and axis rows that name a table that does not exist. |
 | F013 | field-parameter-table-no-measures | error | no | Field-parameter (axis selector) tables are regenerated from their row list; a measure parked on one is lost the next time the table is rebuilt from the template, breaking everything that calls it. Move the measure to a measures table (and update qualified references). |
 | F014 | selector-branch-resolution | error | yes | A selector measure maps the selected field-parameter key ("'Table'[object]") to a measure call, as a SWITCH branch. When a measure is deleted its axis rows go but the branch keeps calling it; the containing measure then fails when the model is processed, so refresh and deployment are rejected. Every bare [X] in the result part of a branch must name an existing measure; keys and commented (parked) branches are never judged. Auto-fix deletes the dangling branch lines (and a comma left before a closing parenthesis). |
+| F015 | field-parameter-partition-shape | info | no | Advisory shape check of the numbered axis tables: an import-mode calculated partition whose fenced source lists ("label", NAMEOF(...), ...) tuples. A DirectQuery or unknown mode, or a source without such tuples, means the table is not the field parameter the axis visuals expect. validate_field_parameter_pattern = false skips the rule. |
 | M001 | model-structure | error | no | The definition folder must contain model.tmdl and a tables/ folder with at least one table file. |
 | M002 | tmdl-well-formed | error | no | Every .tmdl file must be readable UTF-8 (a byte-order mark is fine), contain no null bytes, have paired ``` expression fences, and (for table files) declare a table. Every column, measure and relationship declaration line must also be attached to the model; a mis-indented declaration the parser cannot place is reported here instead of being dropped silently. |
 | M003 | lineage-duplicates | error | yes | Every lineageTag in a model must be unique. Duplicates make the deployment target reject the model ('an object with that lineage tag already exists'). Auto-fix keeps the first occurrence and regenerates the rest. |
@@ -76,6 +77,8 @@ Rules: **91** · auto-fixable: **18** · baselinable: **86**.
 | O005 | measures-in-dimension-tables | info | no | Dimension tables (name starts with '_' but not '__') carry attributes; measures on them are hard to find and move with the dimension when it is re-sourced. Advisory, opt-in. |
 | O006 | empty-measure-tables | info | no | A table named as a measures container (its name contains 'Measures') that holds no measures is usually a leftover after a move. Advisory, opt-in. |
 | O007 | dead-fact-tables | error | no | A fact table no measure reads (its only mentions are filter sensors such as ISFILTERED, or comments) is residue of an incomplete removal; sensing makes it look owned, so it is never dropped and keeps loading. Ratcheted: tables recorded in the 'baseline' file (a JSON object of model key to table list) pass, new ones fail, and recorded tables that are alive again print a tighten hint. A configured baseline file that does not exist is an error. Opt-in. |
+| P001 | refresh-policy-repair | error | yes | Structure of an existing refreshPolicy: declared before the table's partition and before table-level annotations; policyType basic; granularities day, month, quarter or year; periods whole numbers of at least 1; no unknown properties; a sourceExpression identical, line for line, to the M partition's source (Power BI requires them to match, otherwise refreshes fail or reload the wrong slice); and a windowed source (RangeStart plus a configured window marker, default RangeEnd). The fixer (unsafe: only when selected, narrowed with fix --only invalid) copies the partition source into a drifted sourceExpression; other problems need a human. |
+| P002 | refresh-policy-coverage | warning | yes | Every fact table eligible for incremental refresh carries a refreshPolicy, or is declared in the project's per-model backlog (refresh_policy.backlog); without one it reloads in full on every scheduled refresh. Eligible: one import M partition whose source is already windowed, or that calls the configured date-filter loader (refresh_policy.loader_function) with a date column and filtering on. Hand-written sources are listed as info. Backlog entries that are no longer eligible are stale and reported. The fixer (unsafe; fix --only missing) reinstates a policy for a windowed source (metadata only) and, when refresh_policy.inline_template is set, rewrites a loader call into a windowed query (a full refresh is then required). |
 | R001 | relationship-endpoints | error | no | Both endpoints of every relationship must exist: the from/to tables must be declared, and the referenced columns must exist on them. Names resolve case-insensitively, as Power BI does, but an endpoint spelled with different casing from its declaration is reported as an error too. A relationship whose fromColumn or toColumn is missing or unreadable is reported, never dropped. When the share of relationships with valid endpoints falls under min_endpoint_success_rate (default 0.95) the report notes it; the broken endpoints are errors whatever the share. |
 | R002 | relationship-cardinality | error | no | Declared fromCardinality/toCardinality values must be 'one' or 'many'; anything else is not a cardinality the engine accepts. |
 | R003 | relationship-duplicates | warning | no | Two relationships over the same column pair almost always mean a copy/paste or merge accident. Relationships are keyed on their endpoints (not their GUIDs) so re-saved models compare cleanly. |
@@ -122,4 +125,6 @@ Run `tmdl-preflight fix <path>` to repair these; a fixer marked unsafe runs only
 | M011 | property-after-child-block | yes |
 | M013 | dangling-description | yes |
 | M019 | undefined-query-group | yes |
+| P001 | refresh-policy-repair | no |
+| P002 | refresh-policy-coverage | no |
 | R007 | autodetected-relationships | no |

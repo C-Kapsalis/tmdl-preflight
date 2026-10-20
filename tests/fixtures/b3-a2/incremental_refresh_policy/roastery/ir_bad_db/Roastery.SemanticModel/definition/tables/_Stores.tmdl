@@ -1,0 +1,18 @@
+table '_Stores'
+	lineageTag: ffd6fd8b-98c7-5a08-96d4-3eadbf835da1
+
+	column store_id
+		dataType: int64
+		lineageTag: 723abe97-2d7c-5f87-bfca-0b12e71023f1
+		summarizeBy: none
+		sourceColumn: store_id
+
+		annotation SummarizationSetBy = Automatic
+
+	partition '_Stores' = m
+		mode: import
+		source =
+				let
+				    Source = source_filter_dates("stores_v", "opened_on", false, #"v-fromdate")
+				in
+				    Source

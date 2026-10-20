@@ -1,0 +1,26 @@
+table Refunds
+	lineageTag: bd4616cf-a307-55d2-a9df-8ee5df288e2c
+
+	column refunds_id
+		dataType: int64
+		lineageTag: 474734bd-6bcb-5466-8444-ec094cfc65b5
+		summarizeBy: none
+		sourceColumn: refunds_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_date
+		dataType: dateTime
+		lineageTag: 26fe892b-6d80-5730-bd59-ce6657c38288
+		summarizeBy: none
+		sourceColumn: order_date
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Refunds = m
+		mode: import
+		source =
+				let
+				    Source = source_filter_dates("refunds_v", "refund_date", false, #"v-fromdate")
+				in
+				    Source
