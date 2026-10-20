@@ -54,6 +54,17 @@ from .rls import (
     UsernameFunctionRule,
 )
 from .cultures import CultureOrphanBindingsRule
+from .measure_hygiene import (
+    FactTableFilterCoverageRule,
+    HelperMeasuresHiddenRule,
+    IntermediaryHelperFolderRule,
+    RequiredCalcGroupsRule,
+    TableDescriptionCoverageRule,
+    UnusedHelperMeasuresRule,
+    UserFacingDisplayFolderRule,
+    UserFacingMeasureDescriptionRule,
+    UserFacingMeasureVisibleRule,
+)
 from .comments import CommentTicketRefsRule
 from .contract_patterns import (
     GuardedRatioWrapperRule,
@@ -233,6 +244,14 @@ ALL_RULES: list[type[Rule]] = [
     EmptyMeasureTablesRule,
     DeadFactTablesRule,
     DimensionPrefixFloorRule,
+    IntermediaryHelperFolderRule,
+    HelperMeasuresHiddenRule,
+    UnusedHelperMeasuresRule,
+    UserFacingMeasureVisibleRule,
+    UserFacingDisplayFolderRule,
+    UserFacingMeasureDescriptionRule,
+    TableDescriptionCoverageRule,
+    FactTableFilterCoverageRule,
     RequiredModelObjectsRule,
     ModelContractObjectsRule,
     ModelContractRelationshipsRule,
@@ -244,6 +263,7 @@ ALL_RULES: list[type[Rule]] = [
     ReachGuardHelperConsistencyRule,
     GrainGuardCoverageRule,
     GrainPolicyExceptionRule,
+    RequiredCalcGroupsRule,
     FormatMinDecimalsRule,
 ]
 

@@ -45,6 +45,15 @@ the example model with one defect each. Where that evidence and the
 | O006 | empty-measure-tables (opt-in) | info | no |
 | O007 | dead-fact-tables (opt-in) | error | no |
 | N020 | dimension-prefix-floor (opt-in, disabled by default) | warning | no |
+| C012 | required-calc-groups (opt-in) | error | no |
+| O008 | intermediary-helper-folder (opt-in) | warning | no |
+| O009 | helper-measures-hidden (opt-in) | warning | yes |
+| O010 | unused-helper-measures (opt-in) | info | no |
+| O011 | user-facing-measure-visible (opt-in) | error | no |
+| O012 | user-facing-display-folder (opt-in) | info | no |
+| O013 | user-facing-measure-description (opt-in) | info | no |
+| O014 | table-description-coverage (opt-in) | info | no |
+| O015 | fact-table-filter-coverage (opt-in) | error | no |
 | D010 | calc-dax-blocks-present (opt-in) | warning | no |
 | D011 | calc-item-blind-average | error | no |
 | X001 | cross-fact-multirow-key-join | error | no |
@@ -316,6 +325,9 @@ and rule wins; DESKTOP: Power BI Desktop evidence).
 - BUGFIX: `test_fabric_bpa_validation::TestBPAPerformanceRules::test_calculated_columns_detected`:
   calculated columns are found by the integer column type (the text
   comparison found none).
+- Test convention: `test_policy_defaults::test_dax_success_rate_threshold_never_suppresses_per_expression_errors`
+  sets `min_success_rate` to 0.8: the example model has 7 expressions, so
+  one unbalanced expression is 85.7%.
 - Test convention: `test_fixers_config_contract` lists the unsafe fixers by
   their rule names: refresh-policy-repair, dax-reference-resolution and
   autodetected-relationships.

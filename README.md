@@ -14,7 +14,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 
 ## Features
 
-- **105 rules** over the failure modes that reject imports or silently corrupt
+- **114 rules** over the failure modes that reject imports or silently corrupt
   results: duplicate lineage tags and object names, TMDL properties leaked
   into DAX, dangling `///` descriptions, tables with no partition, inline
   `#table` entity sources that force a composite model, DAX references to
@@ -25,7 +25,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
   opt-in, and project contracts (required objects, pinned relationships,
   field-parameter registrations) are declared in the configuration. The
   full catalog is generated into [`docs/rules.md`](docs/rules.md).
-- **21 auto-fixers** for the defects whose repair is fully mechanical,
+- **22 auto-fixers** for the defects whose repair is fully mechanical,
   applied via a check → fix → re-check loop that never lets a fixer vouch
   for itself.
 - **Surgical, verified edits.** Fixers rewrite single lines or single JSON
@@ -143,6 +143,7 @@ commit.
 | C009 | reach-guard helpers that disagree on their dimension list or key a table by the wrong column (configured) | error | no |
 | C010 | a grain guard that misses a blocked table or axis column, or blocks a conformed one (configured) | error | no |
 | C011 | a grain-policy exception that is not narrow (configured) | error | no |
+| C012 | a missing format or time-intelligence calculation-group table (opt-in) | error | no |
 | D001 | unbalanced `()`, `{}`, `[]`, quotes in any DAX expression; a clean share under `min_success_rate`; a model with no measures (warning) | error | no |
 | D002 | `NAMEOF()` references to missing tables, columns or measures, unparseable field-parameter rows, names spelled with other casing | error | no |
 | D003 | the same measure name declared in two tables (engine requires model-wide uniqueness, case-insensitive) | error | no |
@@ -213,6 +214,14 @@ commit.
 | O006 | a measures table with no measures (opt-in) | info | no |
 | N020 | fewer `_` dimension tables than the template's floor (opt-in, disabled by default) | warning | no |
 | O007 | a fact table no measure reads (opt-in ratchet) | error | no |
+| O008 | an intermediary helper (`-Name`) without a display folder (opt-in) | warning | no |
+| O009 | a visible helper measure not on the always-visible list (opt-in) | warning | yes |
+| O010 | helper measures nothing references, and the most used ones (opt-in) | info | no |
+| O011 | a hidden user-facing measure (opt-in) | error | no |
+| O012 | user-facing measures without a display folder (opt-in) | info | no |
+| O013 | user-facing measures without a description of at least 10 characters (opt-in) | info | no |
+| O014 | table description coverage (opt-in) | info | no |
+| O015 | a fact table user-facing measures read but no `f-` filter measure does (opt-in) | error | no |
 
 Details, scopes, examples and severity semantics: see the generated
 [`docs/rules.md`](docs/rules.md) and the rule catalog in the
