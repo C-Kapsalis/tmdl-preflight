@@ -1,0 +1,164 @@
+"""f-All analysis-category coverage gates (spec A-category-gate-coverage).
+
+`f-Filters[f-All]` is the orchestrator every visual-level filter routes
+through. It gates each analysis category with
+
+    IF(CONTAINSSTRING(all_cats, "<Category>"), IF([f-<measure>] > 0, ...), ...)
+
+once in the `temp_basic` (AND) chain and once in `temp_alt` (OR). A category
+that owns an `f-` measure but has no gate is silently excluded from filtering;
+a literal that matches no registered category never fires; a literal that is a
+substring of two categories gates both on the wrong fact. Every query still
+succeeds, so nothing else reports it.
+
+Registered categories are decoded from the encoded mapping table (`z-Map*`).
+Coverage is substring based, because that is what CONTAINSSTRING does.
+
+The rule `category-gate-coverage` reports one finding per problem; the
+message names the check:
+  (1) ``unpaired-chains``          AND and OR chains gate different literals [error]
+  (2) ``undeclared-gate-measure``  `IF([f-X] > 0` names an undeclared measure [error]
+  (3) ``coverage-gap``             category with a resolvable measure, ungated [warning, ratchet]
+  (4) ``ungated-without-measure``  ungated category with no measure [warning, ratchet]
+  (5) ``inert-literal``            literal matches no category [error]
+  (6) ``over-broad-literal``       literal matches more than one category [warning, ratchet]
+Baseline entries that no longer apply produce a ``stale`` finding (the
+baselines only shrink). Each earlier test fails when its check reports for
+the model; the test asserts the tool reports exactly that.
+
+Stand-ins (tests/fixtures/b3-a2/f_all_category_coverage/roastery):
+- ``universal/Performance``: every check clean, relying on the fleet-wide
+  inert-literal allowance (``Keywords``) and the per-model over-broad allowance
+  (``Email Marketing`` spans two categories); a commented `// [f-Sitemap]` gate
+  line is ignored.
+- ``cg_db/Roastery``: every check fires (``Beans`` only in AND; live
+  `IF([f-Roast] > 0`; ``Email Marketing Lists`` resolves through
+  `f-Email_Marketing_Lists` but is ungated; ``Cold Brew`` and
+  ``Email Marketing Campaigns`` have no measure; literal ``Tea`` is inert;
+  ``Spend`` matches ``Spend`` and ``Blended Spend``).
+"""
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from conftest import run_check, violations
+
+RULE = "category-gate-coverage"
+
+# Stand-in baseline: same keys as the spec's category-gates.baseline.json,
+# holding only what the stand-in models need.
+BASELINE = {
+    "coverage_gaps": {},
+    "ungated_without_measure": {},
+    "inert_literals": {},
+    "fleet_inert_literals": ["Keywords"],
+    "over_broad_literals": {"universal/Performance": ["Email Marketing"]},
+}
+
+MODELS = [
+    pytest.param("universal/Performance.SemanticModel", "pass", id="universal/Performance"),
+    pytest.param("cg_db/Roastery.SemanticModel", "fail", id="cg_db/Roastery"),
+]
+
+
+@pytest.fixture
+def report(stand_in, tmp_path):
+    root = stand_in("b3-a2/f_all_category_coverage/roastery")
+
+    def _run(baseline=None):
+        base = tmp_path / "category-gates.baseline.json"
+        base.write_text(json.dumps(baseline or BASELINE, indent=2), encoding="utf-8")
+        _code, payload = run_check(root, RULE, config={"rules": {RULE: {"baseline": str(base)}}})
+        assert "summary" in payload, payload   # the rule ran (no usage/config error)
+        return payload
+
+    return _run
+
+
+def _hits(payload, folder, check):
+    return [v for v in violations(payload)
+            if folder in (v.get("file") or "").replace("\\", "/") and check in v["message"]]
+
+
+def _assert_check(payload, folder, check, verdict, *expected_terms):
+    hits = _hits(payload, folder, check)
+    if verdict == "pass":
+        assert hits == [], hits
+    else:
+        assert hits, f"expected a {check} finding for {folder}"
+        text = " ".join(h["message"] for h in hits)
+        for term in expected_terms:
+            assert term in text
+
+
+@pytest.mark.parametrize("folder,verdict", MODELS)
+def test_f_all_chains_are_paired(report, folder, verdict):
+    """temp_basic and temp_alt gate exactly the same categories (p0)."""
+    _assert_check(report(), folder, "unpaired-chains", verdict, "Beans")
+
+
+@pytest.mark.parametrize("folder,verdict", MODELS)
+def test_f_all_gates_reference_existing_measures(report, folder, verdict):
+    """Every live `IF([f-X] > 0` resolves to a declared f- measure (p0)."""
+    payload = report()
+    _assert_check(payload, folder, "undeclared-gate-measure", verdict, "f-Roast")
+    assert not any("f-Sitemap" in v["message"] for v in violations(payload))
+
+
+@pytest.mark.parametrize("folder,verdict", MODELS)
+def test_f_all_gates_every_registered_category(report, folder, verdict):
+    """Registered category + resolvable f- measure => gated (p1, ratchet)."""
+    payload = report()
+    _assert_check(payload, folder, "coverage-gap", verdict, "Email Marketing Lists")
+    assert not [h for h in _hits(payload, folder, "coverage-gap") if "stale" in h["message"]]
+
+
+@pytest.mark.parametrize("folder,verdict", MODELS)
+def test_registered_category_without_measure_is_declared(report, folder, verdict):
+    """Ungated category with no resolvable measure => declared (p1, ratchet)."""
+    _assert_check(report(), folder, "ungated-without-measure", verdict,
+                  "Cold Brew", "Email Marketing Campaigns")
+
+
+@pytest.mark.parametrize("folder,verdict", MODELS)
+def test_f_all_literals_match_a_registered_category(report, folder, verdict):
+    """Every gate literal matches some registered category, or is allowed (p0)."""
+    payload = report()
+    _assert_check(payload, folder, "inert-literal", verdict, "Tea")
+    # the fleet-wide allowance is never reported stale
+    assert not any("Keywords" in v["message"] for v in violations(payload))
+
+
+@pytest.mark.parametrize("folder,verdict", MODELS)
+def test_f_all_literals_are_not_over_broad(report, folder, verdict):
+    """No gate literal spans more than one category unless baselined (p1)."""
+    _assert_check(report(), folder, "over-broad-literal", verdict, "Spend")
+
+
+# --- ratchet tightening (each earlier test also fails on a stale entry) ---
+
+def test_stale_baseline_entries_fail(report):
+    stale = dict(BASELINE)
+    stale["coverage_gaps"] = {"universal/Performance": ["Beans"]}          # Beans is gated
+    stale["ungated_without_measure"] = {"universal/Performance": ["Radio"]}  # not registered
+    stale["inert_literals"] = {"universal/Performance": ["Tea"]}            # literal gone
+    stale["over_broad_literals"] = {"universal/Performance": ["Email Marketing", "Beans"]}
+    payload = report(stale)
+    folder = "universal/Performance.SemanticModel"
+    for check, term in (("coverage-gap", "Beans"), ("ungated-without-measure", "Radio"),
+                        ("inert-literal", "Tea"), ("over-broad-literal", "Beans")):
+        hits = [h for h in _hits(payload, folder, check) if "stale" in h["message"]]
+        assert hits and term in hits[0]["message"], (check, payload)
+
+
+def test_no_mapping_table_skips_checks_3_to_6(stand_in):
+    root = stand_in("b3-a2/f_all_category_coverage/roastery")
+    (root / "cg_db/Roastery.SemanticModel/definition/tables/z-Map Dimension-Measure Groupings.tmdl").unlink()
+    _code, payload = run_check(root, RULE, config={"rules": {RULE: {}}})
+    folder = "cg_db/Roastery.SemanticModel"
+    assert _hits(payload, folder, "unpaired-chains")
+    assert _hits(payload, folder, "undeclared-gate-measure")
+    for check in ("coverage-gap", "ungated-without-measure", "inert-literal", "over-broad-literal"):
+        assert _hits(payload, folder, check) == []

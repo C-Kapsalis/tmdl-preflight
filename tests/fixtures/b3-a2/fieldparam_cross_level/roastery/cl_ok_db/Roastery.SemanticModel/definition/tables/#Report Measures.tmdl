@@ -1,0 +1,12 @@
+table '#Report Measures'
+	lineageTag: 9813201b-d46d-5475-9ee7-b820e6c9f5ab
+
+	measure z = BLANK()
+		lineageTag: c256a09c-a6f8-543c-bbe4-9e87c01a6c1e
+
+	measure z_space = " "
+		lineageTag: 0d79b0e7-802f-52ae-bdda-c01b358fa649
+
+	partition '#Report Measures' = calculated
+		mode: import
+		source = ROW("x", 1)

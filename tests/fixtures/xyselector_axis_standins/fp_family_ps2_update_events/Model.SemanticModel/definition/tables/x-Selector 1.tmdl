@@ -1,0 +1,40 @@
+table 'x-Selector 1'
+	lineageTag: e4cf541b-d123-55ff-bf80-d4b66ae7b54e
+
+	column 'x-Selector 1'
+		dataType: string
+		lineageTag: d3b1150a-9c0b-5268-8fcc-abfa2d82e31f
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	column 'x-Selector 1 Fields'
+		dataType: string
+		lineageTag: 5e35fb53-9456-52d1-9f73-a9134e734259
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+	column 'x-Selector 1 Order'
+		dataType: int64
+		lineageTag: 5fc09345-3d50-5f3a-bdef-224ebdb18598
+		summarizeBy: none
+		sourceColumn: [Value3]
+
+	column 'x-Selector 1 Value4'
+		dataType: string
+		lineageTag: b1069f28-f7a8-539f-b719-732a13010d1f
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+	partition 'x-Selector 1' = calculated
+		mode: import
+		source =
+				{
+				    ("Revenue", NAMEOF('Sales'[Revenue]), 0, "sales_x"),
+				    ("Units", NAMEOF([Units]), 1, "sales_x"),
+				    ("Region", NAMEOF('_Stores'[Region]), 2, "store_x"),
+				    ("CPM", NAMEOF([CPM]), 3, "ads_x"),
+				    ("Update Events", NAMEOF([Update Events]), 9, "other_x")
+				}
+
+	annotation PBI_Id = 95c6ad207eaf503cb0fe9145cc1677e6
+

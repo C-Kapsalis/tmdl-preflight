@@ -1,0 +1,31 @@
+table 'x-Selector 3'
+	lineageTag: b74cbfd2-da0c-5f92-b193-a744302cedd9
+
+	column 'x-Selector 3'
+		dataType: string
+		lineageTag: 9a3566d2-2d3a-5099-b303-4e2a4864a361
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	column 'x-Selector 3 Fields'
+		dataType: string
+		lineageTag: 5afcd2e3-5c01-5666-8129-6a825251d23b
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+	column 'x-Selector 3 Order'
+		dataType: int64
+		lineageTag: 50cae9cf-0c26-5e96-b69b-ddda62bc775d
+		summarizeBy: none
+		sourceColumn: [Value3]
+
+	partition 'x-Selector 3' = calculated
+		mode: import
+		source =
+				{
+				    ("A", 0)
+				    ("B", 1)
+				}
+
+	annotation PBI_Id = 42fdf8bab31a5b46b292199d567047ed
+

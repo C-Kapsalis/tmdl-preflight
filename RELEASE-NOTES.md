@@ -2,9 +2,8 @@
 
 ## Unreleased
 
-This release ports a large private pytest suite into the tool: its checks
-become rules, its scripts become commands, and its tests become the
-tool's own test suite (fictional stand-in models, no client data).
+This release adds a large set of rules and commands, with a test suite
+that runs on fictional stand-in models.
 
 ### Severity changes
 
@@ -18,9 +17,9 @@ the example model with one defect each. Where that evidence and the
 | M004 lineage-format | warning | warning | Desktop opened a model whose only defect was a placeholder tag. |
 | M003 lineage-duplicates | error | error | Desktop refused to open the model: "Failed to add a deserialized Table object into the model ... An object with lineage-tag '...' already exists in the collection." |
 | F001 fieldparam-comma-runs | error | error, new message | Desktop opened the model, but every visual that uses the field parameter failed ("Error fetching data for this visual. Failed to move the data reader to the next row."). F002 and F003 are expected to behave the same; not observed. |
-| M011 property-after-child-block | warning | error | Stricter of the ported test and the rule. |
-| R007 autodetected-relationships | warning | error | Stricter: the ported gate was zero-tolerance. Its id match widened to "contains autodetected, any case", and it gains an unsafe fixer that deletes the relationship blocks. |
-| M013 dangling-description at end of file | warning | error | Stricter of the ported test and the rule. |
+| M011 property-after-child-block | warning | error | The stricter verdict wins. |
+| R007 autodetected-relationships | warning | error | Stricter: zero tolerance. Its id match widened to "contains autodetected, any case", and it gains an unsafe fixer that deletes the relationship blocks. |
+| M013 dangling-description at end of file | warning | error | The stricter verdict wins. |
 
 ### New rules
 
@@ -65,6 +64,21 @@ the example model with one defect each. Where that evidence and the
 | C010 | grain-guard-coverage | error | no |
 | C011 | grain-policy-exception | error | no |
 | D012 | dax-or-chain-depth | error | no |
+| M020 | calculated-column-expression-present | error | no |
+| F006 | fieldparam-duplicate-rows | error | yes |
+| F007 | fieldparam-family-consistency | error | yes |
+| F008 | fieldparam-arity | error | no |
+| F009 | fieldparam-level-consistency | error | no |
+| F010 | fieldparam-retag (opt-in) | error | no (`fieldparam retag` command) |
+| F011 | fieldparam-category-required (opt-in) | error | no |
+| F012 | fieldparam-coverage (opt-in) | info | no |
+| F013 | field-parameter-table-no-measures | error | no |
+| F014 | selector-branch-resolution | error | yes |
+| A001 | mapping-table-required-columns (opt-in) | error | no |
+| A002 | mapping-table-info-reports (opt-in) | info | no |
+| A003 | mapping-category-required-keys (opt-in) | error | yes |
+| A004 | category-gate-coverage (opt-in, baseline) | error | no |
+| A005 | f-measure-pattern (opt-in) | warning | no |
 
 Rules that encode one team's conventions are **opt-in**: they run only when
 named in `--select` or in the configuration's `select` (`rules` marks them).
@@ -167,6 +181,14 @@ until configured.
   JSON object keyed by the `*.SemanticModel` folder relative to the scanned
   root (with or without the suffix). Recorded entries that no longer fail
   produce a tighten hint in the report's `notes`.
+- `info --categories <path> [--json]` decodes the encoded category-mapping
+  table: `groups` maps each group id to its categories (many-to-many; axis
+  spacers and the standard calendar groups excluded) and `fact_tables`
+  maps every fact table to the categories its metric-axis measures reach.
+  Python API: `tmdl_preflight.categories`.
+- `fieldparam retag <files> --names N1,N2 --from OLD --to NEW` changes the
+  category value of the named live rows across sibling tables; a name not
+  found live under OLD fails with "retag incomplete" and nothing is written.
 - New Python API: `tmdl_preflight.measure_classes.classify_measure_name`
   (helper vs user-facing names, helper subcategory, scaffolding noise) and
   `tmdl_preflight.roles.fact_tables` (the shared fact-table law).
@@ -178,48 +200,53 @@ until configured.
   select its rule explicitly to run it. The JSON payload lists such
   fixers under `skipped_fixers`.
 
-### Bug fixes carried over from the ported suite
+### Bug fixes
 
 - A lineage tag followed by a tab or several spaces after `lineageTag:` is
-  rewritten like any other (the original script only handled one space).
+  rewritten like any other (before, only one space was handled).
 - Three or more copies of a tag in one file: the later copies are
   rewritten, the first is kept.
 
-### Ported test suite: changed expectations
+### Test expectations and why
 
-Each ported test whose expectation differs from the original's verdict is
-listed with the reason (BUGFIX: a bug in the original is fixed; STRICTER:
-the stricter of test and rule wins; DESKTOP: Power BI Desktop evidence).
+Tests whose expectation follows a deliberate choice are listed with the
+reason (BUGFIX: earlier behaviour was a bug; STRICTER: the stricter of test
+and rule wins; DESKTOP: Power BI Desktop evidence).
 
 - DESKTOP: `test_lineage_tag_uniqueness::test_lineage_tag_format_validity[placeholder-fail]`
-  expects M004 as a warning (the porter expected an error).
+  expects M004 as a warning (an error was expected before).
 - STRICTER: `test_tmdl_parser_explore::test_ec020_column_and_measure_share_a_name_target`
   accepts any severity; M012 already reports a measure named like a column
   of its own table as an error.
-- Port convention: `test_p0_tmdl_guardian` turns on M016's opt-in
+- Test convention: `test_p0_tmdl_guardian` turns on M016's opt-in
   `check_line_endings` (off by default because Windows checkouts are often
-  CRLF) to reproduce the original verdicts.
+  CRLF) to pin the line-ending verdicts.
 - BUGFIX: `test_naming_conventions::TestHelperMeasuresFollowConventions`
-  counts 2 described dash helpers where the original printed 1 (its index
+  counts 2 described dash helpers where earlier versions printed 1 (its index
   dropped the description of a measure that directly follows another).
-- STRICTER (DECISIONS 5): `test_dax_table_references::test_dax_references_resolve[reference_casing-*]`
+- STRICTER (project decision): `test_dax_table_references::test_dax_references_resolve[reference_casing-*]`
   now fail: `sales[Amount]` against table `Sales` resolves in DAX, but casing
-  mismatches are D004 errors (the original verdict was pass).
+  mismatches are D004 errors (the earlier verdict was pass).
 - STRICTER: `test_dax_parsable::test_dax_comprehensive_syntax_check[one_unmatched_paren]`
   asserts the D001 error even though the clean share (90.9%) meets the
-  threshold (the original passed).
+  threshold (earlier versions passed).
 - Existing test updated: `test_rules_dax::test_case_mismatch_resolves_but_is_an_error`
   (was `test_case_insensitive_resolution`) expects three casing errors.
-- STRICTER/DECISIONS 5: `test_relationships::test_relationship_endpoints_exist[rel_casing-fail]`
+- STRICTER (project decision): `test_relationships::test_relationship_endpoints_exist[rel_casing-fail]`
   expects the casing mismatch as an error that fails without `--strict`
-  (the porter expected a warning).
-- Port convention: R001's success rate is a note, not a finding (the ported
+  (a warning was expected before).
+- Test convention: R001's success rate is a note, not a finding (the
   tests count exactly one R001 finding per broken endpoint).
-- Port convention: R010 does not report a two-table loop (a reverse pair is
-  R006's); the ported cycle test expects no finding for it.
-- Renames (DECISIONS 7): the ported files and fixtures named after the
-  employer's internal model now say `insights` (for example
-  `test_insights_mcp_feedback_contract.py`, `spinout_02_db/insights.SemanticModel`).
+- Test convention: R010 does not report a two-table loop (a reverse pair is
+  R006's); the cycle test expects no finding for it.
+- STRICTER: `test_reference_integrity_xselector` and `_yselector`
+  `::test_case_only_mismatch_is_a_casing_error` expect a D004 casing error
+  (the reference resolves in Power BI, but casing mismatches are errors).
+- STRICTER: `test_reference_integrity_xselector::test_calculated_column_with_empty_expression_fails`:
+  `column X =` followed directly by a property line is a calculated column
+  with an empty expression (M020).
+- BUGFIX: `test_integration_f_categories::test_f_measure_coverage_analytics_zero_f_measures`:
+  a model with no f- measures reports nothing instead of dividing by zero.
 - Existing tests updated: `test_rules_relationships` expects R007 as an
   error and an R001 casing error for `sales.STORE_ID`.
 - Existing tests updated for the severity changes above: M011 is an error

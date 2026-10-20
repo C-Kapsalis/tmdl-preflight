@@ -1,0 +1,19 @@
+table 'Coffee Measures'
+	lineageTag: 47c066f8-da21-573a-99c2-a0e45ae1a874
+
+	measure 'Cups Sold' = SUM(Brews[cups])
+		lineageTag: ecc3a590-4d8b-554e-ae1f-6aedb6f56ebe
+
+	measure 'Cup Router' = ```
+			SWITCH(
+			    SELECTEDVALUE('x-Plot Specific 2'[x-Plot Specific 2 Fields]),
+			    "'Coffee Measures'[Cups Sold]", [Cups Sold],
+			    BLANK()
+			)
+			```
+		lineageTag: ba0894a4-c709-53f4-90c0-0dd891f20b6a
+
+	partition 'Coffee Measures' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

@@ -14,7 +14,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 
 ## Features
 
-- **76 rules** over the failure modes that reject imports or silently corrupt
+- **91 rules** over the failure modes that reject imports or silently corrupt
   results: duplicate lineage tags and object names, TMDL properties leaked
   into DAX, dangling `///` descriptions, tables with no partition, inline
   `#table` entity sources that force a composite model, DAX references to
@@ -25,7 +25,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
   opt-in, and project contracts (required objects, pinned relationships,
   field-parameter registrations) are declared in the configuration. The
   full catalog is generated into [`docs/rules.md`](docs/rules.md).
-- **13 auto-fixers** for the defects whose repair is fully mechanical,
+- **18 auto-fixers** for the defects whose repair is fully mechanical,
   applied via a check → fix → re-check loop that never lets a fixer vouch
   for itself.
 - **Surgical, verified edits.** Fixers rewrite single lines or single JSON
@@ -126,6 +126,7 @@ commit.
 | M017 | structure lines indented with four spaces instead of tabs | error | no |
 | M018 | the same annotation name twice in one scope of `model.tmdl` | error | no |
 | M019 | a `queryGroup:` reference to a folder `model.tmdl` never declares | error | yes |
+| M020 | a calculated column declared with `=` but no expression | error | no |
 | C001 | a required table (format calculation group, helper table ...) or required measure is missing (configured) | error | no |
 | C002 | a declared object contract broke: a table, column or measure is gone, a key changed type, a DAX shape changed | error | no |
 | C003 | a declared relationship contract broke: an unsanctioned axis edge, a guard that no longer matches the graph, a pinned edge changed | error | no |
@@ -165,8 +166,22 @@ commit.
 | F001 | stray commas in a field-parameter / calculated-table source; the model opens but its visuals fail | error | yes |
 | F002 | a missing comma between two rows of a `{ (...), (...) }` constructor | error | yes |
 | F003 | a trailing comma before the constructor's closing `}` | error | yes |
-| F004 | rows of one constructor with different numbers of values | warning | no |
+| F004 | rows of one constructor with different numbers of values | error | no |
 | F005 | a field-parameter row without its category value (configured tables) | error | no |
+| F006 | the same row twice in one field parameter | error | yes |
+| F007 | sibling field parameters of one family that list different fields | error | yes |
+| F008 | field-parameter rows all wider or narrower than the declared `ValueN` columns | error | no |
+| F009 | drilldown levels (`y-Selector 1..N`) that list different dimensions, or a plot-specific table that adds one | error | no |
+| F010 | a display name with different categories across sibling field parameters (opt-in; `fieldparam retag` fixes all siblings at once) | error | no |
+| F011 | a numbered axis row (`x-Selector N`, `y-Selector N`) with no category value (opt-in) | error | no |
+| F012 | measures and dimensions no axis exposes, helpers an axis does expose (opt-in) | info | no |
+| F013 | a measure parked on a field-parameter table | error | no |
+| F014 | a selector SWITCH branch that calls a measure that no longer exists | error | yes |
+| A001 | the category-mapping table or one of its key columns is missing (opt-in) | error | no |
+| A002 | inventory of axis group ids and mapping-table relationships (opt-in) | info | no |
+| A003 | an account-filterable category whose mapping rows lack the account groups (opt-in) | error | yes |
+| A004 | `f-All` gate chains that disagree, name missing measures, miss a category, or use inert or over-broad literals (opt-in; baseline) | error | no |
+| A005 | an `f-` filter measure that fits no known shape (opt-in) | warning | no |
 | B001 | bookmark `howCreated`/`ComparisonKind`/`Version` stored as strings; the report loader rejects them | error | yes |
 | B002 | bookmarks referencing renamed or deleted visuals | error | no |
 | B003 | bookmark `options` keys outside the report schema | error | yes |
@@ -281,6 +296,14 @@ from the relationship graph which dimensions can filter both sides of a
 ratio (conformed, cost-only, backend-only, partial, neither); `--check
 --guard-table T --guard-measure M` confirms the guard blocks every
 non-conformed dimension, and `--emit-config` prints the lists for C010.
+
+`tmdl-preflight info --categories <path> [--json]` decodes the encoded
+category-mapping table and lists, per group id, the analysis categories it
+belongs to, and per fact table the categories its measures are offered under
+(the relation is many-to-many).
+`tmdl-preflight fieldparam retag <files> --names N1,N2 --from OLD --to NEW`
+moves the named rows to another category in every sibling table at once; if
+any name is not found live under OLD it writes nothing.
 
 `tmdl-preflight comment-refs <path>` counts ticket references (`#365`) in
 comments per model; `--floors FILE --tighten` lowers a ratchet file to

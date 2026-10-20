@@ -157,5 +157,6 @@ class TestRaggedRows:
         )
         violations = RaggedRowWidthRule().check(Context(project))
         assert len(violations) == 1
-        assert violations[0].severity == Severity.WARNING and not violations[0].fixable
+        # an error with a fixer since 1.2 (the engine refuses uneven rows)
+        assert violations[0].severity == Severity.ERROR and violations[0].fixable
         assert "1 row(s) with 2, 3 row(s) with 3" in violations[0].message

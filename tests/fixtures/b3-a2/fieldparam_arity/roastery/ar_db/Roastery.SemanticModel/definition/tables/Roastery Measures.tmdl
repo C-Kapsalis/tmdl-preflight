@@ -1,0 +1,15 @@
+table 'Roastery Measures'
+	lineageTag: c4bb6eaa-5fe2-5ca7-8f84-4517426bb170
+
+	measure 'Cups Sold' = COUNTROWS(Beans)
+		lineageTag: ba186d78-62c2-5248-897d-fdf1dbb9266b
+
+	measure 'Kg Roasted' = COUNTROWS(Beans)
+		lineageTag: f86abe44-722b-5331-accb-dc7a23e05c12
+
+	measure 'Avg Roast' = COUNTROWS(Beans)
+		lineageTag: 19905c2e-dcd4-55f2-89dc-9188abbeaba9
+
+	partition 'Roastery Measures' = calculated
+		mode: import
+		source = ROW("x", 1)

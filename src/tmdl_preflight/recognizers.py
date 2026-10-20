@@ -328,3 +328,50 @@ def leaked_keyword(line: str) -> Optional[str]:
     if m and m.group(1) in METADATA_KEYWORDS:
         return m.group(1)
     return None
+
+
+# ---------------------------------------------------------------------------
+# NAMEOF targets of a whole text
+# ---------------------------------------------------------------------------
+
+_NAMEOF_OPEN_RE = re.compile(r"NAMEOF\s*\(", re.IGNORECASE)
+
+
+def _mask_comment_tail(line: str) -> str:
+    """Blank a ``--`` or ``//`` comment to the end of the line (markers inside
+    single- or double-quoted text do not count); length is preserved."""
+    quote: Optional[str] = None
+    for i, ch in enumerate(line):
+        if quote:
+            if ch == quote:
+                quote = None
+            continue
+        if ch in "'\"":
+            quote = ch
+        elif line.startswith(("--", "//"), i):
+            return line[:i] + " " * (len(line) - i)
+    return line
+
+
+def nameof_targets(text: str) -> set[str]:
+    """Normalised targets of every NAMEOF(...) in ``text``: comments blanked,
+    the whole text scanned (a call split across lines or sharing a line with
+    another is found), single quotes removed, whitespace collapsed,
+    lowercased."""
+    masked = "\n".join(_mask_comment_tail(ln) for ln in text.split("\n"))
+    out: set[str] = set()
+    for m in _NAMEOF_OPEN_RE.finditer(masked):
+        depth, i = 1, m.end()
+        while i < len(masked) and depth:
+            if masked[i] == "(":
+                depth += 1
+            elif masked[i] == ")":
+                depth -= 1
+            i += 1
+        if depth:
+            continue
+        inner = masked[m.end(): i - 1].replace("'", "")
+        inner = re.sub(r"\s+", " ", inner).strip().lower()
+        if inner:
+            out.add(inner)
+    return out

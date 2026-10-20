@@ -1,0 +1,37 @@
+table 'y-Selector 2'
+	lineageTag: 7be1daac-fe6c-55bd-9724-bb9f3fdc73d8
+
+	column 'y-Selector 2'
+		dataType: string
+		lineageTag: bb7c0907-bd56-59ba-a92e-0799e02941c1
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	column 'y-Selector 2 Fields'
+		dataType: string
+		lineageTag: 7aead7df-6b3b-5c02-b2b1-d9bf497b1437
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+	column 'y-Selector 2 Order'
+		dataType: int64
+		lineageTag: b1a58d7a-c2b5-5887-ad6b-589e35cc7cd6
+		summarizeBy: none
+		sourceColumn: [Value3]
+
+	column 'y-Selector 2 Value4'
+		dataType: string
+		lineageTag: f046d71e-a024-5c2a-9ac0-2809c7a43313
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+	partition 'y-Selector 2' = calculated
+		mode: import
+		source =
+				{
+				    ("Revenue", NAMEOF('Sales'[Revenue]), 0, "sales_y"),
+				    ("Units", NAMEOF([Units]), 1, "sales_y")
+				}
+
+	annotation PBI_Id = f41dc92e72215fbfa8f947a3992e743c
+

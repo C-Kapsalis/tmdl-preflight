@@ -225,6 +225,26 @@ def build_parser() -> argparse.ArgumentParser:
                          help="print the blocked/permitted lists as grain-guard-coverage config")
     p_grain.add_argument("--json", action="store_true", help="machine-readable output")
 
+    p_info = sub.add_parser("info", help="derived model facts (analysis categories)")
+    p_info.add_argument("path", help=path_help)
+    p_info.add_argument("--categories", action="store_true", required=True,
+                        help="group ids -> categories from the encoded mapping table, and "
+                             "fact table -> categories through the metric-axis measures")
+    p_info.add_argument("--mapping-table", default=None,
+                        help="the mapping table (default: the first table named z-Map*)")
+    p_info.add_argument("--json", action="store_true", help="machine-readable output")
+
+    p_fp = sub.add_parser("fieldparam", help="edit field-parameter rows")
+    fp_sub = p_fp.add_subparsers(dest="fp_command", required=True)
+    p_retag = fp_sub.add_parser("retag", help="move named rows from one category to another "
+                                              "(all or nothing across the files)")
+    p_retag.add_argument("files", nargs="+", help="field-parameter table files (.tmdl)")
+    p_retag.add_argument("--names", required=True, help="comma-separated row display names")
+    p_retag.add_argument("--from", dest="old", required=True, help="the current category")
+    p_retag.add_argument("--to", dest="new", required=True, help="the new category")
+    p_retag.add_argument("--position", type=int, default=4,
+                         help="1-based row position of the category (default 4)")
+
     p_rules = sub.add_parser("rules", help="list the rule catalog")
     p_rules.add_argument("--json", action="store_true", help="machine-readable output")
     p_rules.add_argument("--format", choices=("text", "json", "markdown"), default=None,
@@ -555,6 +575,54 @@ def _cmd_grain(args) -> int:
     return code
 
 
+def _cmd_info(args) -> int:
+    from .categories import category_map, fact_table_categories, load_mapping
+
+    ctx = _context(args.path)
+    if not ctx.models:
+        raise UsageError("info --categories needs a semantic model")
+    result: dict = {}
+    for model in ctx.models:
+        mapping = load_mapping(model, name=args.mapping_table)
+        groups = category_map(mapping.rows) if mapping else {}
+        facts = fact_table_categories(model, mapping)
+        result[ctx.model_key(model)] = {
+            "groups": {g: sorted(c) for g, c in sorted(groups.items())},
+            "fact_tables": {f: sorted(c) for f, c in sorted(facts.items())},
+        }
+    payload = next(iter(result.values())) if len(result) == 1 else {"models": result}
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0
+    for key, data in result.items():
+        print(f"{key}:")
+        for g, cats in data["groups"].items():
+            print(f"  group {g}: {', '.join(cats)}")
+        for f, cats in data["fact_tables"].items():
+            print(f"  fact {f}: {', '.join(cats) or '-'}")
+    return 0
+
+
+def _cmd_fieldparam(args) -> int:
+    from .edits import EditRefused
+    from .rules.fp_axes import RetagIncomplete, retag_rows
+
+    names = _parse_list(args.names) or []
+    if not names:
+        raise UsageError("--names needs at least one display name")
+    for f in args.files:
+        if not Path(f).is_file():
+            raise UsageError(f"cannot find the file {f}")
+    try:
+        done = retag_rows([Path(f) for f in args.files], names, args.old, args.new, args.position)
+    except (RetagIncomplete, EditRefused) as exc:
+        print(f"tmdl-preflight: {exc}", file=sys.stderr)
+        return 1
+    for name in done:
+        print(f"retagged \"{name}\": {args.old} -> {args.new}")
+    return 0
+
+
 def _cmd_stats(args) -> int:
     ctx = _context(args.path)
     stats = collect_stats(ctx)
@@ -645,7 +713,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     handlers = {"check": _cmd_check, "fix": _cmd_check, "baseline": _cmd_baseline,
                 "stats": _cmd_stats, "comment-refs": _cmd_comment_refs,
                 "report": _cmd_report, "format-resolve": _cmd_format_resolve,
-                "grain": _cmd_grain}
+                "grain": _cmd_grain, "info": _cmd_info, "fieldparam": _cmd_fieldparam}
     handler = handlers.get(args.command)
     if handler is None:
         parser.print_help()

@@ -1,0 +1,13 @@
+table '#Report Measures'
+	lineageTag: 4ac8c52f-c5fd-58ec-8d49-58e6d6ea0562
+
+	measure CPM = 2
+		lineageTag: 7148dc43-ea51-5453-80af-de4ee5a6d224
+
+	measure 'Revenue Total' = SUM(Sales[Revenue])
+		lineageTag: 20de3741-ca68-56e2-af57-38f391ea066b
+
+	partition '#Report Measures' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

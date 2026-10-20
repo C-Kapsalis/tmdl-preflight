@@ -1,0 +1,13 @@
+table Brews
+	lineageTag: 08c82164-bd9f-5886-9927-29cf25be4264
+
+	column cups
+		dataType: int64
+		lineageTag: e442a960-8b16-59fc-b440-a6e4f214df15
+		summarizeBy: none
+		sourceColumn: cups
+
+	partition Brews = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

@@ -1,0 +1,42 @@
+table Beans
+	lineageTag: aac4db01-1df4-55ec-971f-b2a94a8bbc8f
+
+	column bean_id
+		dataType: int64
+		lineageTag: c6b78acd-d5e4-5b69-9333-b80faa15d7e2
+		summarizeBy: none
+		sourceColumn: bean_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column origin
+		dataType: string
+		lineageTag: cc1c8f7f-abca-51aa-b678-c98219999ae8
+		summarizeBy: none
+		sourceColumn: origin
+
+		annotation SummarizationSetBy = Automatic
+
+	column roast
+		dataType: string
+		lineageTag: 28d83d56-2057-5f0e-a39c-0d56568e58f6
+		summarizeBy: none
+		sourceColumn: roast
+
+		annotation SummarizationSetBy = Automatic
+
+	column farm
+		dataType: string
+		lineageTag: 9b6c711f-11fa-5685-be3b-924e0037c546
+		summarizeBy: none
+		sourceColumn: farm
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Beans = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from beans")
+				in
+				    Source

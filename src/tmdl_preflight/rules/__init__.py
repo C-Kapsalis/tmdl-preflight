@@ -17,10 +17,31 @@ from .dax_patterns import (
 )
 from .field_parameters import (
     FieldParameterCategoryColumnRule,
-    FieldParameterCommaRunsRule,
     MissingRowSeparatorRule,
-    RaggedRowWidthRule,
     TrailingRowCommaRule,
+)
+from .fp_rows import (
+    FieldParameterCommaRunsRule,
+    FieldParameterDuplicateRowsRule,
+    FieldParameterFamilyConsistencyRule,
+    RaggedRowWidthRule,
+)
+from .fp_axes import (
+    CalculatedColumnExpressionRule,
+    FieldParameterArityRule,
+    FieldParameterCategoryRequiredRule,
+    FieldParameterCoverageRule,
+    FieldParameterLevelConsistencyRule,
+    FieldParameterNoMeasuresRule,
+    FieldParameterRetagRule,
+    SelectorBranchResolutionRule,
+)
+from .mapping import (
+    CategoryGateCoverageRule,
+    FMeasurePatternRule,
+    MappingCategoryRequiredKeysRule,
+    MappingTableInfoReportsRule,
+    MappingTableRequiredColumnsRule,
 )
 from .comments import CommentTicketRefsRule
 from .contract_patterns import (
@@ -123,6 +144,7 @@ ALL_RULES: list[type[Rule]] = [
     SpaceIndentationRule,
     ModelAnnotationDuplicatesRule,
     UndefinedQueryGroupRule,
+    CalculatedColumnExpressionRule,
     DaxDelimiterBalanceRule,
     NameofResolutionRule,
     DuplicateMeasureNamesRule,
@@ -153,6 +175,20 @@ ALL_RULES: list[type[Rule]] = [
     TrailingRowCommaRule,
     RaggedRowWidthRule,
     FieldParameterCategoryColumnRule,
+    FieldParameterDuplicateRowsRule,
+    FieldParameterFamilyConsistencyRule,
+    FieldParameterArityRule,
+    FieldParameterLevelConsistencyRule,
+    FieldParameterRetagRule,
+    FieldParameterCategoryRequiredRule,
+    FieldParameterCoverageRule,
+    FieldParameterNoMeasuresRule,
+    SelectorBranchResolutionRule,
+    MappingTableRequiredColumnsRule,
+    MappingTableInfoReportsRule,
+    MappingCategoryRequiredKeysRule,
+    CategoryGateCoverageRule,
+    FMeasurePatternRule,
     BookmarkIntegerTypesRule,
     BookmarkVisualRefsRule,
     BookmarkOptionsSchemaRule,

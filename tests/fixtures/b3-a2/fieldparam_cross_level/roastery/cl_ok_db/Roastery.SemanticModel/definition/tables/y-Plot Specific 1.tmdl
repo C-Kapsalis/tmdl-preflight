@@ -1,0 +1,55 @@
+table 'y-Plot Specific 1'
+	lineageTag: feb5559a-e1d6-561c-9098-ccf3c527ba54
+
+	column 'y-Plot Specific 1'
+		lineageTag: e86f1aac-ef22-55b3-8746-b8408e4888fa
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+		relatedColumnDetails
+			groupByColumn: 'y-Plot Specific 1 Fields'
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'y-Plot Specific 1 Fields'
+		lineageTag: 39b6f8e1-6fec-5d85-a678-8c4d88da7d7b
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+		extendedProperty ParameterMetadata =
+				{
+				  "version": 3,
+				  "kind": 2
+				}
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'y-Plot Specific 1 Order'
+		lineageTag: 722bd031-9183-5603-8996-a216775a522e
+		summarizeBy: none
+		sourceColumn: [Value3]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'y-Plot Specific 1 Group'
+		lineageTag: f68b5afc-88fd-54ac-8fa5-364d2c979ee4
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'y-Plot Specific 1 Category'
+		lineageTag: f9bbecfc-f1cc-56c5-adca-01b9dacf11c4
+		summarizeBy: none
+		sourceColumn: [Value5]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'y-Plot Specific 1' = calculated
+		mode: import
+		source = ```
+				{
+				("Origin", NAMEOF(Beans[origin]), 1, "beans_y", "Other"),
+				("None", NAMEOF('#Report Measures'[z_space]), 2, "blank_y", "Other")
+				}
+				```

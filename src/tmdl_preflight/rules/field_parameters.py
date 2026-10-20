@@ -26,85 +26,6 @@ def _calculated_partitions(model):
                 yield table, p
 
 
-class FieldParameterCommaRunsRule(Rule):
-    id = "F001"
-    name = "fieldparam-comma-runs"
-    severity = Severity.ERROR
-    fixable = True
-    description = (
-        "Calculated-table sources (which include field-parameter tables) must "
-        "not contain stray structural commas: two or more commas separated "
-        "only by whitespace, typically left behind when a row was removed but "
-        "its separator was not. Observed in Power BI Desktop: the model still "
-        "opens, but every visual that uses the field parameter fails ('Error "
-        "fetching data for this visual. Failed to move the data reader to the "
-        "next row.'). Commas inside comments and string literals are exempt. "
-        "Auto-fix keeps each run's first comma and deletes the orphans."
-    )
-
-    def check(self, ctx: Context) -> list[Violation]:
-        out: list[Violation] = []
-        for model in ctx.models:
-            for table, part in _calculated_partitions(model):
-                for rel_line, orphans in find_comma_runs(part.source):
-                    line = (part.source_start_line or part.line) + rel_line - 1
-                    out.append(
-                        self.violation(
-                            f"stray comma run ({orphans} orphan comma(s)) in "
-                            f"calculated partition source. Power BI Desktop "
-                            f"still opens the model, but every visual that uses "
-                            f"this table fails ('Error fetching data for this "
-                            f"visual'). Delete the orphan comma(s) (the "
-                            f"auto-fix does).",
-                            file=part.file,
-                            line=line,
-                            obj=f"{table.name} (partition source)",
-                        )
-                    )
-        return out
-
-    def fix(self, ctx: Context) -> list[str]:
-        applied: list[str] = []
-        for model in ctx.models:
-            for table, part in _calculated_partitions(model):
-                if not find_comma_runs(part.source):
-                    continue
-                if part.source_start_line is None or part.source_end_line is None:
-                    continue
-                applied.extend(
-                    _collapse_in_file(
-                        part.file, part.source_start_line, part.source_end_line, table.name
-                    )
-                )
-        return applied
-
-
-def _collapse_in_file(file: Path, start: int, end: int, table_name: str) -> list[str]:
-    """Collapse comma runs inside a 1-based inclusive line range of ``file``,
-    leaving every other byte untouched."""
-    original = read_text_file(file)
-    lines = original.lines()
-    lo, hi = start - 1, min(end, len(lines))
-    block = original.join(lines[lo:hi])
-    new_block, removed = collapse_comma_runs(block)
-    if not removed:
-        return []
-    lines[lo:hi] = new_block.split(original.newline)
-
-    def verify(old: str, new: str) -> None:
-        if old.replace(",", "") != new.replace(",", ""):
-            raise EditRefused("comma-run repair changed more than commas")
-
-    try:
-        verified_write(original, original.join(lines), verify)
-    except EditRefused:
-        return []
-    return [
-        f"{file.name}: removed {removed} orphan comma(s) from "
-        f"'{table_name}' partition source"
-    ]
-
-
 def _repair_block(
     file: Path,
     start: int,
@@ -243,29 +164,6 @@ class TrailingRowCommaRule(_ConstructorRuleBase):
         return self._fix_with(ctx, remove_trailing_row_commas, "removed")
 
 
-class RaggedRowWidthRule(_ConstructorRuleBase):
-    id = "F004"
-    name = "fieldparam-ragged-rows"
-    severity = Severity.WARNING
-    issue_kind = "ragged"
-    description = (
-        "Every row of a { (...), (...) } table constructor should have the "
-        "same number of values. A row with one value too many or too few "
-        "usually means a missing or extra comma inside the row, which "
-        "shifts values into the wrong columns or fails the source. Not "
-        "auto-fixable: only a human knows which value is wrong."
-    )
-
-    def _message(self, issue) -> str:
-        widths = sorted(set(issue.widths))
-        counts = {w: issue.widths.count(w) for w in widths}
-        detail = ", ".join(f"{counts[w]} row(s) with {w}" for w in widths)
-        return (
-            f"rows of this table constructor have different widths ({detail}). "
-            f"Check the odd row(s) for a missing or extra value."
-        )
-
-
 _THREE_FIELD_RE = re.compile(r'\(\s*"(?P<label>[^"]*)"\s*,\s*NAMEOF\s*\([^()]*\)\s*,\s*-?\d+\s*\)')
 _FOUR_FIELD_RE = re.compile(
     r'\(\s*"(?P<label>[^"]*)"\s*,\s*NAMEOF\s*\([^()]*\)\s*,\s*-?\d+,\s*"[^"]*"\s*\)'
@@ -324,3 +222,8 @@ def _is_fenced(part) -> bool:
         if lines[idx].strip().startswith("source") and "```" in lines[idx]:
             return True
     return False
+
+
+# F001 and F004 moved to fp_rows (whole-file scope and row-level fixers);
+# keep them importable from here.
+from .fp_rows import FieldParameterCommaRunsRule, RaggedRowWidthRule  # noqa: E402,F401
