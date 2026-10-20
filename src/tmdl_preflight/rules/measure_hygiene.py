@@ -407,13 +407,24 @@ class FactTableFilterCoverageRule(Rule):
 
     def _exempt(self, model: SemanticModel, fact: str, consumers: list[str],
                 tracer: FactTracer) -> bool:
+        """Is the fact gated through the analysis-category mechanism?
+
+        The forge's gap-fill planner decides this the same way: an x-row
+        measure with a mapped group that reads the fact DIRECTLY (a data
+        read, not only inside a sensor) means the fact is already gated, so
+        no f- measure is owed. The x-row measure must be user-facing; a
+        helper on an x row is the model's own business.
+        """
         mapping = load_mapping(model, name=self.options["mapping_table"])
         if mapping is None:
             return False
         cmap = category_map(mapping.rows, NON_ATTRIBUTING_GROUPS)
         for row in axis_rows(model, self.options["axis_globs"]):
-            if row.target in consumers and cmap.get(row.group or ""):
-                m = tracer.by_name.get(row.target)
-                if m is not None and reads_data(m.expression, fact):
-                    return True
+            if not cmap.get(row.group or ""):
+                continue
+            m = tracer.by_name.get(row.target)
+            if m is None or not _user_facing(m):
+                continue
+            if reads_data(m.expression, fact):
+                return True
         return False

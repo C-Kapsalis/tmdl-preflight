@@ -281,6 +281,14 @@ until configured.
   rewritten like any other (before, only one space was handled).
 - Three or more copies of a tag in one file: the later copies are
   rewritten, the first is kept.
+- The `fact-table-filter-coverage` rule now exempts a fact the way the
+  forge's gap-fill planner does: a user-facing measure on an x row with a
+  mapped group that reads the fact directly (a data read, not only inside
+  a sensor) means the fact is already gated, so no `f-` measure is owed.
+  A helper measure on an x row never exempts a fact: it is the model's own
+  business. Before, the exemption needed the x-row measure to be one of
+  the fact's consumers, so the two tools could disagree about the same
+  model.
 
 ### Test expectations and why
 
