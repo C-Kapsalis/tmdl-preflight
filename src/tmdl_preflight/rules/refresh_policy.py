@@ -57,10 +57,20 @@ class RefreshPolicyRepairRule(Rule):
         "line for line, to the M partition's source (Power BI requires them "
         "to match, otherwise refreshes fail or reload the wrong slice); and "
         "a windowed source (RangeStart plus a configured window marker, "
-        "default RangeEnd). The fixer (unsafe: only when selected, narrowed "
-        "with fix --only invalid) copies the partition source into a "
-        "drifted sourceExpression; other problems need a human."
+        "default RangeEnd). The fixer (unsafe: it runs only when this rule is "
+        "selected) repairs both refresh-policy rules: it copies the partition "
+        "source into a drifted sourceExpression (fix --only invalid), and adds "
+        "the missing policy of an eligible fact P002 reports (fix --only "
+        "missing): metadata only for an already windowed source, a rewrite "
+        "from refresh_policy.inline_template for a loader call (a full "
+        "refresh is then required). Other problems need a human."
     )
+
+    def pending_repairs(self, ctx: Context) -> bool:
+        if _fix_only(ctx) not in (None, "missing"):
+            return False
+        cover = RefreshPolicyCoverageRule()
+        return any(cover._missing(ctx, m) for m in ctx.models)
 
     def _problems(self, ctx: Context):
         cfg = _settings(ctx)
@@ -80,8 +90,15 @@ class RefreshPolicyRepairRule(Rule):
         return out
 
     def fix(self, ctx: Context) -> list[str]:
-        if _fix_only(ctx) not in (None, "invalid"):
-            return []
+        applied: list[str] = []
+        if _fix_only(ctx) in (None, "invalid"):
+            applied.extend(self._realign(ctx))
+            ctx.reload()
+        if _fix_only(ctx) in (None, "missing"):
+            applied.extend(RefreshPolicyCoverageRule().add_missing(ctx))
+        return applied
+
+    def _realign(self, ctx: Context) -> list[str]:
         applied: list[str] = []
         for _m, table, tf, layout, probs in list(self._problems(ctx)):
             if not any(kind == "identity" for kind, _ in probs):
@@ -113,8 +130,6 @@ class RefreshPolicyCoverageRule(Rule):
     name = "refresh-policy-coverage"
     severity = Severity.WARNING
     opt_in = True
-    fixable = True
-    safe = False
     description = (
         "Every fact table eligible for incremental refresh carries a "
         "refreshPolicy, or is declared in the project's per-model backlog "
@@ -123,11 +138,8 @@ class RefreshPolicyCoverageRule(Rule):
         "already windowed, or that calls the configured date-filter loader "
         "(refresh_policy.loader_function) with a date column and filtering "
         "on. Hand-written sources are listed as info. Backlog entries that "
-        "are no longer eligible are stale and reported. The fixer (unsafe; "
-        "fix --only missing) reinstates a policy for a windowed source "
-        "(metadata only) and, when refresh_policy.inline_template is set, "
-        "rewrites a loader call into a windowed query (a full refresh is "
-        "then required)."
+        "are no longer eligible are stale and reported. The repair belongs "
+        "to P001's fixer (fix --select refresh-policy-repair --only missing)."
     )
 
     def _analyse(self, ctx: Context, model: SemanticModel):
@@ -157,11 +169,14 @@ class RefreshPolicyCoverageRule(Rule):
                     v.fixable = False
                     out.append(v)
                 elif e.verdict == "eligible" and table.name not in backlog:
-                    out.append(self.violation(
+                    v = self.violation(
                         f"{table.name} is eligible for incremental refresh ({e.reason}) but has "
                         f"no refreshPolicy, so it reloads in full on every refresh. Add the "
-                        f"policy, or declare it in refresh_policy.backlog.",
-                        file=table.file, line=line, obj=table.name))
+                        f"policy (fix --select refresh-policy-repair --only missing), or "
+                        f"declare it in refresh_policy.backlog.",
+                        file=table.file, line=line, obj=table.name)
+                    v.fixable = True  # repaired by P001's fixer
+                    out.append(v)
             for entry in sorted(backlog - eligible):
                 v = self.violation(
                     f"stale backlog entry {entry}: it is not an eligible fact without a policy "
@@ -171,15 +186,16 @@ class RefreshPolicyCoverageRule(Rule):
                 out.append(v)
         return out
 
-    def fix(self, ctx: Context) -> list[str]:
-        if _fix_only(ctx) not in (None, "missing"):
-            return []
+    def _missing(self, ctx: Context, model: SemanticModel) -> list[tuple]:
+        cfg, backlog, verdicts, _el = self._analyse(ctx, model)
+        return [(cfg, t, tf, layout, e) for t, tf, layout, e in verdicts
+                if e.verdict == "eligible" and t.name not in backlog
+                and (e.windowed or cfg.get("inline_template"))]
+
+    def add_missing(self, ctx: Context) -> list[str]:
         applied: list[str] = []
         for model in ctx.models:
-            cfg, backlog, verdicts, _el = self._analyse(ctx, model)
-            for table, tf, layout, e in verdicts:
-                if e.verdict != "eligible" or table.name in backlog:
-                    continue
+            for cfg, table, tf, layout, e in self._missing(ctx, model):
                 done = self._insert(cfg, table, tf, layout, e)
                 if done:
                     applied.append(done)

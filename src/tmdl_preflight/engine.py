@@ -172,7 +172,7 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
     dirty_rule_ids = {v.rule_id for v in first.violations}
     chosen = {e.lower() for e in (explicit or set())}
     for rule in ruleset.rules:
-        if not rule.fixable or rule.id not in dirty_rule_ids:
+        if not rule.fixable or (rule.id not in dirty_rule_ids and not rule.pending_repairs(ctx)):
             continue
         if not rule.safe and not ({rule.id.lower(), rule.name.lower()} & chosen) \
                 and not rule.unsafe_fix_enabled():

@@ -251,6 +251,46 @@ def build_parser() -> argparse.ArgumentParser:
     p_retag.add_argument("--position", type=int, default=4,
                          help="1-based row position of the category (default 4)")
 
+    p_man = sub.add_parser("manifest", help="write a JSON manifest of a model (tables, roles, "
+                                             "sources, relationships)")
+    p_man.add_argument("model", help="a *.SemanticModel folder, or an entry key of the targets file")
+    p_man.add_argument("--out", help="output file (default: <model>/generated/<name>-manifest.json)")
+    p_man.add_argument("--check", action="store_true",
+                       help="write nothing; exit 1 when the file is missing or stale")
+    p_man.add_argument("--targets", help="the target contract file (YAML or JSON)")
+    _add_config_options(p_man)
+
+    p_sc = sub.add_parser("schema-check", help="compare a manifest with a warehouse schema "
+                                               "snapshot, or prove view columns from SQL files")
+    p_sc.add_argument("--manifest", help="a manifest written by 'manifest'")
+    p_sc.add_argument("--schema", help="schema snapshot: {table: [{name, type}, ...]}")
+    p_sc.add_argument("--out", help="output file (default: <manifest stem>.schema.json)")
+    p_sc.add_argument("--ignore-columns", help="JSON {columns: [...], exceptions: [[table, col]]}")
+    p_sc.add_argument("--strict", action="store_true",
+                      help="exit 1 on missing columns, needs-review, unreachable tables or a "
+                           "coverage gap")
+    p_sc.add_argument("--sql-dir", help="SQL project root (view-column exposure mode)")
+    p_sc.add_argument("--entries", help="with --sql-dir: JSON list of {client, table, view, "
+                                        "shared_view, columns}")
+    p_sc.add_argument("--holdbacks", help="with --sql-dir: holdbacks file path")
+    p_sc.add_argument("--write-holdbacks", action="store_true",
+                      help="with --sql-dir: write the holdbacks file")
+    p_sc.add_argument("--owner-folder-pattern",
+                      help="with --sql-dir: regex whose first group turns an owner id into the "
+                           "SQL folder segment that holds its views")
+
+    p_refs2 = sub.add_parser("refs", help="count the places that name an object (model and "
+                                          "report), before a rename or delete")
+    p_refs2.add_argument("name", help="the object name, exact and case-sensitive")
+    p_refs2.add_argument("paths", nargs="*", default=["."], help="folders to scan (default: .)")
+    p_refs2.add_argument("--files", action="store_true", help="list the matching files")
+    p_refs2.add_argument("--include-history", action="store_true",
+                         help="with --files: list archived copies too")
+    p_refs2.add_argument("--history", action="append", metavar="GLOB",
+                         help="glob of archived paths (repeatable)")
+    p_refs2.add_argument("--loose", action="store_true",
+                         help="count NAME] and NAME\" (closing delimiter only; over-counts)")
+
     p_rules = sub.add_parser("rules", help="list the rule catalog")
     p_rules.add_argument("--json", action="store_true", help="machine-readable output")
     p_rules.add_argument("--format", choices=("text", "json", "markdown"), default=None,
@@ -372,9 +412,8 @@ def _cmd_check(args) -> int:
         raise UsageError(f"--json conflicts with --format {args.format}")
     report, ruleset, cfg, _ctx = _run(args, args.command)
     if args.command == "fix" and getattr(args, "check", False):
-        fixable = {r.id for r in ruleset.rules if r.fixable}
         pending = {(v.rule_id, v.obj or v.path or "") for v in report.violations
-                   if v.rule_id in fixable and v.fixable and v.severity.value != "info"}
+                   if v.fixable and v.severity.value != "info"}
         fmt = "json" if args.json else (args.format or "text")
         print(render(fmt, report, Path(args.path), ruleset))
         return min(len(pending), 255)
@@ -646,6 +685,129 @@ def _cmd_fieldparam(args) -> int:
     return 0
 
 
+def _cmd_manifest(args) -> int:
+    from .manifest import WarehouseTargetError, build_manifest, find_entry, load_targets, render
+
+    cfg_sections: dict = {}
+    if not getattr(args, "no_config", False):
+        try:
+            cfg = load_config(full_ruleset(), start=Path(args.model) if Path(args.model).exists()
+                              else Path.cwd(),
+                              explicit=Path(args.config) if args.config else None,
+                              profile=args.profile)
+        except ConfigError as exc:
+            raise UsageError(f"configuration error: {exc}") from exc
+        cfg_sections = cfg.sections
+    opts = dict(cfg_sections.get("manifest") or {})
+    targets_path = args.targets or (opts.get("target") or {}).get("targets_file")
+    targets = load_targets(Path(targets_path)) if targets_path else {}
+    model_arg = args.model
+    if not Path(model_arg).exists() and model_arg in targets:
+        rel = targets[model_arg].get("model_path")
+        if not rel:
+            raise UsageError(f"targets entry {model_arg} declares no model path")
+        model_arg = str(Path(targets_path).parent / rel) if not Path(rel).exists() else rel
+    model_dir = Path(model_arg)
+    if not (model_dir / "definition").is_dir():
+        raise UsageError(f"{model_dir} has no definition/ folder; pass a *.SemanticModel folder")
+    rel = Path(model_arg).as_posix()
+    entry = None
+    if targets:
+        entry = next((find_entry(targets, cand) for cand in
+                      (rel, f"{model_dir.parent.name}/{model_dir.name}")
+                      if find_entry(targets, cand)), None)
+        if entry is None:
+            print(f"tmdl-preflight: warning: {rel} is not registered in the targets file; the "
+                  f"warehouse target comes only from the model's own parameters.", file=sys.stderr)
+    try:
+        doc = build_manifest(model_dir, rel, entry, opts)
+    except WarehouseTargetError as exc:
+        print(f"tmdl-preflight: {exc}", file=sys.stderr)
+        return 1
+    text = render(doc)
+    out = Path(args.out) if args.out else (
+        model_dir / opts.get("output_dir_name", "generated")
+        / f"{doc['model'].lower()}{opts.get('output_suffix', '-manifest.json')}")
+    regen = f"tmdl-preflight manifest {args.model}" + (f" --out {args.out}" if args.out else "")
+    if args.check:
+        if not out.is_file():
+            print(f"MISSING: {out}; run {regen}", file=sys.stderr)
+            return 1
+        if out.read_bytes() != text.encode("utf-8"):
+            print(f"DRIFT: {out} is stale; run {regen}", file=sys.stderr)
+            return 1
+        print(f"OK: {out} is up to date.")
+        return 0
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(text.encode("utf-8"))
+    block = doc.get((opts.get("target") or {}).get("block_key", "warehouse")) or {}
+    print(f"wrote {out}")
+    print(f"target: {block.get('project')}.{block.get('dataset')} ({block.get('warehouse')})")
+    print(f"tables: {doc['counts']['tables']}, relationships: {doc['counts']['relationships']}")
+    print("by classification: " + ", ".join(f"{k} {v}" for k, v in
+                                           doc["counts"]["by_classification"].items()))
+    print("domains: " + (", ".join(doc["domains"]) or "-"))
+    return 0
+
+
+def _cmd_schema_check(args) -> int:
+    if args.sql_dir:
+        from .sqlviews import holdbacks_yaml, judge, load_entries, previous_since
+
+        root = Path(args.sql_dir)
+        if not root.is_dir():
+            raise UsageError(f"--sql-dir {root} is not a folder")
+        if not args.entries:
+            raise UsageError("--sql-dir needs --entries FILE")
+        try:
+            entries = load_entries(Path(args.entries))
+        except (OSError, ValueError) as exc:
+            raise UsageError(f"cannot read the entries file: {exc}") from exc
+        verdicts = sorted((judge(e, root, args.owner_folder_pattern) for e in entries),
+                          key=lambda v: (v.owner, v.table))
+        for v in verdicts:
+            print(f"{v.owner}  {v.table}  {v.view}  {'READY' if v.ready else 'HELD'}  {v.reason}")
+        held = sum(1 for v in verdicts if not v.ready)
+        print(f"{len(verdicts) - held} ready, {held} held")
+        if args.write_holdbacks:
+            hb = Path(args.holdbacks) if args.holdbacks else Path(args.entries).parent / "deploy_holdbacks.yml"
+            hb.write_text(holdbacks_yaml(verdicts, entries, previous_since(hb)), encoding="utf-8")
+        return 3 if held else 0
+    from .reconcile import failing, load_ignore_columns, reconcile
+
+    if not args.manifest or not args.schema:
+        raise UsageError("schema-check needs --manifest and --schema (or --sql-dir and --entries)")
+    try:
+        manifest = json.loads(Path(args.manifest).read_text(encoding="utf-8-sig"))
+        snapshot = json.loads(Path(args.schema).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as exc:
+        raise UsageError(f"cannot read the manifest or the schema snapshot: {exc}") from exc
+    ignore, exceptions = load_ignore_columns(Path(args.ignore_columns) if args.ignore_columns else None)
+    doc = reconcile(manifest, snapshot, ignore, exceptions, Path(args.schema).name)
+    mpath = Path(args.manifest)
+    if args.out:
+        out = Path(args.out)
+    elif mpath.name.endswith(".schema.json"):
+        out = mpath
+    else:
+        out = mpath.with_name(mpath.stem + ".schema.json")
+    out.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    c = doc["schema_check"]["counts"]
+    print(f"wrote {out}: checked {c['checked']}, failing {c['failing']}, needs review "
+          f"{c['needs_review']}, unreachable {c['unreachable']}, informational "
+          f"{c['informational']}, type mismatch {c['type_mismatch']}"
+          + (", coverage gap" if doc["schema_check"]["coverage_gap"] else ""))
+    return 1 if args.strict and failing(doc) else 0
+
+
+def _cmd_refs(args) -> int:
+    from .refs import census, render
+
+    counts = census(args.name, [Path(p) for p in args.paths], args.history, args.loose)
+    print(render(args.name, counts, args.loose, args.files, args.include_history))
+    return 0
+
+
 def _cmd_stats(args) -> int:
     ctx = _context(args.path)
     stats = collect_stats(ctx)
@@ -736,7 +898,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     handlers = {"check": _cmd_check, "fix": _cmd_check, "baseline": _cmd_baseline,
                 "stats": _cmd_stats, "comment-refs": _cmd_comment_refs,
                 "report": _cmd_report, "format-resolve": _cmd_format_resolve,
-                "grain": _cmd_grain, "info": _cmd_info, "fieldparam": _cmd_fieldparam}
+                "grain": _cmd_grain, "info": _cmd_info, "fieldparam": _cmd_fieldparam,
+                "manifest": _cmd_manifest, "schema-check": _cmd_schema_check, "refs": _cmd_refs}
     handler = handlers.get(args.command)
     if handler is None:
         parser.print_help()

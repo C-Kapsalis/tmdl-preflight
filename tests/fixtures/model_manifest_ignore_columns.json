@@ -1,0 +1,4 @@
+{
+  "columns": ["account_id", "report_name", "source_string", "table_x_id", "updated_at_db", "partition_date"],
+  "exceptions": [["Sitemap", "updated_at_db"]]
+}

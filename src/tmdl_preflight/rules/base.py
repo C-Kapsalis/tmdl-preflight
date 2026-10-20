@@ -219,6 +219,11 @@ class Rule:
         a blanket fix."""
         return False
 
+    def pending_repairs(self, ctx: "Context") -> bool:
+        """True when the fixer has work although its own check reported
+        nothing (a fixer that also repairs another rule's findings)."""
+        return False
+
     def disabled_by_policy(self) -> bool:
         """True when a policy option turned this rule off for the run; the
         engine then lists it under ``skipped`` instead of running it."""

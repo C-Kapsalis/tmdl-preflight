@@ -25,7 +25,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
   opt-in, and project contracts (required objects, pinned relationships,
   field-parameter registrations) are declared in the configuration. The
   full catalog is generated into [`docs/rules.md`](docs/rules.md).
-- **22 auto-fixers** for the defects whose repair is fully mechanical,
+- **21 auto-fixers** for the defects whose repair is fully mechanical,
   applied via a check → fix → re-check loop that never lets a fixer vouch
   for itself.
 - **Surgical, verified edits.** Fixers rewrite single lines or single JSON
@@ -38,7 +38,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 - **CI-ready output:** text, JSON, GitHub annotations, SARIF 2.1.0 and
   Markdown, plus a pre-commit hook and an example GitHub Actions workflow.
 - **Four entry points:** a CLI (`check`, `fix`, `baseline`, `stats`,
-  `rules`), a pytest fixture (`tmdl_preflight`), and a plain Python API
+  `rules`, `manifest`, `schema-check`, `refs` and more), a pytest fixture (`tmdl_preflight`), and a plain Python API
   (`check(Context(path), ruleset)`).
 - **Zero runtime dependencies.** Standard library only; Python ≥ 3.10
   (TOML config files need 3.11+; the JSON form works everywhere).
@@ -130,8 +130,8 @@ commit.
 | M020 | a calculated column declared with `=` but no expression | error | no |
 | M021 | Q&A linguistic metadata in `cultures/` bound to a table that no longer exists | error | yes |
 | M022 | a `diagramLayout.json` that is not the blank "All tables" layout (opt-in) | warning | yes |
-| P001 | a `refreshPolicy` placed after its partition, with out-of-domain values, a `sourceExpression` that differs from the partition source, or an unwindowed source | error | yes (unsafe: only when selected; copies the partition source) |
-| P002 | an incremental-refresh-eligible fact with no `refreshPolicy` and no backlog entry (opt-in; `refresh_policy` config) | warning | yes (unsafe: only when selected) |
+| P001 | a `refreshPolicy` placed after its partition, with out-of-domain values, a `sourceExpression` that differs from the partition source, or an unwindowed source | error | yes (unsafe: only when selected; copies the partition source, adds the policies P002 reports missing) |
+| P002 | an incremental-refresh-eligible fact with no `refreshPolicy` and no backlog entry (opt-in; `refresh_policy` config) | warning | via P001 |
 | C001 | a required table (format calculation group, helper table ...) or required measure is missing (configured) | error | no |
 | C002 | a declared object contract broke: a table, column or measure is gone, a key changed type, a DAX shape changed | error | no |
 | C003 | a declared relationship contract broke: an unsanctioned axis edge, a guard that no longer matches the graph, a pinned edge changed | error | no |
@@ -319,6 +319,21 @@ belongs to, and per fact table the categories its measures are offered under
 moves the named rows to another category in every sibling table at once; if
 any name is not found live under OLD it writes nothing.
 
+`tmdl-preflight manifest <Model.SemanticModel> [--check] [--targets FILE]`
+writes a deterministic JSON manifest (tables with their role, columns,
+measures, the warehouse table each partition reads, relationships) for the
+pipelines next to the model; `--check` fails when the committed copy is stale,
+and a targets file pins the warehouse project and dataset each model must
+declare. `tmdl-preflight schema-check --manifest M --schema SNAPSHOT
+[--strict]` compares it with a schema snapshot you export (model columns the
+warehouse lost fail; columns the model does not import are informational), and
+`schema-check --sql-dir DIR --entries FILE` proves from view SQL files that the
+views expose the columns a model needs. Nothing connects to a warehouse.
+
+`tmdl-preflight refs NAME [PATH ...] [--files]` counts every place a table,
+column or measure name appears, model side and report side, before a rename
+or delete.
+
 `tmdl-preflight comment-refs <path>` counts ticket references (`#365`) in
 comments per model; `--floors FILE --tighten` lowers a ratchet file to
 today's counts and never raises it (rule S004 gates on the same file).
@@ -351,8 +366,12 @@ def test_model_is_deployable(tmdl_preflight):
 `assert_clean` takes `select=`/`ignore=` sets, `strict=True`, and
 `autofix=True` (repair, then assert on the re-check; also switchable via
 `TMDL_PREFLIGHT_AUTOFIX=1` so CI stays read-only while developers repair
-locally). `run()` returns the report without asserting. See the "run in
-pytest" how-to guide in the [documentation](#documentation) below.
+locally). `run()` returns the report without asserting. List models that are
+still being brought into line under `advisory = [...]` in
+`[tool.tmdl-preflight]`: a failing test whose parameters name such a model is
+reported as an expected failure instead of failing the run (passes stay
+passes, setup errors stay errors). See the "run in pytest" how-to guide in the
+[documentation](#documentation) below.
 
 ## How `fix` works
 

@@ -75,7 +75,7 @@ the example model with one defect each. Where that evidence and the
 | F013 | field-parameter-table-no-measures | error | no |
 | F014 | selector-branch-resolution | error | yes |
 | F015 | field-parameter-partition-shape (opt-in) | info | no |
-| P001 | refresh-policy-repair | error | yes (unsafe) |
+| P001 | refresh-policy-repair | error | yes (unsafe; also adds P002's missing policies) |
 | M021 | culture-orphan-bindings | error | yes |
 | M022 | diagram-layout-blank (opt-in) | warning | yes |
 | B005 | pages-metadata-schema (opt-in) | error | no |
@@ -86,7 +86,7 @@ the example model with one defect each. Where that evidence and the
 | L004 | rls-mapping-table-hidden | error | no |
 | L005 | rls-mapping-table-no-relationship | error | no |
 | L006 | rls-inventory (opt-in) | info | no |
-| P002 | refresh-policy-coverage (opt-in) | warning | yes (unsafe) |
+| P002 | refresh-policy-coverage (opt-in) | warning | via P001 |
 | A001 | mapping-table-required-columns (opt-in) | error | no |
 | A002 | mapping-table-info-reports (opt-in) | info | no |
 | A003 | mapping-category-required-keys (opt-in) | error | yes |
@@ -215,6 +215,27 @@ until configured.
   holds `loader_function`, `window_markers` (default `["RangeEnd"]`),
   `window`, `exempt`, `backlog` (per model), `etl_stamp_columns` and
   `inline_template`.
+- `manifest <MODEL> [--out FILE] [--check] [--targets FILE]` writes a
+  byte-stable JSON manifest (table roles, columns with their warehouse
+  origin through Power Query renames, measures, the warehouse table each
+  partition reads in loader-call, inline-window or navigator form,
+  relationships, domains). The warehouse project and dataset the model
+  declares are compared with an optional targets file; a mismatch exits 1
+  and writes nothing. Config section `manifest` (`sources`, `target`,
+  `domains`, ...). Python API: `tmdl_preflight.manifest`.
+- `schema-check --manifest M --schema SNAPSHOT [--ignore-columns FILE]
+  [--strict]` reconciles a manifest with an exported schema snapshot
+  (`missing_in_source` fails, `needs_review` for programmatically renamed
+  tables, `not_imported` and suspicious type pairs are informational);
+  `schema-check --sql-dir DIR --entries FILE [--write-holdbacks]` proves
+  view-column exposure from SQL files (exit 3 when an entry is held).
+  Python API: `tmdl_preflight.reconcile`.
+- `refs NAME [PATH ...] [--files] [--include-history] [--loose]` counts
+  the anchored references to a name, model side and report side, live and
+  archived.
+- The pytest plugin demotes test-body failures on the models listed in the
+  configuration's `advisory` list to expected failures; passes stay passes
+  and setup failures stay failures.
 - `fieldparam retag <files> --names N1,N2 --from OLD --to NEW` changes the
   category value of the named live rows across sibling tables; a name not
   found live under OLD fails with "retag incomplete" and nothing is written.
@@ -274,6 +295,9 @@ and rule wins; DESKTOP: Power BI Desktop evidence).
 - STRICTER: `test_reference_integrity_xselector::test_calculated_column_with_empty_expression_fails`:
   `column X =` followed directly by a property line is a calculated column
   with an empty expression (M020).
+- Test convention: `test_fixers_config_contract` lists the unsafe fixers by
+  their rule names: refresh-policy-repair, dax-reference-resolution and
+  autodetected-relationships.
 - STRICTER: `test_rls::test_mapping_table_is_hidden` judges the table's own
   `isHidden`; a hidden column no longer makes a visible mapping table pass.
 - BUGFIX: `test_integration_f_categories::test_f_measure_coverage_analytics_zero_f_measures`:

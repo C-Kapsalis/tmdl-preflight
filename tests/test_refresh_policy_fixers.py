@@ -1,5 +1,6 @@
-"""The refresh-policy fixers (P001 refresh-policy-repair, P002
-refresh-policy-coverage): explicit selection only, narrow, idempotent."""
+"""The refresh-policy fixer (P001 refresh-policy-repair, which also adds the
+policies P002 refresh-policy-coverage reports missing): explicit selection
+only, narrow, idempotent."""
 from __future__ import annotations
 
 from conftest import run_check, run_fix, violations
@@ -54,7 +55,7 @@ def test_windowed_source_gets_its_policy_back(stand_in):
     model = root / "universal" / "Performance.SemanticModel"
     f = _tables(root, "universal/Performance.SemanticModel") / "Deliveries.tmdl"
     f.write_bytes(f.read_bytes().replace(b"\n", b"\r\n"))
-    run_fix(model, "refresh-policy-coverage", config=CONFIG, args=("--only", "missing"))
+    run_fix(model, "refresh-policy-repair", config=CONFIG, args=("--only", "missing"))
     raw = f.read_bytes()
     assert b"\r\n" in raw and b"\n" not in raw.replace(b"\r\n", b"")
     text = raw.decode("utf-8").replace("\r\n", "\n")
@@ -64,7 +65,7 @@ def test_windowed_source_gets_its_policy_back(stand_in):
                               config=CONFIG)
     assert not [v for v in violations(payload) if v["object"] == "Deliveries"]
     first = f.read_bytes()
-    run_fix(model, "refresh-policy-coverage", config=CONFIG, args=("--only", "missing"))
+    run_fix(model, "refresh-policy-repair", config=CONFIG, args=("--only", "missing"))
     assert f.read_bytes() == first
 
 
@@ -73,13 +74,13 @@ def test_loader_form_needs_a_template(stand_in):
     model = root / "universal" / "Performance.SemanticModel"
     f = _tables(root, "universal/Performance.SemanticModel") / "Tastings.tmdl"
     before = f.read_bytes()
-    run_fix(model, "refresh-policy-coverage", config=CONFIG)
+    run_fix(model, "refresh-policy-repair", config=CONFIG, args=("--only", "missing"))
     assert f.read_bytes() == before
     cfg = {"refresh_policy": dict(CONFIG["refresh_policy"], inline_template=(
         'let\n    ir_dfilter = "{date_column} >= " & Text.From(RangeStart) & " and {date_column}'
         ' < " & Text.From(RangeEnd),\n    Source = Value.NativeQuery(Warehouse, "select * from'
         ' {view} where " & ir_dfilter)\nin\n    Source'))}
-    code, payload = run_fix(model, "refresh-policy-coverage", config=cfg)
+    code, payload = run_fix(model, "refresh-policy-repair", config=cfg, args=("--only", "missing"))
     assert any("full refresh" in x for x in payload["fixes"]), payload
     text = f.read_text(encoding="utf-8")
     assert "tastings_v" in text and "source_filter_dates" not in text
