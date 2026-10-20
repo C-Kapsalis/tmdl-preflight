@@ -45,6 +45,15 @@ from .mapping import (
     MappingTableRequiredColumnsRule,
 )
 from .refresh_policy import RefreshPolicyCoverageRule, RefreshPolicyRepairRule
+from .rls import (
+    InValuesBypassRule,
+    MappingTableHiddenRule,
+    MappingTableNoRelationshipRule,
+    RlsInventoryRule,
+    RoleGrammarRule,
+    UsernameFunctionRule,
+)
+from .cultures import CultureOrphanBindingsRule
 from .comments import CommentTicketRefsRule
 from .contract_patterns import (
     GuardedRatioWrapperRule,
@@ -66,6 +75,7 @@ from .grain import (
     ReachGuardHelperConsistencyRule,
 )
 from .hygiene import (
+    DiagramLayoutBlankRule,
     ModelAnnotationDuplicatesRule,
     SpaceIndentationRule,
     UndefinedQueryGroupRule,
@@ -94,6 +104,8 @@ from .report import (
     BookmarkIntegerTypesRule,
     BookmarkOptionsSchemaRule,
     BookmarkVisualRefsRule,
+    HierarchyLevelBindingShapeRule,
+    PagesMetadataSchemaRule,
     ReportDefinitionIntegrityRule,
 )
 from .structural import (
@@ -149,6 +161,8 @@ ALL_RULES: list[type[Rule]] = [
     CalculatedColumnExpressionRule,
     RefreshPolicyRepairRule,
     RefreshPolicyCoverageRule,
+    CultureOrphanBindingsRule,
+    DiagramLayoutBlankRule,
     DaxDelimiterBalanceRule,
     NameofResolutionRule,
     DuplicateMeasureNamesRule,
@@ -194,10 +208,18 @@ ALL_RULES: list[type[Rule]] = [
     MappingCategoryRequiredKeysRule,
     CategoryGateCoverageRule,
     FMeasurePatternRule,
+    RoleGrammarRule,
+    UsernameFunctionRule,
+    InValuesBypassRule,
+    MappingTableHiddenRule,
+    MappingTableNoRelationshipRule,
+    RlsInventoryRule,
     BookmarkIntegerTypesRule,
     BookmarkVisualRefsRule,
     BookmarkOptionsSchemaRule,
     ReportDefinitionIntegrityRule,
+    PagesMetadataSchemaRule,
+    HierarchyLevelBindingShapeRule,
     FormatStringPresenceRule,
     MeasureDescriptionRule,
     FormatInferenceNamingRule,

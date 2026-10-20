@@ -1,0 +1,6 @@
+role Regional
+	modelPermission: read
+
+	tablePermission _Stores = [Region] IN CALCULATETABLE(VALUES('User Access'[Region]), 'User Access'[UserPrincipalName] = USERPRINCIPALNAME())
+
+	annotation PBI_Id = c9071a5666ee5f14b7e1fda5afa2e161

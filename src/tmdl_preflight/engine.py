@@ -81,6 +81,8 @@ class PreflightReport:
     would_fix: list[str] = field(default_factory=list)
     # free-text notes from the rules (for example ratchet tighten hints)
     notes: list[str] = field(default_factory=list)
+    # repairs a fixer refused because it could not prove them (exit 2)
+    refused_fixes: list[str] = field(default_factory=list)
 
     def by_severity(self, severity: Severity) -> list[Violation]:
         return [v for v in self.violations if v.severity == severity]
@@ -98,6 +100,8 @@ class PreflightReport:
         return self.by_severity(Severity.INFO)
 
     def exit_code(self, strict: bool = False) -> int:
+        if self.refused_fixes:
+            return 2
         if self.errors:
             return 1
         if strict and self.warnings:
@@ -121,6 +125,7 @@ class PreflightReport:
             "skipped": self.skipped,
             "skipped_fixers": self.skipped_fixers,
             "would_fix": self.would_fix,
+            "refused_fixes": self.refused_fixes,
             "notes": self.notes,
             "violations": [v.to_dict() for v in self.violations],
             "scanned": self.scanned,
@@ -162,6 +167,7 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
     """
     first = check(ctx, ruleset)
     report = PreflightReport()
+    ctx.refused_fixes = []
 
     dirty_rule_ids = {v.rule_id for v in first.violations}
     chosen = {e.lower() for e in (explicit or set())}
@@ -181,6 +187,7 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
         ctx.reload()
 
     second = check(ctx, ruleset)
+    report.refused_fixes = list(ctx.refused_fixes)
     report.violations = second.violations
     report.scanned = second.scanned
     report.notes = second.notes

@@ -1,0 +1,5 @@
+role 'Store Managers'
+
+	tablePermission _Stores = [Region] = "North"
+
+	annotation PBI_Id = d731e639732c58f39868e972b6264350

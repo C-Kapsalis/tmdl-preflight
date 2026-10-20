@@ -18,8 +18,29 @@ INT_FIELDS = ("howCreated", "ComparisonKind", "Version")
 HOW_CREATED_MAP = {"user": 0, "manual": 0, "system": 1, "auto": 1}
 
 
-def _bookmark_files(report_dir: Path) -> list[Path]:
-    return sorted(report_dir.rglob("*.bookmark.json"))
+# Path fragments that mark an archived copy of a report; bookmarks below them
+# are not scanned (project section ``bookmarks.archive_markers``).
+ARCHIVE_MARKERS = ["legacy/", "_backup/", "_legacy/", "_b2/", "DemoData.", "demodata/"]
+
+
+def _bookmark_files(report_dir: Path, ctx: Optional[Context] = None) -> list[Path]:
+    files = sorted(report_dir.rglob("*.bookmark.json"))
+    if ctx is None:
+        return files
+    markers = (ctx.options.get("bookmarks") or {}).get("archive_markers", ARCHIVE_MARKERS)
+    if not markers:
+        return files
+    out = []
+    for f in files:
+        rel = ctx.scan_relative(f) or f.as_posix()
+        if not any(m in rel for m in markers):
+            out.append(f)
+    return out
+
+
+def bookmark_files(ctx: Context) -> list[Path]:
+    """Every bookmark file in scope (archived copies skipped)."""
+    return [f for r in ctx.report_dirs for f in _bookmark_files(r, ctx)]
 
 
 def _walk_string_ints(obj: Any, path: str = "") -> Iterator[tuple[str, str, str]]:
@@ -114,7 +135,7 @@ class BookmarkIntegerTypesRule(Rule):
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for report_dir in ctx.report_dirs:
-            for bf in _bookmark_files(report_dir):
+            for bf in _bookmark_files(report_dir, ctx):
                 try:
                     data = json.loads(bf.read_text(encoding="utf-8-sig"))
                 except (json.JSONDecodeError, OSError) as exc:
@@ -134,7 +155,7 @@ class BookmarkIntegerTypesRule(Rule):
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
         for report_dir in ctx.report_dirs:
-            for bf in _bookmark_files(report_dir):
+            for bf in _bookmark_files(report_dir, ctx):
                 try:
                     original = read_text_file(bf)
                     new_text, fixes = surgical_coerce_string_ints(original.text)
@@ -191,14 +212,20 @@ class BookmarkVisualRefsRule(Rule):
         out: list[Violation] = []
         for report_dir in ctx.report_dirs:
             visuals = self._visual_names(report_dir)
-            bookmarks = _bookmark_files(report_dir)
+            bookmarks = _bookmark_files(report_dir, ctx)
             if not bookmarks or not visuals:
                 continue
             for bf in bookmarks:
                 try:
                     data = json.loads(bf.read_text(encoding="utf-8-sig"))
-                except (json.JSONDecodeError, OSError):
-                    continue  # B001 reports unreadable bookmarks
+                except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+                    out.append(self.violation(
+                        f"bookmark file cannot be read as JSON ({exc}); its visual "
+                        f"references cannot be checked and the report loader rejects it.",
+                        file=bf, obj=bf.stem))
+                    continue
+                if not isinstance(data, dict):
+                    continue
                 for ref in self._referenced_visuals(data):
                     if ref not in visuals:
                         out.append(
@@ -323,7 +350,7 @@ class BookmarkOptionsSchemaRule(Rule):
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for report_dir in ctx.report_dirs:
-            for bf in _bookmark_files(report_dir):
+            for bf in _bookmark_files(report_dir, ctx):
                 try:
                     data = json.loads(bf.read_text(encoding="utf-8-sig"))
                 except (json.JSONDecodeError, OSError, UnicodeDecodeError):
@@ -345,13 +372,15 @@ class BookmarkOptionsSchemaRule(Rule):
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
         for report_dir in ctx.report_dirs:
-            for bf in _bookmark_files(report_dir):
+            for bf in _bookmark_files(report_dir, ctx):
                 try:
                     original = read_text_file(bf)
                     new_text, removed = strip_illegal_options(original.text)
                     if removed and verified_write(original, new_text):
                         applied.extend(f"{bf.name}: removed options.{k}" for k in removed)
-                except (json.JSONDecodeError, OSError, UnicodeDecodeError, EditRefused):
+                except EditRefused as exc:
+                    ctx.refused_fixes.append(f"{self.id}: {bf}: {exc}")
+                except (json.JSONDecodeError, OSError, UnicodeDecodeError):
                     continue
         return applied
 
@@ -451,4 +480,113 @@ class ReportDefinitionIntegrityRule(Rule):
                                 obj=f.parent.name,
                             )
                         )
+        return out
+
+
+# ---------------------------------------------------------------------------
+# Report-definition schema shapes
+# ---------------------------------------------------------------------------
+
+PAGES_METADATA_SCHEMA = ("https://developer.microsoft.com/json-schemas/fabric/item/report/"
+                         "definition/pagesMetadata/1.1.0/schema.json")
+
+
+class PagesMetadataSchemaRule(Rule):
+    id = "B005"
+    name = "pages-metadata-schema"
+    severity = Severity.ERROR
+    opt_in = True
+    option_defaults = {"accepted_schemas": [PAGES_METADATA_SCHEMA]}
+    description = (
+        "Opt-in pin of the PBIR pages metadata: definition/pages/pages.json "
+        "must exist, declare an accepted $schema (default: the 1.1.0 URL; "
+        "accepted_schemas lists the versions your tooling expects) and a "
+        "pageOrder array. A missing file or a pageOrder that is not a list "
+        "breaks page navigation; an unexpected schema version means the file "
+        "was written by a different tool version than the one you validate "
+        "against. Unparseable JSON is B004's finding."
+    )
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        accepted = list(self.options.get("accepted_schemas") or [PAGES_METADATA_SCHEMA])
+        for report_dir in ctx.report_dirs:
+            pages = report_dir / "definition" / "pages" / "pages.json"
+            if not pages.is_file():
+                out.append(self.violation(
+                    "definition/pages/pages.json is missing; the report has no pages "
+                    "metadata. Save the report again from Power BI Desktop (PBIR format).",
+                    file=pages, obj=report_dir.name))
+                continue
+            try:
+                data = json.loads(pages.read_text(encoding="utf-8-sig"))
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                continue  # B004 reports unreadable report JSON
+            if not isinstance(data, dict):
+                continue
+            schema = data.get("$schema")
+            if schema not in accepted:
+                out.append(self.violation(
+                    f"pages.json declares $schema {schema!r}; expected "
+                    f"{' or '.join(accepted)}. Update the URL (or add the version to "
+                    f"accepted_schemas if your tooling targets it).",
+                    file=pages, obj=report_dir.name))
+            if not isinstance(data.get("pageOrder"), list):
+                out.append(self.violation(
+                    "pages.json pageOrder is missing or not a list of page names.",
+                    file=pages, obj=report_dir.name))
+        return out
+
+
+def _hierarchy_problems(node: Any, path: str = "") -> Iterator[tuple[str, str]]:
+    if isinstance(node, dict):
+        for key, value in node.items():
+            here = f"{path}.{key}" if path else key
+            if key == "HierarchyLevel" and isinstance(value, dict):
+                expr = value.get("Expression")
+                problems = []
+                if not isinstance(expr, dict):
+                    problems.append("has no Expression object")
+                elif "Level" in expr:
+                    problems.append("carries Level inside its Expression")
+                if "Level" not in value:
+                    problems.append("has no Level next to its Expression")
+                if problems:
+                    yield here, " and ".join(problems)
+            yield from _hierarchy_problems(value, here)
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            yield from _hierarchy_problems(value, f"{path}[{i}]")
+
+
+class HierarchyLevelBindingShapeRule(Rule):
+    id = "B006"
+    name = "hierarchy-level-binding-shape"
+    severity = Severity.ERROR
+    description = (
+        "A visual field bound to a hierarchy level must be written as "
+        "HierarchyLevel: {Expression: {Hierarchy: ...}, Level: <name>}: the "
+        "Level sits next to the Expression, never inside it. Any other shape "
+        "does not match the report definition schema, so the report can fail "
+        "to load. Unparseable visual.json files are reported too."
+    )
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        for report_dir in ctx.report_dirs:
+            pages = report_dir / "definition" / "pages"
+            if not pages.is_dir():
+                continue
+            for vf in sorted(pages.rglob("visual.json")):
+                try:
+                    data = json.loads(vf.read_text(encoding="utf-8-sig"))
+                except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+                    out.append(self.violation(f"visual.json cannot be parsed ({exc}).",
+                                              file=vf, obj=vf.parent.name))
+                    continue
+                for where, problem in _hierarchy_problems(data):
+                    out.append(self.violation(
+                        f"HierarchyLevel at {where} {problem}; write it as "
+                        f"{{Expression: {{Hierarchy: ...}}, Level: ...}}.",
+                        file=vf, obj=f"{vf.parent.name}:{where}"))
         return out

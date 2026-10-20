@@ -84,12 +84,14 @@ def render_text(report: PreflightReport, root: Path) -> str:
         out.append(f"fixed  {applied}")
     for planned in report.would_fix:
         out.append(f"would fix  {planned}")
+    for refused in report.refused_fixes:
+        out.append(f"refused  {refused} (the edit could not be proven; the file is unchanged)")
     for rid in report.skipped_fixers:
         out.append(
             f"not fixed  {rid}: its fixer can change data, so a blanket fix skips "
             f"it; run 'fix --select {rid}' to apply it"
         )
-    if report.fixes_applied or report.would_fix or report.skipped_fixers:
+    if report.fixes_applied or report.would_fix or report.skipped_fixers or report.refused_fixes:
         out.append("")
     for v in _sorted(report.violations):
         loc = _display_path(v.file, root)

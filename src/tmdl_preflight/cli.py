@@ -340,6 +340,14 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
     if getattr(args, "only", None):
         ctx.options["_fix_only"] = args.only
     ruleset = _effective_ruleset(full, cfg, args)
+    explicit = _parse_id_list(getattr(args, "select", None)) or set()
+    if explicit & {"b003", "bookmark-options-schema"}:
+        from .rules.report import bookmark_files
+
+        if not bookmark_files(ctx):
+            raise UsageError(
+                "B003 was selected, but no bookmark file was found under the path "
+                "(archived copies are skipped); nothing scanned is not a clean result.")
     if mode == "fix" and not getattr(args, "dry_run", False) and not getattr(args, "check", False):
         report = fix(ctx, ruleset, explicit=_parse_id_list(args.select))
     else:

@@ -103,6 +103,8 @@ class Context:
         self.options: dict[str, Any] = {}
         # free-text notes rules want shown with the report (tighten hints)
         self.notes: list[str] = []
+        # fixes a fixer had to refuse (the proof failed; the file is untouched)
+        self.refused_fixes: list[str] = []
 
     def model_key(self, model: SemanticModel) -> str:
         """The model's ``*.SemanticModel`` folder relative to the scan root

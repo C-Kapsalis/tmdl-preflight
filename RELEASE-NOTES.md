@@ -76,6 +76,16 @@ the example model with one defect each. Where that evidence and the
 | F014 | selector-branch-resolution | error | yes |
 | F015 | field-parameter-partition-shape (opt-in) | info | no |
 | P001 | refresh-policy-repair | error | yes (unsafe) |
+| M021 | culture-orphan-bindings | error | yes |
+| M022 | diagram-layout-blank (opt-in) | warning | yes |
+| B005 | pages-metadata-schema (opt-in) | error | no |
+| B006 | hierarchy-level-binding-shape | error | no |
+| L001 | rls-role-grammar | error | no |
+| L002 | rls-username-function | error | no |
+| L003 | rls-in-values-bypass | error | no |
+| L004 | rls-mapping-table-hidden | error | no |
+| L005 | rls-mapping-table-no-relationship | error | no |
+| L006 | rls-inventory (opt-in) | info | no |
 | P002 | refresh-policy-coverage (opt-in) | warning | yes (unsafe) |
 | A001 | mapping-table-required-columns (opt-in) | error | no |
 | A002 | mapping-table-info-reports (opt-in) | info | no |
@@ -147,6 +157,16 @@ until configured.
   name contains a double quote.
 - Names declared with trailing spaces inside quotes (`'Frame Size   '`) are
   read trimmed.
+
+- **B002** reports a bookmark file that is not valid JSON.
+- **B001-B003** skip bookmarks of archived report copies: paths containing
+  `legacy/`, `_backup/`, `_legacy/`, `_b2/`, `DemoData.` or `demodata/`
+  (project section `bookmarks.archive_markers`; an empty list scans them).
+- `check`/`fix --select B003` on a path with no bookmark file exits 2
+  (nothing scanned is not a clean result).
+- `fix` exits 2 when a fixer refuses a repair it cannot prove (the file is
+  left unchanged and listed under `refused_fixes`); other files are still
+  repaired.
 
 ### Commands and options
 
@@ -254,6 +274,8 @@ and rule wins; DESKTOP: Power BI Desktop evidence).
 - STRICTER: `test_reference_integrity_xselector::test_calculated_column_with_empty_expression_fails`:
   `column X =` followed directly by a property line is a calculated column
   with an empty expression (M020).
+- STRICTER: `test_rls::test_mapping_table_is_hidden` judges the table's own
+  `isHidden`; a hidden column no longer makes a visible mapping table pass.
 - BUGFIX: `test_integration_f_categories::test_f_measure_coverage_analytics_zero_f_measures`:
   a model with no f- measures reports nothing instead of dividing by zero.
 - Existing tests updated: `test_rules_relationships` expects R007 as an

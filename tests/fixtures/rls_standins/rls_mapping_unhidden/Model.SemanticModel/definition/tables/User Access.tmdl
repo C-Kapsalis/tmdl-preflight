@@ -1,0 +1,19 @@
+table 'User Access'
+	lineageTag: 6bb51dd0-5dd7-537b-9df0-d2e59a36e81b
+
+	column UserPrincipalName
+		dataType: string
+		lineageTag: 229467dc-19fb-52d0-aadf-b50097cff9c1
+		summarizeBy: none
+		sourceColumn: UserPrincipalName
+
+	column Region
+		dataType: string
+		lineageTag: d6e02e1d-41bc-595c-810a-7b5160d3f122
+		summarizeBy: none
+		sourceColumn: Region
+
+	partition 'User Access' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

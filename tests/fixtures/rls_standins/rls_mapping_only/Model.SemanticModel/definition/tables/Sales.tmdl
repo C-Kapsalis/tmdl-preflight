@@ -1,0 +1,25 @@
+table Sales
+	lineageTag: 777faf55-eaa1-5116-833f-6a1d7e2e8421
+
+	column store_id
+		dataType: int64
+		lineageTag: df68d422-340b-5c1b-b78b-c9fd78e2ae50
+		summarizeBy: none
+		sourceColumn: store_id
+
+	column region_id
+		dataType: int64
+		lineageTag: 6cf1a1cc-3a46-596a-a5c6-976097084d70
+		summarizeBy: none
+		sourceColumn: region_id
+
+	column amount
+		dataType: decimal
+		lineageTag: 2ae56efa-1db1-5055-8767-a099b6246a33
+		summarizeBy: none
+		sourceColumn: amount
+
+	partition Sales = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

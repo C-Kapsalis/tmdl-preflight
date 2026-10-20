@@ -1,0 +1,6 @@
+role Self
+	modelPermission: read
+
+	tablePermission _Stores = [Email] = username ()
+
+	annotation PBI_Id = a8f946e0eb0e5473833019d7da8cb9c2

@@ -14,7 +14,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 
 ## Features
 
-- **94 rules** over the failure modes that reject imports or silently corrupt
+- **104 rules** over the failure modes that reject imports or silently corrupt
   results: duplicate lineage tags and object names, TMDL properties leaked
   into DAX, dangling `///` descriptions, tables with no partition, inline
   `#table` entity sources that force a composite model, DAX references to
@@ -25,7 +25,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
   opt-in, and project contracts (required objects, pinned relationships,
   field-parameter registrations) are declared in the configuration. The
   full catalog is generated into [`docs/rules.md`](docs/rules.md).
-- **20 auto-fixers** for the defects whose repair is fully mechanical,
+- **22 auto-fixers** for the defects whose repair is fully mechanical,
   applied via a check → fix → re-check loop that never lets a fixer vouch
   for itself.
 - **Surgical, verified edits.** Fixers rewrite single lines or single JSON
@@ -128,6 +128,8 @@ commit.
 | M018 | the same annotation name twice in one scope of `model.tmdl` | error | no |
 | M019 | a `queryGroup:` reference to a folder `model.tmdl` never declares | error | yes |
 | M020 | a calculated column declared with `=` but no expression | error | no |
+| M021 | Q&A linguistic metadata in `cultures/` bound to a table that no longer exists | error | yes |
+| M022 | a `diagramLayout.json` that is not the blank "All tables" layout (opt-in) | warning | yes |
 | P001 | a `refreshPolicy` placed after its partition, with out-of-domain values, a `sourceExpression` that differs from the partition source, or an unwindowed source | error | yes (unsafe: only when selected; copies the partition source) |
 | P002 | an incremental-refresh-eligible fact with no `refreshPolicy` and no backlog entry (opt-in; `refresh_policy` config) | warning | yes (unsafe: only when selected) |
 | C001 | a required table (format calculation group, helper table ...) or required measure is missing (configured) | error | no |
@@ -190,6 +192,14 @@ commit.
 | B002 | bookmarks referencing renamed or deleted visuals | error | no |
 | B003 | bookmark `options` keys outside the report schema | error | yes |
 | B004 | `definition.pbir` pointing at a missing model, `pages.json` naming missing pages, unparseable `visual.json` | error | no |
+| B005 | `pages.json` missing, with an unexpected `$schema`, or without a `pageOrder` list (opt-in) | error | no |
+| B006 | a `HierarchyLevel` binding with its `Level` inside the `Expression`, or missing either part | error | no |
+| L001 | a role without `modelPermission: read`, or a `tablePermission` with no filter | error | no |
+| L002 | a row filter that calls `USERNAME()` instead of `USERPRINCIPALNAME()` | error | no |
+| L003 | an `IN VALUES(...)` row filter that does not restrict the mapping table to the signed-in user | error | no |
+| L004 | a visible user-mapping table (a `UserPrincipalName` column) | error | no |
+| L005 | a relationship to the user-mapping table | error | no |
+| L006 | RLS inventory and posture (opt-in) | info | no |
 | S001 | visible measures without a `formatString` | info | no |
 | S002 | visible measures without a real `///` description | info | no |
 | S003 | a visible measure whose name gives a format-picking calculation group nothing to go on (opt-in) | info | no |

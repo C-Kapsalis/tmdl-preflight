@@ -306,3 +306,71 @@ def _group_insert_point(lines: list[str]) -> int:
         if line.startswith("ref "):
             return idx
     return len(lines)
+
+
+# ---------------------------------------------------------------------------
+# M022 blank diagram layout
+# ---------------------------------------------------------------------------
+
+def canonical_diagram_layout() -> str:
+    import json as _json
+
+    data = {
+        "version": "1.1.0",
+        "diagrams": [{
+            "ordinal": 0,
+            "scrollPosition": {"x": 0, "y": 0},
+            "nodes": [],
+            "name": "All tables",
+            "zoomValue": 100,
+            "pinKeyFieldsToTop": False,
+            "showExtraHeaderInfo": False,
+            "hideKeyFieldsWhenCollapsed": False,
+            "tablesLocked": False,
+        }],
+        "selectedDiagram": "All tables",
+        "defaultDiagram": "All tables",
+    }
+    return _json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
+class DiagramLayoutBlankRule(Rule):
+    id = "M022"
+    name = "diagram-layout-blank"
+    severity = Severity.WARNING
+    fixable = True
+    opt_in = True
+    description = (
+        "Opt-in: diagramLayout.json must be the blank layout (one 'All "
+        "tables' diagram with no table boxes). Power BI never prunes the "
+        "layout when tables are renamed or removed, so stale boxes pile up "
+        "and clutter the Model view; a blank layout cannot go stale and the "
+        "Model view arranges the tables itself. Auto-fix writes the blank "
+        "layout. Leave the rule off if your team curates layouts."
+    )
+
+    def _stale(self, ctx: Context):
+        want = canonical_diagram_layout()
+        for model in ctx.models:
+            path = model.definition_path.parent / "diagramLayout.json"
+            if not path.is_file() or ".git" in path.parts:
+                continue
+            try:
+                text = path.read_bytes().decode("utf-8")
+            except (OSError, UnicodeDecodeError):
+                text = None
+            if text != want:
+                yield path
+
+    def check(self, ctx: Context) -> list[Violation]:
+        return [self.violation(
+            "diagramLayout.json is not the blank layout; stale table boxes accumulate "
+            "there. Replace it with the blank layout (the auto-fix does).",
+            file=path, obj=path.parent.name) for path in self._stale(ctx)]
+
+    def fix(self, ctx: Context) -> list[str]:
+        applied = []
+        for path in list(self._stale(ctx)):
+            path.write_bytes(canonical_diagram_layout().encode("utf-8"))
+            applied.append(f"{path.parent.name}/diagramLayout.json: replaced with the blank layout")
+        return applied
