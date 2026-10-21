@@ -206,7 +206,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_report.add_argument("--json", action="store_true", help="machine-readable output")
     p_report.add_argument("--top", type=int, default=10, help="complexity: longest N measures")
     p_report.add_argument("--group-prefix", action="append", metavar="PREFIX",
-                          help="nameof: table-name prefix to group by (repeatable)")
+                          help="nameof: the table-name prefix of the x family "
+                               "(default: x-Selector and x-Plot Specific)")
 
     p_fmt = sub.add_parser("format-resolve",
                            help="resolve the format a measure name gets from a format "
@@ -660,8 +661,6 @@ def _cmd_report(args) -> int:
             data["broken"] += other["broken"]
             for k, v in other["statistics"].items():
                 data["statistics"][k] += v
-        families = nameof.build_families(models[0])
-        data["families"] = families["families"]
         text = nameof.render_report
         if args.json:
             def _tables(name):
@@ -699,7 +698,7 @@ def _cmd_report(args) -> int:
 
 
 def _cmd_format_resolve(args) -> int:
-    from .format_resolver import UNKNOWN, branched_axes, decimals, resolve
+    from .format_resolver import branched_axes, decimals, resolve
 
     ctx = _context(args.path)
     rows = []

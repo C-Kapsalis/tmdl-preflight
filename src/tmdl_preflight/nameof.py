@@ -231,8 +231,6 @@ class NameofResolver:
 #: them.
 FAMILIES = (("x", ("x-Selector", "x-Plot Specific")), ("y", ("y-Selector", "y-Plot Specific")))
 
-DEFAULT_GROUP_PREFIXES = ["x-Selector", "x-Plot Specific", "y-Selector", "y-Plot Specific"]
-
 
 def statistics(refs: list[NameofReference]) -> dict:
     return {
@@ -257,16 +255,24 @@ def sort_references(refs: list[NameofReference]) -> list[NameofReference]:
     return sorted(refs, key=lambda r: (_kind(r), r.line_number))
 
 
-def build_families(model: SemanticModel) -> dict:
-    """The two families of field-parameter tables, with the references each
-    table holds and the broken ones."""
+def build_report(model: SemanticModel, prefixes: Optional[list[str]] = None) -> dict:
+    """The reference inventory of one model: the statistics, the broken
+    references and the two families of field-parameter tables.
+
+    ``prefixes`` names the table-name prefixes of the families instead of
+    the default ones.
+    """
     resolver = NameofResolver(model)
     refs = resolver.find_all_nameof_references()
     broken = resolver.validate_references(refs)
+    broken.sort(key=lambda b: (b.severity != Severity.ERROR, b.reference.source_table,
+                               b.reference.source_measure, _kind(b.reference),
+                               b.reference.line_number))
     families: dict[str, dict] = {}
-    for name, prefixes in FAMILIES:
+    for name, family_prefixes in FAMILIES:
+        wanted = tuple(prefixes) if prefixes and name == "x" else family_prefixes
         tables = sorted(
-            (t for t in model.table_list if t.name.startswith(prefixes)),
+            (t for t in model.table_list if t.name.startswith(wanted)),
             key=lambda t: t.name)
         entry: dict[str, dict] = {}
         for t in tables:
@@ -283,44 +289,6 @@ def build_families(model: SemanticModel) -> dict:
                             for r in sort_references(own)[:3]],
             }
         families[name] = entry
-    return {"families": families, "refs": refs, "broken": broken}
-
-
-def build_report(model: SemanticModel, prefixes: Optional[list[str]] = None) -> dict:
-    """The reference inventory of one model: the statistics, the broken
-    references and the per-table counts."""
-    resolver = NameofResolver(model)
-    refs = resolver.find_all_nameof_references()
-    broken = resolver.validate_references(refs)
-    broken.sort(key=lambda b: (b.severity != Severity.ERROR, b.reference.source_table,
-                               b.reference.source_measure, _kind(b.reference),
-                               b.reference.line_number))
-    groups: dict[str, dict] = {}
-    summary: dict = {}
-    total_refs = total_broken = 0
-    for prefix in prefixes if prefixes is not None else DEFAULT_GROUP_PREFIXES:
-        tables = sorted((t for t in model.table_list if t.name.startswith(prefix)), key=lambda t: t.name)
-        entry: dict[str, dict] = {}
-        p_refs = p_broken = 0
-        for t in tables:
-            own = [r for r in refs if r.source_table == t.name]
-            own_broken = [b for b in broken if b.reference.source_table == t.name]
-            entry[t.name] = {
-                "columns": len(t.column_list),
-                "measures": len(t.measure_list),
-                "nameof_refs": len(own),
-                "broken_refs": len(own_broken),
-                "errors": sum(1 for b in own_broken if b.severity == Severity.ERROR),
-                "warnings": sum(1 for b in own_broken if b.severity == Severity.WARNING),
-            }
-            p_refs += len(own)
-            p_broken += len(own_broken)
-        groups[prefix] = entry
-        summary[prefix] = {"refs": p_refs, "broken": p_broken}
-        total_refs += p_refs
-        total_broken += p_broken
-    summary["total_refs"] = total_refs
-    summary["total_broken"] = total_broken
     return {
         "statistics": statistics(refs),
         "broken": [
@@ -329,8 +297,7 @@ def build_report(model: SemanticModel, prefixes: Optional[list[str]] = None) -> 
              "reason": b.reason, "line_context": b.reference.line_context[:80]}
             for b in broken
         ],
-        "groups": groups,
-        "summary": summary,
+        "families": families,
     }
 
 
