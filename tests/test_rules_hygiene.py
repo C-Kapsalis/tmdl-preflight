@@ -204,20 +204,56 @@ class TestFixOptions:
         assert code == 1 and payload["would_fix"] == ["M003: 1 violation(s)"]
         assert {p: p.read_bytes() for p in model.rglob("*") if p.is_file()} == before
 
-    def test_clear_cache_is_opt_in(self, tmp_path):
+    def test_a_single_model_run_clears_the_cache(self, tmp_path):
+        """On a single-model run the cache is what makes Desktop reuse the
+        old tags, so it goes by default."""
         model = self._dup(tmp_path)
         cache = model / ".pbi" / "cache.abf"
         cache.parent.mkdir()
         cache.write_bytes(b"cache")
         code, out, err = run_cli("fix", model, "--select", "M003", "--no-config")
-        assert cache.exists() and "--clear-cache" in err
+        assert not cache.exists(), "the cache was kept"
+        assert "Deleted cache file" in out, out
+
+    def test_keep_cache_opts_out(self, tmp_path):
+        """`--keep-cache` keeps it."""
+        model = self._dup(tmp_path)
+        cache = model / ".pbi" / "cache.abf"
+        cache.parent.mkdir()
+        cache.write_bytes(b"cache")
+        code, out, err = run_cli("fix", model, "--select", "M003",
+                                 "--keep-cache", "--no-config")
+        assert cache.exists(), "the cache was deleted"
+
+    def test_a_multi_model_run_keeps_the_cache(self, tmp_path):
+        """A whole-repository run never deletes a cache; it says it exists."""
+        model = self._dup(tmp_path)
+        cache = model / ".pbi" / "cache.abf"
+        cache.parent.mkdir()
+        cache.write_bytes(b"cache")
         model2 = self._dup(tmp_path / "second")
         cache2 = model2 / ".pbi" / "cache.abf"
         cache2.parent.mkdir()
         cache2.write_bytes(b"cache")
-        code, payload = run_fix(model2, "M003", args=("--clear-cache",))
-        assert not cache2.exists()
-        assert any("cache.abf" in f for f in payload["fixes"])
+        code, out, err = run_cli("fix", tmp_path, "--select", "M003",
+                                 "--no-config")
+        assert cache.exists() and cache2.exists()
+        assert "--clear-cache" in err, err
+
+    def test_clear_cache_forces_the_deletion_on_a_multi_model_run(self, tmp_path):
+        """`--clear-cache` forces it, whatever the run's scope."""
+        model = self._dup(tmp_path)
+        cache = model / ".pbi" / "cache.abf"
+        cache.parent.mkdir()
+        cache.write_bytes(b"cache")
+        model2 = self._dup(tmp_path / "second")
+        cache2 = model2 / ".pbi" / "cache.abf"
+        cache2.parent.mkdir()
+        cache2.write_bytes(b"cache")
+        code, out, err = run_cli("fix", tmp_path, "--select", "M003",
+                                 "--clear-cache", "--no-config")
+        assert not cache.exists() and not cache2.exists()
+        assert "Deleted cache file" in out, out
 
 
 class _UnsafeRule(Rule):

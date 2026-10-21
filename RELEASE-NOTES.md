@@ -277,6 +277,12 @@ until configured.
 
 ### Bug fixes
 
+- **A single-model lineage fix clears Desktop's cache by default.** The
+  cache (`.pbi/cache.abf`) is what makes Power BI Desktop reuse the old
+  lineage tags, so a run that changed a tag now deletes it and says
+  `🗑️  Deleted cache file: <path>`. A whole-repository run never deletes
+  a cache; it says that it exists. `--keep-cache` opts out on a
+  single-model run, and `--clear-cache` forces the deletion.
 - **Every line that starts with four spaces is an M017 error, expression
   bodies included.** The rule's `strict` option (on by default) exempts
   expression bodies; the default now flags them too, and the message is

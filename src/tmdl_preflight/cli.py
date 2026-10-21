@@ -147,6 +147,9 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--clear-cache", action="store_true",
                            help="after lineage tags change, delete the model's "
                                 ".pbi/cache.abf so Desktop does not reuse old tags")
+            p.add_argument("--keep-cache", action="store_true",
+                           help="after lineage tags change, keep the model's "
+                                ".pbi/cache.abf even on a single-model run")
             p.add_argument("--check", action="store_true",
                            help="write nothing; exit with the number of objects the "
                                 "selected fixers would act on (capped at 255)")
@@ -457,16 +460,25 @@ def _cmd_check(args) -> int:
 
 def _after_fix_cache(args, report: PreflightReport, ctx: Context) -> None:
     """Desktop keeps a model cache (.pbi/cache.abf) that remembers lineage
-    tags. After tags change, delete it on request, or say that it exists."""
+    tags. After tags change, delete it — on a single-model run by default,
+    because that cache is what makes Desktop reuse the old tags. A
+    whole-repository run never deletes a cache; it says that it exists.
+    """
     if not any(rid in ("M003", "M004") for rid in report.fixed_rule_ids):
         return
+    single = len(ctx.definition_dirs) == 1
     for d in ctx.definition_dirs:
         cache = d.parent / ".pbi" / "cache.abf"
         if not cache.is_file():
             continue
-        if getattr(args, "clear_cache", False):
+        forced = getattr(args, "clear_cache", False)
+        keep = getattr(args, "keep_cache", False)
+        if forced or (single and not keep):
             cache.unlink()
-            report.fixes_applied.append(f"cache: deleted {cache.parent.parent.name}/.pbi/cache.abf")
+            print(f"🗑️  Deleted cache file: {cache}")
+            print()
+            report.fixes_applied.append(
+                f"cache: deleted {cache.parent.parent.name}/.pbi/cache.abf")
         else:
             print(
                 f"tmdl-preflight: lineage tags changed; Power BI Desktop may still hold "
