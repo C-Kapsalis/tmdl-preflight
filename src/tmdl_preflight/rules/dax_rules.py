@@ -427,17 +427,24 @@ class DaxReferenceResolutionRule(Rule):
         """``[(block, missing table names)]`` for one model.
 
         A block that names a table the model does not have is one object
-        with one finding; the missing tables are sorted.
+        with one finding; the missing tables are sorted. The names are
+        resolved the way the check resolves them, so the repair works on
+        the same set the report names.
         """
         out: list = []
         for block in model.dax_blocks():
             expr = _drop_property_lines(block.expression)
+            variables = variable_names(expr)
             missing = []
             for ref in extract_references(expr):
+                if ref.kind == "bare" and ref.prev_word:
+                    word = ref.prev_word
+                    if word.upper() not in DAX_KEYWORDS and model.find_table(word) is not None:
+                        ref.kind, ref.table = "column", word
                 if ref.kind not in ("table", "column"):
                     continue
                 name = ref.table or ""
-                if _is_virtual(name):
+                if _is_virtual(name) or name.lower() in variables:
                     continue
                 if model.find_table(name) is None and name not in missing:
                     missing.append(name)
