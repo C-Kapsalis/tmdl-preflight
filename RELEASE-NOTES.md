@@ -275,6 +275,16 @@ until configured.
   select its rule explicitly to run it. The JSON payload lists such
   fixers under `skipped_fixers`.
 
+### Changed
+
+- **The filter-coverage check prints the fact-table completeness.** Beside
+  the uncovered findings, it reports per model how many fact tables there
+  are, how many are consumed by a user-facing measure, how many are
+  reachable through a filter measure, how many are uncovered and how many
+  are unused — and the lists that say which fact is which. An exempt fact
+  and an unused fact never fail; they are reported so that a reader can
+  see why nothing was said about them.
+
 ### Bug fixes
 
 - **A qualified measure reference is an edge in the fact trace.** A

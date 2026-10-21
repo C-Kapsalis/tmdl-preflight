@@ -393,8 +393,15 @@ class FactTableFilterCoverageRule(Rule):
                     for f in facts:
                         consumers.setdefault(f, []).append(m.name)
             uncovered = sorted(set(consumers) - covered)
+            exempt: list[str] = []
             if uncovered:
-                uncovered = [f for f in uncovered if not self._exempt(model, f, consumers[f], tracer)]
+                for f in uncovered:
+                    if self._exempt(model, f, consumers[f], tracer):
+                        exempt.append(f)
+                uncovered = [f for f in uncovered if f not in exempt]
+            unused = sorted(set(tracer.facts) - set(consumers))
+            ctx.notes.extend(self._report(model, tracer, consumers, covered,
+                                          uncovered, exempt, unused))
             for f in uncovered:
                 names = ", ".join(sorted(set(consumers[f])))
                 table = model.get_table(f)
@@ -403,6 +410,51 @@ class FactTableFilterCoverageRule(Rule):
                     f"filter measure, so visual filters never narrow its rows. Add a filter "
                     f"measure (pbip-forge can write int(not ISEMPTY('{f}'))).",
                     file=table.file if table else model.definition_path, obj=f))
+        return out
+
+    def _report(self, model: SemanticModel, tracer: FactTracer,
+                consumers: dict[str, list[str]], covered: set[str],
+                uncovered: list[str], exempt: list[str],
+                unused: list[str]) -> list[str]:
+        """The informational report beside the findings.
+
+        The counts say how much of the model's fact surface is covered, and
+        the lists say which fact is which. An exempt fact and an unused
+        fact never fail: they are reported so that a reader can see why
+        nothing was said about them.
+        """
+        facts = sorted(tracer.facts)
+        consumed = sorted(consumers)
+        key = model.definition_path.parent.name
+        out = [
+            "",
+            f"Fact-Table Completeness ({key}):",
+            f"Fact tables identified:                {len(facts)}",
+            f"Consumed by user-facing measures:      {len(consumed)}",
+            f"Reachable via some f-measure:          "
+            f"{len([f for f in facts if f in covered])}",
+            f"Uncovered (consumed, no f-measure):    {len(uncovered)}",
+            f"Unused (no user-facing consumer):      {len(unused)}",
+        ]
+        if uncovered:
+            out.append(
+                "Fact tables consumed by user-facing measures, no f-coverage:")
+            for f in uncovered:
+                names = consumers.get(f) or []
+                out.append(f"  - {f}  ({len(names)} user-facing consumer(s))")
+                for name in names:
+                    home = tracer.by_name[name]
+                    out.append(f"      e.g. {home.table}[{name}]")
+        if exempt:
+            out.append(
+                "Gated via the z-Map-driven f-Analysis Category mechanism "
+                "(no per-fact f-measure needed, not gating):")
+            for f in exempt:
+                out.append(f"  - {f}")
+        if unused:
+            out.append("Fact tables with no user-facing consumer (not gating):")
+            for f in unused:
+                out.append(f"  - {f}")
         return out
 
     def _exempt(self, model: SemanticModel, fact: str, consumers: list[str],
