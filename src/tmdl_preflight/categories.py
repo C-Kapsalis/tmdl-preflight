@@ -31,6 +31,9 @@ from .roles import fact_tables
 MAPPING_TABLE = "z-Map Dimension-Measure Groupings"
 MAPPING_PREFIX = "z-Map"
 METRIC_AXIS_GLOBS = ["x-Selector [1-9]", "x-Plot Specific*"]
+#: The numbered x-axis tables alone: the category-mechanism exemption reads
+#: its axis rows from these by default.
+NUMBERED_X_AXIS_GLOBS = ["x-Selector [1-9]"]
 ALL_AXIS_GLOBS = ["x-Selector*", "x-Plot Specific*", "y-Selector*", "y-Plot Specific*"]
 # axis spacers and the standard calendar groups attribute nothing
 NON_ATTRIBUTING_GROUPS = ["Blank Measure_x", "Blank Dimension_y", "Date_y", "Date_day_y", "Date_week_y"]

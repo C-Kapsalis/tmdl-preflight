@@ -11,6 +11,7 @@ from typing import Optional
 from ..categories import (
     MAPPING_TABLE,
     METRIC_AXIS_GLOBS,
+    NUMBERED_X_AXIS_GLOBS,
     NON_ATTRIBUTING_GROUPS,
     FactTracer,
     axis_rows,
@@ -368,7 +369,7 @@ class FactTableFilterCoverageRule(Rule):
     severity = Severity.ERROR
     opt_in = True
     option_defaults = {"filter_prefix": "f-", "mapping_table": MAPPING_TABLE,
-                       "axis_globs": list(METRIC_AXIS_GLOBS)}
+                       "axis_globs": list(NUMBERED_X_AXIS_GLOBS)}
     description = (
         "Every fact table a user-facing measure reads (directly or through "
         "other measures) must also be read by some visual-filter measure "

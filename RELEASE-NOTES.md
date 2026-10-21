@@ -277,6 +277,11 @@ until configured.
 
 ### Changed
 
+- **The category-mechanism exemption reads the numbered x-axis tables.**
+  By default it reads its axis rows only from `x-Selector 1` to
+  `x-Selector 9`; a plot-specific table is added only by configuration.
+  A fact whose only surfacing row lives in a plot-specific table therefore
+  stays uncovered.
 - **The filter-coverage check prints the fact-table completeness.** Beside
   the uncovered findings, it reports per model how many fact tables there
   are, how many are consumed by a user-facing measure, how many are
