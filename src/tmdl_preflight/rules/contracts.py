@@ -369,7 +369,7 @@ class ModelContractRelationshipsRule(Rule):
 # ---------------------------------------------------------------------------
 
 _ORDINAL_RE = re.compile(r",\s*(\d{3,5})\s*,")
-_LABEL_RE = re.compile(r'\(\s*"([^"]*)"')
+_LABEL_RE = re.compile(r'^\s*\(\s*"([^"]*)"')
 
 
 def _table_lines(table: Table) -> list[str]:
@@ -386,6 +386,13 @@ def _live(lines: list[str]) -> list[tuple[int, str]]:
 def _ordinal(line: str) -> Optional[int]:
     found = _ORDINAL_RE.findall(line)
     return int(found[-1]) if found else None
+
+
+def _is_group_row(line: str, group: Optional[str]) -> bool:
+    """A live line that names the group and carries an ordinal."""
+    if not group or f'"{group}"' not in line:
+        return False
+    return _ordinal(line) is not None
 
 
 class FieldParamRegistrationContractRule(Rule):
@@ -421,7 +428,7 @@ class FieldParamRegistrationContractRule(Rule):
             )]
         lines = _live(_table_lines(table))
         group = e.get("group")
-        rows = [(n, ln) for n, ln in lines if group and f'"{group}"' in ln]
+        rows = [(n, ln) for n, ln in lines if _is_group_row(ln, group)]
         obj = f"{tname}/{group}" if group else tname
         lo, hi = (e.get("range") or [None, None])[:2]
 
@@ -479,7 +486,13 @@ class FieldParamRegistrationContractRule(Rule):
                           f"groups {', '.join(groups)}.")]
             out = []
             for n, ln in hits:
-                for o in (int(x) for x in _ORDINAL_RE.findall(ln)):
+                ordinals = [int(x) for x in _ORDINAL_RE.findall(ln)]
+                if not ordinals:
+                    out.append(v(f"contract: column '{col}' is registered, but no ordinal "
+                                 f"parsed from the row; it cannot be checked against the "
+                                 f"free range {lo}-{hi}.", n))
+                    continue
+                for o in ordinals:
                     if lo is not None and not (lo <= o <= hi):
                         out.append(v(f"contract: column '{col}' has ordinal {o}, outside the "
                                      f"free range {lo}-{hi}.", n))

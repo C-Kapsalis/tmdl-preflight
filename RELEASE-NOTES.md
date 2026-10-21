@@ -340,6 +340,13 @@ until configured.
 - **The below-grain check says when it skips.** A model without the
   configured host table skips the check, and the run names the skipped
   check. BUGFIX.
+- **A registered column needs an ordinal.** A row that registers a column
+  but carries no ordinal is reported: the contract cannot check it against
+  the group's free range, and a silent pass reads as permission. BUGFIX.
+- **A group row is a live line that carries an ordinal.** The rows of a
+  group are the live lines that name the group and carry an ordinal, and a
+  row's label is the quoted text right after the opening parenthesis at the
+  start of the line, not a quoted string further down. BUGFIX.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the
