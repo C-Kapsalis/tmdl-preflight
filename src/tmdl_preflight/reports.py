@@ -356,7 +356,11 @@ def render_relationships(data: dict) -> str:
     lines += ["", "Hub Tables (most connected):"]
     for hub in data["hub_tables"][:5]:
         lines.append(f"  - {hub['table']:30s} {hub['relationship_count']} relationships")
+    # The reference wrote the analysis to a file here and named the file.
+    # The tool writes no file, so the lines are gone; the blank line they
+    # stood between stays.
     lines += [
+        "",
         "",
         "=" * 60,
         "ANALYSIS COMPLETE",
