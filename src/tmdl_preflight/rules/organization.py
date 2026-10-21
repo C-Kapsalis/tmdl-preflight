@@ -228,7 +228,9 @@ class HelperMeasurePlacementRule(Rule):
             if lenient:
                 ctx.notes.append(self._lenient_report(ctx, model, lenient_buckets))
             else:
-                ctx.notes.append(self._strict_report(strict))
+                block = self._strict_report(strict)
+                if block:
+                    ctx.notes.append(block)
         return out
 
     def _strict_report(self, grouped: dict[str, list[tuple[str, str]]]) -> str:
