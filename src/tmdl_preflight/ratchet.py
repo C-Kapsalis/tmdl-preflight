@@ -66,6 +66,14 @@ def matching_key(floors: dict[str, Any], model_key: str) -> Optional[str]:
     return None
 
 
+def ambiguous_keys(floors: dict[str, Any], model_key: str) -> list[str]:
+    """The floors keys that could name this model but do not say so alone."""
+    want = _norm(model_key)
+    segments = len(want.split("/"))
+    return sorted(key for key in floors
+                  if _norm(key) != want and _tail(key, segments) == want)
+
+
 def entry_for(floors: dict[str, Any], model_key: str) -> tuple[bool, Any]:
     """``(found, value)`` of the floors entry for a model key."""
     key = matching_key(floors, model_key)

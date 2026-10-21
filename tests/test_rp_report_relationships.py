@@ -101,14 +101,26 @@ def test_the_json_report_has_the_reference_layout(stand_in):
 
 
 def test_a_relationship_on_the_first_line_of_the_file_counts(stand_in, tmp_path):
-    import shutil
-
+    """The reference skipped a relationship block on the first line of the
+    file; the tool counts it, as the file's own structure says."""
     model = _model(stand_in)
     rels = model / "definition" / "relationships.tmdl"
-    rels.write_text(rels.read_text(encoding="utf-8"), encoding="utf-8")
     text = rels.read_text(encoding="utf-8")
     first, _, rest = text.partition("\n\n")
     rels.write_text(first + "\n" + rest, encoding="utf-8")
     code, out, _err = run_cli("report", "relationships", str(model), "--json")
     assert code == 0
     assert json.loads(out)["total_relationships"] == 4
+
+
+def test_a_non_ascii_table_name_is_written_as_it_is(stand_in, tmp_path):
+    """The JSON keeps the accents; it does not escape them."""
+    model = _model(stand_in)
+    tables = model / "definition" / "tables"
+    (tables / "Ventas ñ.tmdl").write_text(
+        "table 'Ventas ñ'\n\tlineageTag: 00000000-0000-0000-0000-000000000009\n\n"
+        "\tcolumn id\n\t\tdataType: int64\n\t\tsourceColumn: id\n", encoding="utf-8")
+    code, out, _err = run_cli("report", "relationships", str(model), "--json")
+    assert code == 0
+    assert "Ventas ñ" in out
+    assert "\\u" not in out

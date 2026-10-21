@@ -371,6 +371,8 @@ def evaluate_definition(source, measure_name, axis=None, label=None):
     c = _Context(measure_name, label, axis)
     try:
         result = _value(expr, c)
+    except _Silent:
+        result = UNKNOWN
     except _Unreadable as exc:
         c.unresolved.append(str(exc)[:80])
         result = UNKNOWN

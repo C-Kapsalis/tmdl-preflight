@@ -137,6 +137,19 @@ def test_an_ambiguous_floor_key_is_not_used(stand_in, tmp_path):
     assert "shop_a/Growth.SemanticModel [description]: 0 -> 1" in out
 
 
+def test_an_ambiguous_floor_key_is_named(stand_in, tmp_path):
+    """Two keys could name the model; the run says so and uses neither."""
+    tree = _tree(stand_in)
+    floors = _floors(tmp_path, {
+        "shop_a/Growth.SemanticModel": {"description": 9, "inline": 9},
+        "other/Growth.SemanticModel": {"description": 9, "inline": 9},
+    })
+    code, out, _err = run_cli("comment-refs", str(tree / "shop_a"), "--floors", str(floors))
+    assert code == 1
+    assert "could name" in out
+    assert "none of them was used" in out
+
+
 # ---------------------------------------------------------------------------
 # RP-5 / RP-6: the tighten run
 # ---------------------------------------------------------------------------

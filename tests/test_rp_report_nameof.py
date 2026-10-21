@@ -153,3 +153,35 @@ def test_the_validation_block_starts_the_report(stand_in):
     assert lines[0] == "=" * 80
     assert lines[1] == "NAMEOF REFERENCE VALIDATION REPORT"
     assert lines[2] == "=" * 80
+
+
+def test_the_references_of_one_measure_are_listed_by_kind(stand_in):
+    """The quoted-table columns first, then the unquoted-table ones, then the
+    bare measures. That order decides which three are the samples and the
+    order inside the ERRORS and WARNINGS sections."""
+    code, out, _err = run_cli("report", "nameof", str(_model(stand_in)))
+    assert code == 0
+    lines = out.splitlines()
+    samples = [ln for ln in lines if ln.startswith("    • ")]
+    assert samples[:3] == [
+        "    • Sales[Revenue] (in Lbl)",   # quoted table
+        "    • Ghost[x] (in Lbl)",         # quoted table
+        "    • Sales[nope] (in Lbl)",      # unquoted table
+    ]
+    errors = []
+    warnings = []
+    for line in lines:
+        if line.startswith("[ERROR]"):
+            errors.append(line)
+        elif line.startswith("[WARNING]"):
+            warnings.append(line)
+    assert len(errors) == 3 and len(warnings) == 2
+    references = []
+    for index, line in enumerate(lines):
+        if line.startswith("  Reference: "):
+            references.append((line[len("  Reference: "):],
+                               "ERROR" if lines[index - 1].startswith("[ERROR]") else "WARNING"))
+    assert [r for r, _ in references if _ == "ERROR"] == [
+        "Ghost[x]", "Sales[nope]", "[Missing]"]
+    assert [r for r, _ in references if _ == "WARNING"] == [
+        "Sales[Revenue]", "[Revenue]"]

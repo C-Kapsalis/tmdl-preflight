@@ -1107,7 +1107,7 @@ def _comment_refs_list(args, root: Path, refs) -> int:
 
 def _comment_refs_gate(args, floors_path, counts, floors, refs) -> int:
     """The gate: the counts against the committed floor."""
-    from .ratchet import matching_key
+    from .ratchet import ambiguous_keys, matching_key
     from .rules.comments import CLASSES
 
     rises = []
@@ -1124,6 +1124,9 @@ def _comment_refs_gate(args, floors_path, counts, floors, refs) -> int:
                 rises.append(f"{key} [{cls}]: {floor} -> {cur[cls]}")
             elif cur.get(cls, 0) < floor:
                 below.append(f"{key} [{cls}]: {floor} -> {cur.get(cls, 0)}")
+        for candidate in ambiguous_keys(floors, key):
+            print(f"   note: the floor key '{candidate}' could name '{key}' but "
+                  f"several keys say so; none of them was used.")
     for key in sorted(set(floors) - claimed):
         entry = floors[key] or {}
         for cls in CLASSES:
