@@ -283,6 +283,15 @@ until configured.
 
 ### Changed
 
+- **The measures-on-facts check reads the reference's internal-name list and
+  prints its report blocks.** A measure whose name carries one of
+  `ga4traf`, `ga4users`, `ga4convs` or `related` is advisory, never a
+  warning; the token itself is not a tag. The advisory tags follow the
+  reference: `hidden`, `test`, `helper` (a name that starts with `-` only),
+  `diagnostic` and `lowercase`, in that order, and no bracket group when
+  there is none. The text report now prints, per model, the user-facing
+  measures it found on a fact (with the field parameter that surfaces one)
+  and the advisory ones with the recommended actions.
 - **`stats --measures` prints one summary per model.** A folder with two
   models prints two summaries, each with its own totals, in the layout a
   reviewer reads: the totals, the user-facing and helper split, the

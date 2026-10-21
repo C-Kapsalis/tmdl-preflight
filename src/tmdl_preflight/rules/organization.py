@@ -216,7 +216,7 @@ class MeasuresInFactTablesRule(Rule):
     opt_in = True
     option_defaults = {
         "surfacing_tables": [],
-        "internal_name_tokens": [],
+        "internal_name_tokens": ["ga4traf", "ga4users", "ga4convs", "related"],
         "diagnostic_tokens": ["countrows", "count ", "diagnostic", "debug", "helper"],
     }
     description = (
@@ -224,8 +224,26 @@ class MeasuresInFactTablesRule(Rule):
         "field parameter surfaces, or a visible measure whose name is not a "
         "diagnostic, test, helper or lowercase name) is a warning; any other "
         "measure on a fact is listed as info with the reason it was not "
-        "counted. Facts follow the shared table-role law. Opt-in."
+        "counted. A name that carries one of the internal_name_tokens is "
+        "advisory too; the token itself is not a tag. Facts follow the shared "
+        "table-role law. Opt-in."
     )
+
+    def _tags(self, m, diag: list[str]) -> list[str]:
+        """The advisory tags of a measure, in the reference's order."""
+        low = m.name.lower()
+        tags = []
+        if m.is_hidden:
+            tags.append("hidden")
+        if low.startswith("test"):
+            tags.append("test")
+        if m.name.startswith("-"):
+            tags.append("helper")
+        if any(d in low for d in diag):
+            tags.append("diagnostic")
+        if m.name[:1].islower():
+            tags.append("lowercase")
+        return tags
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
@@ -233,38 +251,59 @@ class MeasuresInFactTablesRule(Rule):
         internal = [t.lower() for t in self.options["internal_name_tokens"]]
         for model in ctx.models:
             surfaced = surfaced_measures(model, self.options["surfacing_tables"] or None)
+            warnings: list[tuple[str, str, bool]] = []
+            advisories: list[tuple[str, str, str]] = []
             for name in fact_tables(model):
                 t = model.tables[name]
                 for m in t.measure_list:
                     low = m.name.lower()
-                    tags = []
-                    if m.is_hidden:
-                        tags.append("hidden")
-                    if low.startswith("test"):
-                        tags.append("test")
-                    if m.name.startswith("-") or "helper" in low:
-                        tags.append("helper")
-                    if any(d in low for d in diag if d != "helper"):
-                        tags.append("diagnostic")
-                    if m.name[:1].islower():
-                        tags.append("lowercase")
-                    if any(tok in low for tok in internal):
-                        tags.append("internal")
-                    if m.name in surfaced or not tags:
+                    tags = self._tags(m, diag)
+                    is_internal = any(tok in low for tok in internal)
+                    if m.name in surfaced or not (tags or is_internal):
                         why = "a field parameter surfaces it" if m.name in surfaced else "it is visible"
                         out.append(self.violation(
                             f"user-facing measure {t.name}[{m.name}] is homed on a fact "
                             f"table ({why}); move it into a measures table.",
                             file=m.file, line=m.line, obj=m.full_name,
                         ))
-                    else:
-                        out.append(self.violation(
-                            f"{t.name}[{m.name}] [{', '.join(tags)}] sits on a fact table "
-                            f"(advisory).",
-                            file=m.file, line=m.line, obj=m.full_name, severity=Severity.INFO,
-                        ))
+                        warnings.append((t.name, m.name, m.name in surfaced))
+                        continue
+                    group = ", ".join(tags)
+                    advisories.append((t.name, m.name, group))
+                    out.append(self.violation(
+                        f"{t.name}[{m.name}]"
+                        + (f" [{group}]" if group else "")
+                        + " sits on a fact table (advisory).",
+                        file=m.file, line=m.line, obj=m.full_name, severity=Severity.INFO,
+                    ))
+            ctx.notes.extend(self._report(ctx, model, warnings, advisories))
         return out
 
+    def _report(self, ctx: Context, model, warnings: list, advisories: list) -> list[str]:
+        """The per-model block the text report shows beside the findings."""
+        out: list[str] = []
+        if warnings:
+            out.append(f"Found {len(warnings)} USER-FACING measures in fact tables")
+            for table, name, surfaced in warnings:
+                out.append(f"   Table: {table}")
+                out.append(f"      - {name}" + (" (IN x-Selector!)" if surfaced else ""))
+            out.append("")
+        if advisories:
+            out.append(
+                f"ADVISORY: Found {len(advisories)} hidden/diagnostic measures "
+                f"in fact tables")
+            for table, name, group in advisories:
+                out.append(f"   • {table}[{name}]"
+                           + (f" [{group}]" if group else ""))
+            out.append("   Recommended actions:")
+            out.append("   - Move diagnostic measures to 'Diagnostic Measures' table")
+            out.append("   - Delete test measures (leftover from development)")
+            out.append("   - Priority: P2 (cleanup when convenient, not urgent)")
+            out.append("")
+        if not warnings and not advisories:
+            out.append("No measures in fact tables")
+            out.append("")
+        return out
 
 # ---------------------------------------------------------------------------
 # O005, O006, S003: advisory listings
