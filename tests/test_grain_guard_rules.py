@@ -182,6 +182,14 @@ def test_the_re_check_gate_accepts_the_whole_variable_name(tmp_path):
     assert _violations(payload) == []
 
 
+def test_the_re_check_gate_accepts_a_value_of_ten(tmp_path):
+    model = _model(tmp_path, "\t\t\tISFILTERED ( '_Countries' )", {},
+                   policy=POLICY_GOOD.replace("recheck = 1", "recheck = 10"))
+    code, payload = run_check(model, "grain-policy-exception", config=_policy_config())
+    assert code == 0
+    assert _violations(payload) == []
+
+
 # ---------------------------------------------------------------------------
 # CG-9: the below-grain check reports its skip
 # ---------------------------------------------------------------------------
@@ -242,6 +250,31 @@ def test_a_helper_outside_the_configuration_is_still_checked(tmp_path):
                               config=_reach_config([HELPER, REACH]))
     assert code == 1
     assert _violations(payload, "-helper Filter Misses Campaigns", "misses")
+
+
+def test_the_minimum_helper_count_counts_the_collected_ones(tmp_path):
+    """A helper nobody configured still counts toward the minimum."""
+    helpers = {
+        HELPER: _engine_term("_Users", "user_id"),
+        REACH: _engine_term("_Users", "user_id"),
+        "-helper Filter Misses Campaigns": _engine_term("_Users", "user_id"),
+    }
+    model = _model(tmp_path, "\t\t\tISFILTERED ( '_Countries' )", helpers, rels=RELS)
+    config = _reach_config([HELPER, REACH])
+    config["rules"]["reach-guard-helper-consistency"]["min_filter_misses"] = 2
+    code, payload = run_check(model, "reach-guard-helper-consistency", config=config)
+    assert code == 0
+    assert _violations(payload, "Filter Misses helper(s) parsed") == []
+
+
+def test_a_configured_helper_that_is_missing_is_still_reported(tmp_path):
+    helpers = {HELPER: _engine_term("_Users", "user_id"),
+               REACH: _engine_term("_Users", "user_id")}
+    model = _model(tmp_path, "\t\t\tISFILTERED ( '_Countries' )", helpers, rels=RELS)
+    code, payload = run_check(model, "reach-guard-helper-consistency",
+                              config=_reach_config([HELPER, REACH, "-helper Filter Misses Absent"]))
+    assert code == 1
+    assert _violations(payload, "-helper Filter Misses Absent", "not found")
 
 
 # ---------------------------------------------------------------------------

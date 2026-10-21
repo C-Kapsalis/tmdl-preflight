@@ -351,7 +351,7 @@ class GrainPolicyExceptionRule(Rule):
             if not recheck:
                 v(f"[{o['helper']}] has no VAR = CALCULATE( [{o['guard']}], REMOVEFILTERS( "
                   f"{column} ) ) re-check.")
-            elif not re.search(r"\b" + re.escape(recheck.group(1)) + r"\b\s*=\s*1\b", after):
+            elif not re.search(r"\b" + re.escape(recheck.group(1)) + r"\b\s*=\s*1", after):
                 v(f"[{o['helper']}] computes the re-check {recheck.group(1)} but does not "
                   f"require {recheck.group(1)} = 1 after RETURN; it would forgive more than "
                   f"the policy filter.")
