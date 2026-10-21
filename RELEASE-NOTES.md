@@ -121,16 +121,22 @@ until configured.
   `cultures/`, everything else (path, then line, inside a class). Before, a
   column could lose its tag to an expression because `expressions.tmdl`
   sorts before `tables/`. Expression occurrences now name the expression.
+  BUGFIX: the order is deterministic — the first file in directory-listing
+  order keeps the tag.
 - **M010** recognises `kpi`, `detailRows` and `relatedColumnDetails`, and in
   DAX bodies matches a metadata keyword as a whole word whatever follows it
   (`displayFolder` with no colon counts). Shared expressions are checked
-  too; in M bodies only a line shaped like a property counts.
+  too; in M bodies only a line shaped like a property counts. STRICTER: a
+  property-shaped line inside a string or a comment is not reported, and
+  partitions, calculation items and shared expressions are checked too.
 - **M011** knows the nested sections `kpi`, `detailRows`,
   `relatedColumnDetails` and `formatStringDefinition`, resets at `role`
   declarations, and its fixer moves the line to the object's first property
   slot (right after the expression) instead of the end of the property
   section. Valued properties move like flags; a file that would need more
-  than 200 moves is left alone.
+  than 200 moves is left alone. STRICTER: the rule applies to any object,
+  not only to measures and columns, and a valued property moves like a
+  flag.
 - **M013** fix removes the run and the one blank line directly after it, at
   the end of the file too; blank lines before a run are never touched. New
   option `fix_mode = "attach"` deletes the blank lines between a
@@ -321,7 +327,8 @@ until configured.
 - **M018 reports one finding per duplicated annotation name.** A name used
   three times yielded two findings that each said "appears twice". There is
   now one finding per name, saying how many times it occurs and listing
-  every line.
+  every line. STRICTER: the annotations are scoped by declaration, so the
+  same name in two scopes is not a duplicate.
 - **Archived copies are skipped by default.** With no `exclude` list
   configured, every file whose path relative to the scan root has a folder
   segment that holds `legacy`, `_backup` or `_b2` is skipped. A configured
