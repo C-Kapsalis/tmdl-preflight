@@ -41,14 +41,37 @@ def _norm(key: str) -> str:
     return key[: -len(".SemanticModel")] if key.endswith(".SemanticModel") else key
 
 
+def _tail(key: str, segments: int) -> str:
+    """The last ``segments`` path segments of a key."""
+    return "/".join(_norm(key).split("/")[-segments:])
+
+
+def matching_key(floors: dict[str, Any], model_key: str) -> Optional[str]:
+    """The floors key that names this model, or None when no key does.
+
+    A key matches only when it IS the model key (with or without the
+    ``.SemanticModel`` suffix), or when the model key is the last path
+    segments of the key and exactly one key in the file says so: a run on a
+    sub-folder finds the floor of the model it scans, and never the floor of
+    another model whose name ends the same way.
+    """
+    want = _norm(model_key)
+    for key in floors:
+        if _norm(key) == want:
+            return key
+    segments = len(want.split("/"))
+    candidates = [key for key in floors if _tail(key, segments) == want]
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
 def entry_for(floors: dict[str, Any], model_key: str) -> tuple[bool, Any]:
     """``(found, value)`` of the floors entry for a model key."""
-    want = _norm(model_key)
-    for key, value in floors.items():
-        k = _norm(key)
-        if k == want or want.endswith("/" + k) or k.endswith("/" + want):
-            return True, value
-    return False, None
+    key = matching_key(floors, model_key)
+    if key is None:
+        return False, None
+    return True, floors[key]
 
 
 def write_floors(path: str | Path, data: dict[str, Any], indent: Optional[int] = 2) -> None:

@@ -357,9 +357,13 @@ folder without any network access.
 column or measure name appears, model side and report side, before a rename
 or delete.
 
-`tmdl-preflight comment-refs <path>` counts ticket references (`#365`) in
-comments per model; `--floors FILE --tighten` lowers a ratchet file to
-today's counts and never raises it (rule S004 gates on the same file).
+`tmdl-preflight comment-refs <path> [--floors FILE]` counts ticket
+references (`#365`) in comments per model and per comment class, and gates
+on the floor file: a rise above the floor fails, a fall is reported for
+tightening. `--list` prints every reference, `--list PREFIX` only the
+models whose key starts with it, and `--floors FILE --tighten` lowers a
+ratchet file to today's counts and never raises it (rule S004 gates on the
+same file).
 
 ## In CI and pre-commit
 

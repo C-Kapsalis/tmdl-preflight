@@ -1,0 +1,19 @@
+
+relationship aaaa-1
+	fromColumn: Sales.product_id
+	toColumn: _Products.product_id
+
+relationship bbbb-2
+	crossFilteringBehavior: bothDirections
+	fromColumn: Sales.date
+	toColumn: __Calendar.date
+
+relationship cccc-3
+	isActive: false
+	fromColumn: 'Sales'.'date'
+	toColumn: '__Calendar'.date
+
+relationship dddd-4
+	fromCardinality: one
+	fromColumn: _Products.'shop ''A'' key'
+	toColumn: 'Report Helpers'.a

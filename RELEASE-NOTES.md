@@ -283,6 +283,29 @@ until configured.
 
 ### Changed
 
+- **`comment-refs` is a gate.** With a floor file it compares the counts
+  with the floors and fails when a model or a class rose above its floor:
+  the risen model/class pairs, the offending lines, and the line that says
+  to raise the floor by hand. Without a rise it prints the totals and, for
+  every class below its floor, the pair to tighten. Without a floor file it
+  keeps printing today's counts.
+- **`comment-refs --list` lists the references.** One line per reference —
+  `<file>:<line>  [<class>]  <line>` — then the number of references and
+  the number of models. `--list` takes precedence over `--tighten`.
+- **`comment-refs --tighten` says what it lowered.** A floor file that does
+  not exist yet is seeded from the current scan; otherwise one line per
+  lowered class, or `nothing to tighten`.
+- **A floor key never borrows another model's floor.** A floor key matches
+  a model only when it is that model's key, with or without the
+  `.SemanticModel` suffix. A key whose last path segments equal the model
+  key is used when exactly one key in the file says so; when several do,
+  none is used, so a run on one client never passes on another's floor.
+- **`comment-refs` reads the whole scan root.** Every `*.tmdl` under it
+  counts, not only the model definition folders; a file outside a model
+  belongs to the folder it sits in. In a git work tree only tracked files
+  are read. The `tests/` folder is skipped. BUGFIX: an unclosed double
+  quote no longer hides the comment behind it, and a file that cannot be
+  decoded is read with replacement characters instead of being skipped.
 - **`format-resolve` resolves every model under the path.** It used to
   answer for the first model it found; now it answers for each model under
   the path, in model-path order, one row for the measure-name path and one

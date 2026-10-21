@@ -930,52 +930,137 @@ def _parse_list(raw: Optional[str]) -> Optional[list[str]]:
 
 
 def _cmd_comment_refs(args) -> int:
-    from .ratchet import RatchetFileError, load_floors, write_floors
-    from .rules.comments import CLASSES, count_by_class, model_ticket_refs
+    from .ratchet import RatchetFileError, load_floors, matching_key, write_floors
+    from .rules.comments import CLASSES, root_ticket_refs
 
     ctx = _context(args.path)
+    root = Path(args.path)
+    refs = root_ticket_refs(root, ctx)
     counts: dict[str, dict[str, int]] = {}
-    hits: dict[str, list] = {}
-    for model in ctx.models:
-        key = ctx.model_key(model)
-        refs = model_ticket_refs(model.definition_path, ctx)
-        counts[key] = count_by_class(refs)
-        hits[key] = refs
-    if args.tighten:
-        if not args.floors:
-            raise UsageError("--tighten needs --floors FILE")
+    for ref in refs:
+        counts.setdefault(ref.model, {c: 0 for c in CLASSES})
+        counts[ref.model][ref.cls] += 1
+
+    if args.list is not None:
+        return _comment_refs_list(args, root, refs)
+
+    floors: dict = {}
+    if args.floors:
         try:
             floors = load_floors(args.floors, missing_ok=True)
         except RatchetFileError as exc:
             raise UsageError(str(exc)) from exc
-        seeded = not Path(args.floors).exists()
+
+    if args.tighten:
+        if not args.floors:
+            raise UsageError("--tighten needs --floors FILE")
+        if not Path(args.floors).exists():
+            print("no floors file yet — seeding from the current scan")
+            write_floors(args.floors, {k: dict(v) for k, v in sorted(counts.items())})
+            return 0
+        lowered = []
         new: dict[str, dict[str, int]] = {}
-        for key, entry in floors.items():
-            now = counts.get(key)
-            if now is None:
-                continue  # the model is gone: its entry goes with it
-            new[key] = {c: min(int(entry.get(c, 0)), now[c]) for c in CLASSES}
-        if seeded:
-            new = {k: dict(v) for k, v in counts.items()}
-        new = {k: v for k, v in sorted(new.items()) if any(v.values())}
+        for key in sorted(set(floors) | set(counts)):
+            floor_key = matching_key(floors, key) if key in counts else key
+            entry = floors.get(floor_key) or {}
+            model = _model_for_key(floors, counts, key)
+            cur = counts.get(model, {c: 0 for c in CLASSES}) if model else {c: 0 for c in CLASSES}
+            row = {}
+            for cls in CLASSES:
+                old = int(entry.get(cls, 0))
+                now = int(cur.get(cls, 0))
+                if now < old:
+                    lowered.append(f"{floor_key} {cls}: {old} -> {now}")
+                row[cls] = min(old, now)
+            if any(row.values()):
+                new[floor_key] = row
         write_floors(args.floors, new)
-        print(f"tmdl-preflight: floors written to {args.floors} ({len(new)} model(s))")
+        print("\n".join(lowered) if lowered else "nothing to tighten")
         return 0
+
     if args.json:
-        payload: dict = {"counts": counts}
-        if args.list is not None:
-            payload["refs"] = [
-                {"model": k, "file": str(r.file), "line": r.line, "class": r.cls, "ref": r.ref}
-                for k, refs in hits.items() if k.startswith(args.list) for r in refs
-            ]
-        print(json.dumps(payload, indent=2))
+        print(json.dumps({"counts": counts}, indent=2))
         return 0
+
+    return _comment_refs_gate(args, floors_path=args.floors, counts=counts, floors=floors, refs=refs)
+
+
+def _model_for_key(floors, counts, key):
+    """The scanned model a floors key names, or None when it names none."""
+    from .ratchet import matching_key
+
+    if key in counts:
+        return key
+    for model in counts:
+        if matching_key(floors, model) == key:
+            return model
+    return None
+
+
+def _comment_refs_list(args, root: Path, refs) -> int:
+    """One line per reference, then the total."""
+    prefix = args.list or ""
+    shown = [r for r in refs if r.model.startswith(prefix)]
+    for ref in shown:
+        rel = ref.file.relative_to(root).as_posix()
+        print(f"{rel}:{ref.line}  [{ref.cls}]  {ref.text[:140]}")
+    print()
+    print(f"{len(shown)} reference(s) in {len({r.model for r in shown})} model(s)")
+    return 0
+
+
+def _comment_refs_gate(args, floors_path, counts, floors, refs) -> int:
+    """The gate: the counts against the committed floor."""
+    from .ratchet import matching_key
+    from .rules.comments import CLASSES
+
+    rises = []
+    below = []
+    claimed = set()
     for key in sorted(counts):
-        c = counts[key]
-        print(f"{key}: description {c['description']}, inline {c['inline']}")
-        if args.list is not None and key.startswith(args.list):
-            for r in hits[key]:
-                print(f"  {r.file.name}:{r.line} [{r.cls}] {r.ref}  {r.text}")
+        floor_key = matching_key(floors, key)
+        entry = floors.get(floor_key) or {} if floor_key else {}
+        claimed.add(floor_key)
+        cur = counts[key]
+        for cls in CLASSES:
+            floor = int(entry.get(cls, 0))
+            if cur.get(cls, 0) > floor:
+                rises.append(f"{key} [{cls}]: {floor} -> {cur[cls]}")
+            elif cur.get(cls, 0) < floor:
+                below.append(f"{key} [{cls}]: {floor} -> {cur.get(cls, 0)}")
+    for key in sorted(set(floors) - claimed):
+        entry = floors[key] or {}
+        for cls in CLASSES:
+            floor = int(entry.get(cls, 0))
+            if floor:
+                below.append(f"{key} [{cls}]: {floor} -> 0")
+    below.sort()
+    if rises:
+        print(f"❌ issue/PR references in TMDL comments ROSE above the committed floor "
+              f"in {len(rises)} model/class(es):")
+        for line in rises:
+            print(f"   {line}")
+        print()
+        print("   Offending lines (new refs are among these; comments carry the mechanism, "
+              "the commit carries the issue):")
+        risen = {line.split(" [")[0] for line in rises}
+        shown = 0
+        for ref in refs:
+            if ref.model in risen and shown < 40:
+                rel = ref.file.relative_to(Path(args.path)).as_posix()
+                print(f"   {rel}:{ref.line}  [{ref.cls}]  {ref.text[:120]}")
+                shown += 1
+        print()
+        print(f"   Fix the comment, or (human edit, justified in the PR) raise "
+              f"{floors_path}.")
+        return 1
+    total = sum(sum(v.values()) for v in counts.values())
+    print(f"✅ comment issue-ref ratchet: {total} reference(s) across {len(counts)} "
+          f"model(s), none above floor")
+    if below:
+        print("   below floor — tighten with --tighten:")
+        for line in below:
+            print(f"   {line}")
     return 0
 
 
