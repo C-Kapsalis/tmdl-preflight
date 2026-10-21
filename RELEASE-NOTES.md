@@ -277,6 +277,12 @@ until configured.
 
 ### Changed
 
+- **`stats --measures` prints one summary per model.** A folder with two
+  models prints two summaries, each with its own totals, in the layout a
+  reviewer reads: the totals, the user-facing and helper split, the
+  field-parameter surfacing, the helper subcategories, the top tables and
+  the dash-helper description block. A sum across models would hide which
+  model is the problem.
 - **The category-mechanism exemption reads the numbered x-axis tables.**
   By default it reads its axis rows only from `x-Selector 1` to
   `x-Selector 9`; a plot-specific table is added only by configuration.

@@ -64,23 +64,57 @@ def render_stats(stats: dict[str, Any]) -> str:
 def measure_summary(ctx: Context, field_parameter_tables=None, options=None) -> dict[str, Any]:
     """How measures are organised: name classes, field-parameter surfacing,
     helper subcategories, top tables, described dash helpers. Informational
-    only; there are no thresholds besides the surfacing advisory."""
+    only; there are no thresholds besides the surfacing advisory.
+
+    The summary is PER MODEL: a folder with two models prints two
+    summaries, each with its own totals. A sum across models would hide
+    which model is the problem."""
     from .measure_classes import classify_measure_name
     from .roles import surfaced_measures
 
-    measures = [m for model in ctx.models for m in model.all_measures()]
+    per_model = []
+    for model in ctx.models:
+        per_model.append(
+            _model_measure_summary(model, field_parameter_tables, options))
+    return {
+        "per_model": per_model,
+        "total": sum(s["total"] for s in per_model),
+        "user_facing": sum(s["user_facing"] for s in per_model),
+        "helpers": sum(s["helpers"] for s in per_model),
+        "surfaced": sum(s["surfaced"] for s in per_model),
+        "surfaced_user_facing": sum(s["surfaced_user_facing"] for s in per_model),
+        "not_surfaced": sum(s["not_surfaced"] for s in per_model),
+        "advisory": any(s["advisory"] for s in per_model),
+        "subcategories": dict(sorted(
+            Counter({k: v for s in per_model for k, v in s["subcategories"].items()}
+                    ).items(), key=lambda kv: (-kv[1], kv[0]))),
+        "top_tables": [[name, n] for name, n in sorted(
+            Counter({k: v for s in per_model for k, v in s["top_tables"]}.items()
+                    ).items(), key=lambda kv: (-kv[1], kv[0]))[:10]],
+        "dash_helpers": sum(s["dash_helpers"] for s in per_model),
+        "dash_helpers_described": sum(
+            s["dash_helpers_described"] for s in per_model),
+    }
+
+
+def _model_measure_summary(model, field_parameter_tables, options) -> dict[str, Any]:
+    """The measure organisation of ONE model."""
+    from .measure_classes import classify_measure_name
+    from .roles import surfaced_measures
+
+    measures = list(model.all_measures())
     classes = [classify_measure_name(m.name, options) for m in measures]
     user = {c.name for c in classes if not c.is_helper}
-    surfaced: set[str] = set()
-    for model in ctx.models:
-        surfaced |= surfaced_measures(model, field_parameter_tables)
-    subcats = Counter(c.subcategory or "unknown_helper" for c in classes if c.is_helper)
+    surfaced = surfaced_measures(model, field_parameter_tables)
+    subcats = Counter(c.subcategory or "unknown_helper"
+                      for c in classes if c.is_helper)
     per_table = Counter(m.table for m in measures)
     dash = [m for m in measures if m.name.startswith("-")]
     total = len(measures)
     users = sum(1 for c in classes if not c.is_helper)
     inter = len(surfaced & user)
     return {
+        "model": model.definition_path.parent.name,
         "total": total,
         "user_facing": users,
         "helpers": total - users,
@@ -90,36 +124,68 @@ def measure_summary(ctx: Context, field_parameter_tables=None, options=None) -> 
         "surfaced_user_facing": inter,
         "not_surfaced": len(user - surfaced),
         "advisory": bool(users) and inter < users * 0.5,
-        "subcategories": dict(sorted(subcats.items(), key=lambda kv: (-kv[1], kv[0]))),
-        "top_tables": [[name, n] for name, n in sorted(per_table.items(), key=lambda kv: (-kv[1], kv[0]))[:10]],
+        "subcategories": dict(sorted(subcats.items(),
+                                     key=lambda kv: (-kv[1], kv[0]))),
+        "top_tables": [[name, n] for name, n in sorted(
+            per_table.items(), key=lambda kv: (-kv[1], kv[0]))[:10]],
         "dash_helpers": len(dash),
-        "dash_helpers_described": sum(1 for m in dash if (m.description or "").strip()),
+        "dash_helpers_described": sum(
+            1 for m in dash if (m.description or "").strip()),
     }
 
 
 def render_measure_summary(s: dict[str, Any]) -> str:
+    """One summary per model, in the layout a reviewer reads."""
+    rule = "=" * 70
+    blocks: list[str] = []
+    for one in s.get("per_model") or []:
+        blocks.append(_render_model_summary(one, rule))
+    if not blocks:
+        return "No measures in model."
+    dash = s.get("dash_helpers") or 0
+    described = s.get("dash_helpers_described") or 0
+    block = "\n".join(blocks)
+    if dash:
+        share = f"{100.0 * described / dash:.1f}%"
+        block += (
+            "\n\nHelper Measure Analysis:"
+            f"\n   Total helper measures (- prefix): {dash}"
+            f"\n   With description: {described} ({share})"
+            f"\n   Without description: {dash - described} ({100.0 * (dash - described) / dash:.1f}%)"
+            "\n\n   Descriptions are optional for helper measures (P2)")
+    return block
+
+
+def _render_model_summary(s: dict[str, Any], rule: str) -> str:
     if not s["total"]:
         return "No measures in model."
     pct = lambda n: f"{100.0 * n / s['total']:.1f}%"  # noqa: E731
     lines = [
-        f"measures: {s['total']}",
-        f"  user-facing: {s['user_facing']} ({pct(s['user_facing'])})",
-        f"  helpers: {s['helpers']} ({pct(s['helpers'])})",
-        f"field-parameter surfacing: {s['surfaced']} measure(s) surfaced, "
-        f"{s['surfaced_user_facing']} of them user-facing, {s['not_surfaced']} user-facing "
-        f"measure(s) not surfaced",
+        "",
+        rule,
+        "MEASURE ORGANIZATION SUMMARY",
+        rule,
+        "",
+        f"Total measures: {s['total']}",
+        f"  User-facing names: {s['user_facing']} ({pct(s['user_facing'])})",
+        f"  Helper names:      {s['helpers']} ({pct(s['helpers'])})",
+        "",
+        "Field-parameter surfacing (x-Selector / y-Selector NAMEOF refs):",
+        f"  Distinct measures referenced by x/y-Selector field params: {s['surfaced']}",
+        f"  User-facing measures surfaced (intersection):          {s['surfaced_user_facing']}",
+        f"  User-facing measures NOT in any x/y-Selector field param:  {s['not_surfaced']}",
     ]
     if s["advisory"]:
-        lines.append("  advisory: fewer than half of the user-facing measures are surfaced "
-                     "by a field parameter")
-    lines.append("helper subcategories:")
+        lines.append(
+            "  ! >50% of user-facing names are not surfaced via x/y-Selector - "
+            "possible naming mess or analysis-category gap.")
+    lines.append("")
+    lines.append("Helper subcategories:")
     for name, n in s["subcategories"].items():
-        lines.append(f"  {name}: {n} ({pct(n)})")
-    lines.append("top tables by measure count:")
+        lines.append(f"  {name:<22}: {n:>4} ({pct(n)})")
+    lines.append("")
+    lines.append("Top 10 tables by measure count:")
     for name, n in s["top_tables"]:
-        lines.append(f"  {name}: {n}")
-    described = s["dash_helpers_described"]
-    share = f"{100.0 * described / s['dash_helpers']:.1f}%" if s["dash_helpers"] else "n/a"
-    lines.append(f"dash-prefixed helpers: {s['dash_helpers']}, with a description: "
-                 f"{described} ({share})")
+        lines.append(f"  {name:<40}: {n:>4} ({pct(n)})")
+    lines.append(rule)
     return "\n".join(lines)

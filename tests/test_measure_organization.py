@@ -123,18 +123,21 @@ class TestOrganizationRulesSummary:
 
     def test_clean_model_summary(self, stand_in):
         s = self._summary(_model(stand_in, "universal"))
-        assert s["total"] == 17
-        assert s["user_facing"] == 9
-        assert s["helpers"] == 8
-        assert s["surfaced"] == 2
-        assert s["surfaced_user_facing"] == 2
-        assert s["not_surfaced"] == 7
-        assert s["advisory"] is True  # 2 < 9 * 0.5
-        assert s["subcategories"] == {
+        # the summary is PER MODEL
+        assert len(s["per_model"]) == 1
+        one = s["per_model"][0]
+        assert one["total"] == 17
+        assert one["user_facing"] == 9
+        assert one["helpers"] == 8
+        assert one["surfaced"] == 2
+        assert one["surfaced_user_facing"] == 2
+        assert one["not_surfaced"] == 7
+        assert one["advisory"] is True  # 2 < 9 * 0.5
+        assert one["subcategories"] == {
             "measure_helper": 3, "visual_helper": 2, "diagnostic_helper": 1,
             "slicer_helper": 1, "intermediary_helper": 1,
         }
-        assert s["top_tables"][0] == ["Helper Measures", 5]
+        assert one["top_tables"][0] == ["Helper Measures", 5]
 
     def test_broken_model_summary_still_exits_zero(self, stand_in):
         s = self._summary(_model(stand_in, "spinout-02"))
