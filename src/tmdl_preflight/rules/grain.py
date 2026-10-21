@@ -141,16 +141,20 @@ class GrainGuardCoverageRule(Rule):
             if not cols and cfg.get("require_registered_columns"):
                 v(f"(2) no axis field parameter exposes a column of {_qt(table)}; check the "
                   f"parser or the field parameters.", obj=table)
-            for col in sorted(cols):
-                if not term_present(body, "ISINSCOPE", col):
-                    v(f"(2) guard [{guard}] lacks ISINSCOPE({col}): an axis exposes this "
-                      f"column of blocked table {table}.", obj=col)
+            missing = sorted(c for c in cols if not term_present(body, "ISINSCOPE", c))
+            for col in missing:
+                v(f"(2) guard [{guard}] lacks ISINSCOPE({col}): {len(missing)} column(s) of "
+                  f"blocked table {table} are axis-selectable but absent from the guard: "
+                  f"{', '.join(missing)}.", obj=col)
         for table in cfg.get("permitted_tables") or []:
-            for col in sorted(registered.get(table, set())):
-                blocked = term_present(body, "ISINSCOPE", col) or term_present(body, "ISFILTERED", col)
-                if blocked and not term_present(body, "SELECTEDVALUE", col):
-                    v(f"(3) {col} of conformed table {table} is blocked without SELECTEDVALUE; "
-                      f"a conformed column may only be blocked member-conditionally.", obj=col)
+            bare = sorted(c for c in registered.get(table, set())
+                          if (term_present(body, "ISINSCOPE", c) or term_present(body, "ISFILTERED", c))
+                          and not term_present(body, "SELECTEDVALUE", c))
+            for col in bare:
+                v(f"(3) {col} of conformed table {table} is blocked in guard [{guard}] "
+                  f"without SELECTEDVALUE; {len(bare)} conformed column(s) of {table} are "
+                  f"blocked outright, and a conformed column may only be blocked "
+                  f"member-conditionally.", obj=col)
             if term_present(body, "ISFILTERED", _qt(table)):
                 v(f"(4) guard [{guard}] blocks conformed table {table} table-wide with "
                   f"ISFILTERED({_qt(table)}); remove it.", obj=table)
@@ -211,10 +215,13 @@ class GrainGuardCoverageRule(Rule):
                         f"{_qt(table)}; the recogniser is broken, so this is not a pass.",
                         file=host.file, obj=f"{measure}/{table}",
                     ))
-                for col in sorted(cols - guarded):
+                missing = sorted(cols - guarded)
+                for col in missing:
                     out.append(self.violation(
                         f"[{measure}] is below the grain of {table} but its guard lacks "
-                        f"ISINSCOPE({col}).", file=host.file, obj=f"{measure}/{col}",
+                        f"ISINSCOPE({col}): {len(missing)} column(s) of {table} are "
+                        f"axis-selectable but absent from the guard: {', '.join(missing)}.",
+                        file=host.file, obj=f"{measure}/{col}",
                     ))
         return out
 
@@ -442,17 +449,23 @@ class ReachGuardHelperConsistencyRule(Rule):
             if name == ref_name or ref_name not in pairs:
                 continue
             for t, k in sorted(ref - found):
-                v(f"helper [{name}] misses {t}[{k}], which [{ref_name}] lists.", obj=name)
+                v(f"helper [{name}] misses {t}[{k}], which [{ref_name}] lists: "
+                  f"{len(ref - found)} pair(s) of the reference helper are absent.",
+                  obj=name)
             for t, k in sorted(found - ref):
-                v(f"helper [{name}] lists {t}[{k}], which [{ref_name}] does not.", obj=name)
+                v(f"helper [{name}] lists {t}[{k}], which [{ref_name}] does not: "
+                  f"{len(found - ref)} pair(s) are not in the reference helper.",
+                  obj=name)
         exclusions = set((o.get("exclusions") or {}).keys())
         dims = {p.stem for p in (model.definition_path / "tables").glob("*.tmdl")
                 if p.stem.startswith("_") and not p.stem.startswith("__")} - exclusions
         listed = {t for t, _k in ref}
         for t in sorted(dims - listed):
-            v(f"dimension {t} is not listed in the reach-guard helpers.", obj=t)
+            v(f"dimension {t} is not listed in the reach-guard helpers: "
+              f"{len(dims - listed)} dimension(s) are missing.", obj=t)
         for t in sorted(listed - dims):
-            v(f"helpers list {t}, which is not a dimension table (or is excluded).", obj=t)
+            v(f"helpers list {t}, which is not a dimension table (or is excluded): "
+              f"{len(listed - dims)} listed table(s) are not dimensions.", obj=t)
         natural = o.get("natural_keys") or {}
         for t, k in sorted(ref):
             incoming = {r.to_column for r in model.relationships if r.is_active and r.to_table == t}

@@ -369,6 +369,12 @@ until configured.
   for the required tokens in the item's source, from its
   `calculationItem Daily` line to the next calculation item or the end of
   the file, so a property line of the item counts too. BUGFIX.
+- **The contract findings carry the counts, the names and the guard.** A
+  missing-column finding says how many columns of the table are
+  axis-selectable but absent from the guard and names them all, and a
+  blocked-conformed-column finding names the guard too. One finding per
+  object, as before; the facts a reader needs to act on it are the same.
+  BUGFIX.
 - **A commented-out expression is not live DAX.** The reference contracts
   read the raw text of a measure, so a `-- DIVIDE([Cost], ...)` line in a
   comment was reported as a live raw-cost ratio. The tool skips comment
