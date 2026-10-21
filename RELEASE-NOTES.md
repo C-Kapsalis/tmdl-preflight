@@ -287,6 +287,27 @@ until configured.
 
 ### Changed
 
+- **The visibility and coverage checks print their reports.** The
+  helper-visibility check reports per model how many helper measures there
+  are, how many are hidden and which visible ones need hiding; the
+  user-facing-visibility check reports the same for the user-facing names
+  (with the scaffolding names counted apart) and, when one is hidden, the
+  judgment note that says what to do with it. The folder, description and
+  table-description checks print the coverage of the model with one
+  decimal, and the list of the measures or tables that are missing it. A
+  display folder counts when the property is there and not empty as
+  written, so a whitespace-only value is a folder.
+- **The required-calculation-group check prints a summary and an
+  inventory.** Per model it says how many calculation groups are required,
+  how many are present and how many are missing, and lists each of them.
+  The inventory of the `z-Selector` tables (their columns and measures, and
+  the measures that use `SELECTEDMEASURENAME()`) is report output only,
+  never a finding.
+- **A skipped rule says why it did not run.** The description check that
+  is turned off reports `Description validation disabled`; the
+  calculation-group check with all its switches off reports `Calculation
+  group validation disabled in policy`. The `skipped` list of the JSON
+  output still holds the rule names; the reasons are in `skip_reasons`.
 - **The helper-placement rule frees the axis field-parameter tables and
   prints its reports.** The default `field_parameter_prefixes` are
   `x-Selector`, `y-Selector`, `x-Plot Specific` and `y-Plot Specific`, so a

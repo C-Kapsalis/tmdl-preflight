@@ -77,6 +77,8 @@ class PreflightReport:
     skipped_fixers: list[str] = field(default_factory=list)
     # rules disabled by a policy toggle; they ran no check at all
     skipped: list[str] = field(default_factory=list)
+    # why each skipped rule did not run
+    skip_reasons: dict[str, str] = field(default_factory=dict)
     # fix --dry-run: what a real fix would repair, per rule
     would_fix: list[str] = field(default_factory=list)
     # free-text notes from the rules (for example ratchet tighten hints)
@@ -123,6 +125,7 @@ class PreflightReport:
             },
             "fixes": self.fixes_applied,
             "skipped": self.skipped,
+            "skip_reasons": self.skip_reasons,
             "skipped_fixers": self.skipped_fixers,
             "would_fix": self.would_fix,
             "refused_fixes": self.refused_fixes,
@@ -151,6 +154,7 @@ def check(ctx: Context, ruleset: RuleSet) -> PreflightReport:
     for rule in ruleset.rules:
         if rule.disabled_by_policy():
             report.skipped.append(rule.name)
+            report.skip_reasons[rule.name] = rule.skip_reason()
             continue
         report.violations.extend(rule.check(ctx))
     report.scanned = scan_summary(ctx)
@@ -192,6 +196,7 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
     report.scanned = second.scanned
     report.notes = second.notes
     report.skipped = second.skipped
+    report.skip_reasons = second.skip_reasons
     return report
 
 

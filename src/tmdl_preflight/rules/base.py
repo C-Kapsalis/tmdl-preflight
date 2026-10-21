@@ -261,6 +261,10 @@ class Rule:
         engine then lists it under ``skipped`` instead of running it."""
         return False
 
+    def skip_reason(self) -> str:
+        """Why the rule did not run (shown beside its name in the report)."""
+        return "turned off by its policy option"
+
     def configure(self, options: dict[str, Any]) -> None:
         """Apply per-rule options (already validated by the config loader)."""
         self.options.update(options)
