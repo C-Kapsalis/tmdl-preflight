@@ -10,11 +10,18 @@ from .base import Context, Rule, Severity, Violation
 
 _CALC_KINDS = ("partition_source", "calculation_item", "format_string_definition")
 
+#: The name each kind of non-measure DAX block carries in the report.
+_CALC_KIND_NAMES = {
+    "partition_source": "calculated_partition_source",
+    "calculation_item": "calculation_item",
+    "format_string_definition": "format_string_definition",
+}
+
 
 class CalcDaxBlocksPresentRule(Rule):
     id = "D010"
     name = "calc-dax-blocks-present"
-    severity = Severity.WARNING
+    severity = Severity.ERROR
     opt_in = True
     option_defaults = {"enabled": True, "min_blocks": 1}
     description = (
@@ -22,8 +29,9 @@ class CalcDaxBlocksPresentRule(Rule):
         "always carry calculated-table sources, calculation items or dynamic "
         "format strings. Finding none means the tables were lost or the "
         "layout changed under the parser, and every DAX check on those "
-        "blocks would pass vacuously. Warns when fewer than min_blocks such "
-        "blocks exist; the per-kind counts go to the report notes. Opt-in."
+        "blocks would pass vacuously. Reports an error when fewer than "
+        "min_blocks such blocks exist; the per-kind counts go to the report "
+        "notes. Opt-in."
     )
 
     def disabled_by_policy(self) -> bool:
@@ -38,10 +46,15 @@ class CalcDaxBlocksPresentRule(Rule):
                 if block.kind in counts:
                     counts[block.kind] += 1
             key = ctx.model_key(model)
+            total = sum(counts.values())
             ctx.notes.append(
-                f"D010: {key}: " + ", ".join(f"{k} {v}" for k, v in counts.items())
+                f"[OK] Extracted {total} non-measure DAX blocks:\n"
+                + "\n".join(
+                    f"   - {_CALC_KIND_NAMES[name]}: {counts[name]}"
+                    for name in sorted(counts)
+                )
             )
-            if sum(counts.values()) < floor:
+            if total < floor:
                 out.append(self.violation(
                     "no calculated-table, calculation-item or format-string DAX blocks "
                     "found; the tables were lost or the TMDL layout changed under the "
@@ -148,11 +161,13 @@ class CrossFactMultirowKeyJoinRule(Rule):
                             continue
                         line = code.count("\n", 0, m.start()) + 1
                         out.append(self.violation(
-                            f"{f.name}:{line}: '{left}'[{key}] IN VALUES('{right}'[{key}]) "
-                            f"joins two tables on multi-row key '{key}'; the key spaces do "
-                            f"not overlap, so the measure silently returns blank. Compare "
-                            f"natural-key sets (INTERSECT/EXCEPT over VALUES of the business "
-                            f"key) instead.",
+                            f"{f.name}:{line}: '{left}'[{key}] compared against "
+                            f"VALUES('{right}'[{key}]) joins two tables on multi-row key "
+                            f"'{key}'; the two key spaces do not overlap, so the measure "
+                            f"silently returns blank. Compare at the grain the question is "
+                            f"asked at: build each side's set of business keys with "
+                            f"CALCULATETABLE(VALUES(<dimension>[<business key>]), <fact>), "
+                            f"then use EXCEPT/INTERSECT over those sets.",
                             file=f, line=line, obj=f"{left}->{right}[{key}]",
                         ))
         return out

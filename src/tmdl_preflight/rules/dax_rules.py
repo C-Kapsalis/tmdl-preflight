@@ -555,9 +555,9 @@ class DuplicateVariableRule(Rule):
                 for name, rel_line in find_outer_scope_duplicate_vars(block.expression):
                     out.append(
                         self.violation(
-                            f"VAR '{name}' is declared twice in the same scope, "
-                            f"so the expression fails on evaluation. Rename "
-                            f"or remove one of the declarations.",
+                            f"VAR '{name.lower()}' declared twice in the same scope "
+                            f"(measure at line {block.line}), so the expression fails on "
+                            f"evaluation. Rename or remove one of the declarations.",
                             file=block.file,
                             line=block.first_line + rel_line - 1,
                             obj=block.label,

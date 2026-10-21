@@ -84,6 +84,16 @@ def _row_label(context: str) -> str | None:
     return row_label(context)
 
 
+def _reference_rank(ref: NameofReference) -> int:
+    """The order the reference lists the references in: a quoted table
+    first, an unquoted table next, a bare member last."""
+    if ref.table_name is None:
+        return 2
+    if ref.raw_argument.strip().startswith(("'", '"')):
+        return 0
+    return 1
+
+
 def _unquote_member(member: str) -> str:
     return unquote_member(member)
 
@@ -156,7 +166,12 @@ class NameofResolver:
 
     def find_all_nameof_references(self, measures_only: bool = True) -> list[NameofReference]:
         """References in measure expressions (``measures_only``) or in every
-        DAX container of the model."""
+        DAX container of the model.
+
+        Within one expression the references come in the reference's order:
+        the quoted-table ones first, then the unquoted-table ones, then the
+        bare ones; each group keeps the order of the text.
+        """
         out: list[NameofReference] = []
         for block in self.model.dax_blocks():
             if measures_only and block.kind != "measure":
@@ -165,7 +180,7 @@ class NameofResolver:
                            block.file, block.kind)
             if measures_only:
                 refs = [r for r in refs if r.valid_syntax]
-            out.extend(refs)
+            out.extend(sorted(refs, key=_reference_rank))
         return out
 
     # -- resolution ---------------------------------------------------------
@@ -302,29 +317,42 @@ def build_report(model: SemanticModel, prefixes: Optional[list[str]] = None) -> 
 def render_report(data: dict) -> str:
     s = data["statistics"]
     lines = [
-        "=" * 60,
+        "=" * 80,
         "NAMEOF REFERENCE VALIDATION REPORT",
-        "=" * 60,
+        "=" * 80,
+        "",
         f"Total References: {s['total_references']}",
-        f"  Measure references: {s['measure_references']}",
-        f"  Column references: {s['column_references']}",
-        f"  Unique tables: {s['unique_tables']}",
-        f"  Unique objects: {s['unique_objects']}",
+        f"  Measure References: {s['measure_references']}",
+        f"  Column References: {s['column_references']}",
+        f"  Unique Tables: {s['unique_tables']}",
+        f"  Unique Objects: {s['unique_objects']}",
         "",
     ]
     broken = data["broken"]
     if not broken:
-        lines.append("All references are valid")
+        lines.append("✅ All references are valid!")
     else:
-        errors = sum(1 for b in broken if b["severity"] == "ERROR")
-        lines.append(f"Found {len(broken)} issues ({errors} error(s), "
-                     f"{len(broken) - errors} warning(s))")
-        for b in broken:
-            lines += [
-                f"  [{b['severity']}] {b['source_table']}[{b['source_measure']}]: {b['reference']}",
-                f"      {b['reason']}",
-                f"      {b['line_context']}",
-            ]
+        errors = [b for b in broken if b["severity"] == "ERROR"]
+        warnings = [b for b in broken if b["severity"] == "WARNING"]
+        lines.append(f"❌ Found {len(broken)} issues:")
+        lines.append(f"   Errors: {len(errors)}")
+        lines.append(f"   Warnings: {len(warnings)}")
+        lines.append("")
+        for label, group in (("ERRORS", errors), ("WARNINGS", warnings)):
+            if not group:
+                continue
+            lines.append(f"{label}:")
+            lines.append("-" * 80)
+            for b in group:
+                lines += [
+                    f"[{b['severity']}] Broken reference in "
+                    f"{b['source_table']}[{b['source_measure']}]:",
+                    f"  Reference: {b['reference']}",
+                    f"  Reason: {b['reason']}",
+                    f"  Context: {b['line_context']}...",
+                    "",
+                ]
+    lines.append("=" * 80)
     for prefix, tables in data["groups"].items():
         if not tables:
             continue

@@ -54,7 +54,7 @@ the example model with one defect each. Where that evidence and the
 | O013 | user-facing-measure-description (opt-in) | info | no |
 | O014 | table-description-coverage (opt-in) | info | no |
 | O015 | fact-table-filter-coverage (opt-in) | error | no |
-| D010 | calc-dax-blocks-present (opt-in) | warning | no |
+| D010 | calc-dax-blocks-present (opt-in) | error | no |
 | D011 | calc-item-blind-average | error | no |
 | X001 | cross-fact-multirow-key-join | error | no |
 | C005 | measure-reference-contract | error | no |
@@ -164,6 +164,18 @@ until configured.
   with expressions gets the summary note (`DAX Validation Summary:` with
   the expression count and the clean share), a clean model too. A model
   with no measures is an error.
+- **D005** says `VAR 'total' declared twice in the same scope (measure at
+  line 12)`: the name in lower case and the line the object is declared
+  on.
+- **D010** reports an error when it is enabled (it used to warn) and prints
+  the per-kind counts the way the reference does: `[OK] Extracted 3
+  non-measure DAX blocks:` with one `   - {kind}: {count}` line per kind,
+  sorted by kind name. It stays opt-in: the convention is one template's.
+- **X001** says `'Left'[key] compared against VALUES('Right'[key])` and
+  advises comparing at the grain the question is asked at: build each
+  side's set of business keys with
+  `CALCULATETABLE(VALUES(<dimension>[<business key>]), <fact>)`, then use
+  EXCEPT/INTERSECT over those sets.
 - **D002** is rebuilt on the new `tmdl_preflight.nameof` module: quoted
   members (`Sales['Amount']`), double-quoted tables and dotted table names
   are accepted; an unparseable NAMEOF in a field-parameter row is an error;
@@ -247,7 +259,13 @@ until configured.
   calendar counts) and checks a grain guard against it.
 - `report complexity|nameof|relationships <path> [--json]`: read-only
   reports (measure length distribution and threshold suggestions, NAMEOF
-  inventory, relationship topology).
+  inventory, relationship topology). The NAMEOF report prints the
+  reference's layout: the title rule, the counts, and then either
+  `✅ All references are valid!` or the issues under `ERRORS:` and
+  `WARNINGS:`, each with the reference, the reason and the line the call
+  sits in. Within one expression the references come in the reference's
+  order: the quoted-table ones, the unquoted-table ones, then the bare
+  ones.
 - `format-resolve <path> --name NAME [--axis T] [--label L] [--compare N2]`
   resolves the format a name gets from a format calculation group; the same
   evaluator backs S005. Python API: `tmdl_preflight.format_resolver`
@@ -369,6 +387,10 @@ until configured.
   check failed on a model without measures, whether or not the model had
   tables; the tool now says `<model>: no measures found (suspicious)` and
   fails. STRICTER.
+- **A `--` line is a DAX comment.** A comparison written on a `--` line is
+  commented out, so the cross-fact key check does not report it. The
+  reference removed only `//` and `/* */` comments and reported the
+  comparison anyway. BUGFIX.
 - **A repaired file keeps its own line endings.** The reference rewrote
   every file it touched with LF endings, so a CRLF file became LF
   throughout and every line of a Windows checkout showed up as a change.
@@ -481,6 +503,8 @@ and rule wins; DESKTOP: Power BI Desktop evidence).
   expects `Ambiguous: measure 'Units Sold' exists in multiple tables:`.
 - Existing test updated: `test_dax_spec_cases::test_qualified_measure_in_a_measure_is_a_warning`
   expects `'Units' is a measure, not a column. Use NAMEOF([Units]) instead`.
+- Existing test updated: `test_calc_group_table_dax::test_calc_group_and_calc_table_dax_blocks_found`
+  expects the D010 finding as an error (it was a warning).
 - STRICTER (project decision): `test_relationships::test_relationship_endpoints_exist[rel_casing-fail]`
   expects the casing mismatch as an error that fails without `--strict`
   (a warning was expected before).
