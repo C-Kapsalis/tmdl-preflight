@@ -74,36 +74,31 @@ class ModelStructureRule(Rule):
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for d in ctx.definition_dirs:
+            missing_dirs = []
             if not (d / "model.tmdl").is_file():
+                missing_dirs.append("model.tmdl")
+            if not (d / "tables").is_dir():
+                missing_dirs.append("tables")
+            if missing_dirs:
                 out.append(
                     self.violation(
-                        "model.tmdl is missing from this definition folder, so "
-                        "the model cannot be opened or deployed. This usually "
-                        "means a truncated export or a bad merge; restore the "
-                        "file from source control or save the project again "
-                        "from Power BI Desktop.",
+                        f"{d.parent.name}: required directories missing: "
+                        f"[{', '.join(missing_dirs)}]. The model cannot be "
+                        f"opened or deployed without them; this usually means a "
+                        f"truncated export or a bad merge. Restore them from "
+                        f"source control, or save the project again from Power "
+                        f"BI Desktop.",
                         file=d,
                     )
                 )
-            tables = d / "tables"
-            if not tables.is_dir():
+            elif not any((d / "tables").glob("*.tmdl")):
                 out.append(
                     self.violation(
-                        "the tables/ folder is missing, so the model defines "
-                        "no tables. This usually means a truncated export or a "
-                        "bad merge; restore the folder from source control or "
-                        "save the project again from Power BI Desktop.",
+                        f"{d.parent.name}: the tables/ folder contains no "
+                        f".tmdl files, so the model defines no tables. Restore "
+                        f"the table files from source control, or save the "
+                        f"project again from Power BI Desktop.",
                         file=d,
-                    )
-                )
-            elif not any(tables.glob("*.tmdl")):
-                out.append(
-                    self.violation(
-                        "the tables/ folder contains no .tmdl files, so the "
-                        "model defines no tables. Restore the table files from "
-                        "source control or save the project again from "
-                        "Power BI Desktop.",
-                        file=tables,
                     )
                 )
         return out
@@ -125,14 +120,16 @@ class TmdlWellFormedRule(Rule):
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for model in ctx.models:
+            unreadable: set[Path] = set()
             for f in model.tmdl_files:
                 try:
                     text = f.read_text(encoding="utf-8-sig")
                 except (UnicodeDecodeError, OSError) as exc:
+                    unreadable.add(f)
                     out.append(
                         self.violation(
-                            f"cannot be read as UTF-8 ({exc}). TMDL files must "
-                            f"be UTF-8 text; save the file again with UTF-8 "
+                            f"File encoding error: {exc}. TMDL files must be "
+                            f"UTF-8 text; save the file again with UTF-8 "
                             f"encoding, or restore it from source control if "
                             f"it was corrupted.",
                             file=f,
@@ -143,27 +140,29 @@ class TmdlWellFormedRule(Rule):
                     line = text[: text.index("\x00")].count("\n") + 1
                     out.append(
                         self.violation(
-                            "contains null bytes, which usually means the file "
-                            "was truncated or corrupted during a merge or "
-                            "copy. Restore the file from source control.",
+                            f"{f.name}:{line} contains null bytes, which usually "
+                            f"means the file was truncated or corrupted during a "
+                            f"merge or a copy. Restore it from source control.",
                             file=f,
                             line=line,
                         )
                     )
                 bad_fence = unpaired_fence(text.splitlines())
                 if bad_fence is not None:
+                    markers = sum(ln.count("```") for ln in text.splitlines())
                     out.append(
                         self.violation(
-                            "has an unpaired ``` expression fence: a fence "
-                            "opened after '=' never closes, or a closing fence "
-                            "has no opening one. Everything after an open "
-                            "fence is read as one expression; add or remove a "
-                            "fence so they pair up.",
+                            f"unmatched DAX code fences: {markers} ``` markers "
+                            f"(must be even). A fence opened after '=' never "
+                            f"closes, so everything after it is read as one "
+                            f"expression; add or remove a fence so they pair up.",
                             file=f,
                             line=bad_fence + 1,
                         )
                     )
             for err in model.parse_errors:
+                if err.file in unreadable:
+                    continue  # the file's own finding says it all
                 out.append(
                     self.violation(
                         err.message, file=err.file, line=err.line,
@@ -281,8 +280,11 @@ class LineageTagUniquenessRule(_LineageRuleBase):
                 for dup in occs[1:]:
                     out.append(
                         self.violation(
-                            f"lineageTag '{tag}' duplicates the one on "
-                            f"{first.context} ({first.file.name}:{first.line})",
+                            f"Duplicate lineageTag '{tag}' found in files: "
+                            f"{first.file.name}, {dup.file.name}. The tag on "
+                            f"line {first.line} ({first.context}) is the one "
+                            f"that keeps it; the copy on line {dup.line} "
+                            f"({dup.context}) is regenerated by the auto-fix.",
                             file=dup.file,
                             line=dup.line,
                             obj=dup.context,
@@ -327,7 +329,9 @@ class LineageTagFormatRule(_LineageRuleBase):
             for occ in self._malformed(model):
                 out.append(
                     self.violation(
-                        f"lineageTag '{occ.tag}' is not a canonical UUID",
+                        f"LineageTag '{occ.tag}' is not a canonically-formatted "
+                        f"UUID (expected 8-4-4-4-12 hex). Power BI rejects a "
+                        f"tag it cannot read; the auto-fix writes a fresh one.",
                         file=occ.file,
                         line=occ.line,
                         obj=occ.context,
@@ -582,29 +586,55 @@ def _file_lines(cache: dict, path: Path) -> list[str]:
 
 
 def _expression_owners(model):
-    """(label, file, decl_line, expression, start_line, is_dax) for every
-    object that carries an expression, DAX or M."""
+    """(label, name, file, decl_line, expression, start_line, is_dax) for
+    every object that carries an expression, DAX or M."""
     for t in model.table_list:
         for m in t.measure_list:
-            yield f"{t.name}[{m.name}] (measure)", m.file, m.line, m.expression, m.expression_line, True
+            yield (f"{t.name}[{m.name}] (measure)", m.name, m.file, m.line,
+                   m.expression, m.expression_line, True)
         for c in t.column_list:
             if c.expression is not None:
                 yield (
-                    f"{t.name}[{c.name}] (calculated_column)", c.file, c.line,
-                    c.expression, c.expression_line, True,
+                    f"{t.name}[{c.name}] (calculated_column)", c.name, c.file,
+                    c.line, c.expression, c.expression_line, True,
                 )
         for p in t.partitions:
             if p.source:
                 yield (
-                    f"{t.name} (partition {p.name})", p.file, p.line, p.source,
-                    p.source_start_line, p.kind == "calculated",
+                    f"{t.name} (partition {p.name})", p.name, p.file, p.line,
+                    p.source, p.source_start_line, p.kind == "calculated",
                 )
         for k, (name, expr, line) in enumerate(t.calculation_items):
             start = t.calculation_item_starts[k] if k < len(t.calculation_item_starts) else None
-            yield f"{t.name}[{name}] (calculation_item)", t.file, line, expr, start, True
+            yield (f"{t.name}[{name}] (calculation_item)", name, t.file, line,
+                   expr, start, True)
     for e in model.expressions:
         if e.expression:
-            yield f"expression {e.name}", e.file, e.line, e.expression, None, False
+            yield (f"expression {e.name}", e.name, e.file, e.line, e.expression,
+                   None, False)
+
+
+def _leak_shape(cache: dict, file: Path, decl_line: int, rel: int) -> str:
+    """How a property leaked into an expression: right after the ``=``, buried
+    in the expression body, or inside a ``` expression."""
+    lines = _file_lines(cache, file)
+    if decl_line - 1 >= len(lines):
+        return "property buried in expression"
+    decl = lines[decl_line - 1]
+    if "```" in decl:
+        return "property inside ``` expression"
+    if not decl.rstrip().endswith("=") and rel == 0:
+        return "property buried in expression"
+    # the first line of a bare body that sits at the property level is a
+    # property where the expression should be
+    prop_level = indent_level(decl) + 1
+    for idx in range(decl_line, len(lines)):
+        if not lines[idx].strip():
+            continue
+        if indent_level(lines[idx]) <= prop_level:
+            return "property right after `=`"
+        break
+    return "property buried in expression"
 
 
 class MetadataInExpressionRule(Rule):
@@ -629,12 +659,11 @@ class MetadataInExpressionRule(Rule):
         out: list[Violation] = []
         cache: dict = {}
         for model in ctx.models:
-            for label, file, decl_line, expr, start, is_dax in _expression_owners(model):
+            for label, name, file, decl_line, expr, start, is_dax in _expression_owners(model):
                 match = leaked_keyword if is_dax else leaked_property
                 if expr and expr.strip():
                     tags = classify(expr) if is_dax else None
                     offset = 0
-                    first_rel = None
                     for rel, ln in enumerate(expr.split("\n")):
                         body = ln.lstrip()
                         first = offset + (len(ln) - len(body))
@@ -647,11 +676,9 @@ class MetadataInExpressionRule(Rule):
                         if token:
                             out.append(
                                 self.violation(
-                                    f"TMDL property '{token}' is inside the "
-                                    f"expression body, so it is read as part "
-                                    f"of the expression and Power BI rejects "
-                                    f"the file. Move it out of the expression, "
-                                    f"one level under the declaration.",
+                                    f"{name}: {_leak_shape(cache, file, decl_line, rel)}"
+                                    f" (line {self._line_of(cache, file, decl_line, start, rel, body)}): "
+                                    f"{body[:40]}",
                                     file=file,
                                     line=self._line_of(cache, file, decl_line, start, rel, body),
                                     obj=label,
@@ -674,11 +701,8 @@ class MetadataInExpressionRule(Rule):
                     if token and indent_level(nxt) <= indent_level(decl) + 1:
                         out.append(
                             self.violation(
-                                f"the expression after '=' is missing and the "
-                                f"TMDL property '{token}' sits where it should "
-                                f"be, so Power BI rejects the file. Put the "
-                                f"expression back right after '=' and keep "
-                                f"properties below it.",
+                                f"{name}: property right after `=` (line {j + 1}): "
+                                f"{nxt.strip()[:40]}",
                                 file=file,
                                 line=j + 1,
                                 obj=label,
@@ -1044,7 +1068,9 @@ class RefTableTargetRule(Rule):
         return out
 
 
-_EMPTY_FENCED_MEASURE_RE = re.compile(r"^[\t ]*measure[\t ]+'(?:[^']|'')*'[\t ]*=[\t ]*```[\t ]*$")
+_EMPTY_FENCED_MEASURE_RE = re.compile(
+    r"^[\t ]*measure[\t ]+(?:'(?P<name>(?:[^']|'')*)'|(?P<bare>[^\s=]+))"
+    r"[\t ]*=[\t ]*```[\t ]*$")
 _ROOT_COMMENT_RE = re.compile(r"^\t//[ ][A-Z]")
 _MODEL_DECL_RE = re.compile(r"^model[\t ]+\S")
 _TABLE_DECL_RE = re.compile(r"^table[\t ]+\S")
@@ -1081,19 +1107,19 @@ class TmdlFileSanityRule(Rule):
         for d in ctx.definition_dirs:
             if not (d / "tables").is_dir():
                 out.append(self.violation(
-                    "the tables/ folder is missing, so the model defines no tables.",
+                    f"{d.parent.name}: required directories missing: [tables]",
                     file=d,
                 ))
-            for name in required_files:
-                if not (d / name).is_file():
-                    out.append(self.violation(
-                        f"required file {name} is missing from the definition "
-                        f"folder. Power BI Desktop always writes it, so this "
-                        f"usually means a partial export or a bad merge; "
-                        f"restore it from source control or save the project "
-                        f"again.",
-                        file=d, obj=name,
-                    ))
+            missing_files = [name for name in required_files if not (d / name).is_file()]
+            if missing_files:
+                out.append(self.violation(
+                    f"{d.parent.name}: required files missing: "
+                    f"[{', '.join(missing_files)}]. Power BI Desktop always "
+                    f"writes them, so this usually means a partial export or a "
+                    f"bad merge; restore them from source control or save the "
+                    f"project again.",
+                    file=d, obj=", ".join(missing_files),
+                ))
             table_files = {f"tables/{t}.tmdl" for t in required_tables}
             for t in required_tables:
                 if not (d / "tables" / f"{t}.tmdl").is_file():
@@ -1112,22 +1138,24 @@ class TmdlFileSanityRule(Rule):
                     text = raw.decode("utf-8-sig")
                 except (OSError, UnicodeDecodeError) as exc:
                     out.append(self.violation(
-                        f"cannot be read as UTF-8 ({exc}); TMDL files must be UTF-8.",
+                        f"File encoding error: {exc}. TMDL files must be UTF-8 "
+                        f"text; save the file again with UTF-8 encoding, or "
+                        f"restore it from source control if it was corrupted.",
                         file=f,
                     ))
                     continue
                 if b"\x00" in raw:
                     line = raw[: raw.index(b"\x00")].count(b"\n") + 1
                     out.append(self.violation(
-                        "contains a null byte, which usually means the file was "
-                        "truncated or corrupted by a merge or copy. Restore it "
-                        "from source control.",
+                        f"{f.name}:{line} contains null bytes, which usually "
+                        f"means the file was truncated or corrupted by a merge "
+                        f"or a copy. Restore it from source control.",
                         file=f, line=line,
                     ))
                 if self.options.get("check_line_endings") and rel in core and b"\r" in raw:
                     line = raw[: raw.index(b"\r")].count(b"\n") + 1
                     out.append(self.violation(
-                        f"{rel} has Windows line endings (CRLF). Core model "
+                        f"{f.name}: Windows line endings (CRLF). Core model "
                         f"files must use LF; convert the file (for example "
                         f"with a .gitattributes 'eol=lf' rule).",
                         file=f, line=line,
@@ -1135,12 +1163,24 @@ class TmdlFileSanityRule(Rule):
                 lines = text.splitlines()
                 if rel == "model.tmdl" and not any(_MODEL_DECL_RE.match(ln) for ln in lines):
                     out.append(self.violation(
-                        "model.tmdl has no 'model <name>' declaration line.",
+                        "Model file must start with 'model' declaration. Power "
+                        "BI Desktop always writes that line first, so a file "
+                        "without it is not a model file; restore it from source "
+                        "control or save the project again.",
                         file=f,
                     ))
                 if rel.startswith("tables/"):
+                    if not any(_TABLE_DECL_RE.match(ln) for ln in lines):
+                        out.append(self.violation(
+                            "Table file must start with 'table' declaration. "
+                            "Power BI Desktop always writes that line first, so "
+                            "a file without it is not a table file; restore it "
+                            "from source control or save the project again.",
+                            file=f,
+                        ))
                     for idx, ln in enumerate(lines):
-                        if not _EMPTY_FENCED_MEASURE_RE.match(ln):
+                        match = _EMPTY_FENCED_MEASURE_RE.match(ln)
+                        if not match:
                             continue
                         body = []
                         for nxt in lines[idx + 1:]:
@@ -1148,27 +1188,30 @@ class TmdlFileSanityRule(Rule):
                                 break
                             body.append(nxt)
                         if not "".join(body).strip():
+                            name = match.group("name") or match.group("bare")
                             out.append(self.violation(
-                                "measure has an empty DAX expression (its fenced "
-                                "body holds only whitespace); write the "
-                                "expression or delete the measure.",
+                                f"Measure '{name}' has empty DAX expression; "
+                                f"write the expression or delete the measure.",
                                 file=f, line=idx + 1,
                             ))
-                if rel in table_files:
+                if rel.startswith("tables/"):
                     for idx, ln in enumerate(lines):
                         if _ROOT_COMMENT_RE.match(ln):
                             out.append(self.violation(
-                                "root-level comment indented one tab between "
-                                "objects; TMDL has no comment lines outside "
-                                "expressions, so this line is not valid TMDL. "
-                                "Move the note into a /// description or "
-                                "delete it.",
+                                f"line {idx + 1}: root-level comment is indented. "
+                                f"TMDL has no comment lines outside expressions, "
+                                f"so this line is not valid TMDL. Move the note "
+                                f"into a /// description or delete it.",
                                 file=f, line=idx + 1,
                             ))
-                    bad = unpaired_fence(lines)
-                    if bad is not None:
-                        out.append(self.violation(
-                            "has an unpaired ``` expression fence.",
-                            file=f, line=bad + 1,
-                        ))
+                bad = unpaired_fence(lines)
+                if bad is not None:
+                    markers = sum(ln.count("```") for ln in lines)
+                    out.append(self.violation(
+                        f"unmatched DAX code fences: {markers} ``` markers "
+                        f"(must be even). A fence that opens after '=' never "
+                        f"closes, so everything after it is read as one "
+                        f"expression; add or remove a fence so they pair up.",
+                        file=f, line=bad + 1,
+                    ))
         return out

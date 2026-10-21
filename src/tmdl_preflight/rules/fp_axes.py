@@ -423,10 +423,16 @@ class CalculatedColumnExpressionRule(Rule):
         out: list[Violation] = []
         for model in ctx.models:
             for col in model.all_columns():
-                if col.expression is not None and not col.expression.strip():
+                if col.expression is None:
+                    continue
+                if col.expression_missing:
                     out.append(self.violation(
-                        f"calculated column {col.full_name} is declared with '=' but has an "
-                        f"empty expression; write the expression or remove the '='.",
+                        f"{col.full_name} is marked as calculated but has no expression",
+                        file=col.file, line=col.line, obj=col.full_name,
+                    ))
+                elif not col.expression.strip():
+                    out.append(self.violation(
+                        f"{col.full_name} has empty expression",
                         file=col.file, line=col.line, obj=col.full_name,
                     ))
         return out

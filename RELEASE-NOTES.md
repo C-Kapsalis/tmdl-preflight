@@ -115,20 +115,31 @@ until configured.
   on the next line that starts with backticks), so backticks inside a fenced
   string literal are no longer an "unpaired fence". It also reports a
   broken quoted name (`'Rider's Name'`, an apostrophe not doubled) as an
-  error and an empty name as a warning.
+  error and an empty name as a warning. The messages now read
+  `File encoding error: <detail>`,
+  `<file>:<line> contains null bytes` and
+  `unmatched DAX code fences: <N> ``` markers (must be even)`.
 - **M003** keeps a shared tag on the occurrence that most plausibly owns
   it: table files first, then `relationships.tmdl`, `expressions.tmdl`,
   `cultures/`, everything else (path, then line, inside a class). Before, a
   column could lose its tag to an expression because `expressions.tmdl`
   sorts before `tables/`. Expression occurrences now name the expression.
   BUGFIX: the order is deterministic — the first file in directory-listing
-  order keeps the tag.
+  order keeps the tag. The message now reads
+  `Duplicate lineageTag '<tag>' found in files: <first file>, <duplicate file>`
+  and names the line and the object of each occurrence.
 - **M010** recognises `kpi`, `detailRows` and `relatedColumnDetails`, and in
   DAX bodies matches a metadata keyword as a whole word whatever follows it
   (`displayFolder` with no colon counts). Shared expressions are checked
   too; in M bodies only a line shaped like a property counts. STRICTER: a
   property-shaped line inside a string or a comment is not reported, and
-  partitions, calculation items and shared expressions are checked too.
+  partitions, calculation items and shared expressions are checked too. The
+  messages now name the object and quote the offending line:
+  `<object>: property right after `=` (line <N>): <text>`,
+  `<object>: property buried in expression (line <N>): <text>` and
+  `<object>: property inside ``` expression (line <N>): <text>`. BUGFIX: a
+  property-shaped line inside a multi-line string in a fenced body is not
+  reported; it is text, not a property.
 - **M011** knows the nested sections `kpi`, `detailRows`,
   `relatedColumnDetails` and `formatStringDefinition`, resets at `role`
   declarations, and its fixer moves the line to the object's first property
@@ -150,6 +161,21 @@ until configured.
   description and its object instead, keeping the documentation. The attach
   mode works on the table files only, and its report counts the occurrences
   in a dry run and the blank lines it removed in a live run.
+- **M001** and **M016** name what is missing:
+  `<model>: required directories missing: [<names>]` and
+  `<model>: required files missing: [<names>]`. M016's other messages read
+  `Model file must start with 'model' declaration`,
+  `Table file must start with 'table' declaration`,
+  `Measure '<name>' has empty DAX expression`,
+  `<file>: Windows line endings (CRLF)`,
+  `line <N>: root-level comment is indented` and
+  `unmatched DAX code fences: <N> ``` markers (must be even)`.
+- **M004** says `LineageTag '<tag>' is not a canonically-formatted UUID
+  (expected 8-4-4-4-12 hex)`.
+- **M020** says `<Table>[<Column>] has empty expression` for a calculated
+  column whose expression is blank, and
+  `<Table>[<Column>] is marked as calculated but has no expression` when the
+  `=` has nothing at all.
 - **R001** messages say "not found"; an endpoint spelled with different
   casing is an error; new option `min_endpoint_success_rate` (default 0.95)
   notes a low share of valid relationships (each broken endpoint is an
