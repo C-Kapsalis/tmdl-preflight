@@ -6,3 +6,6 @@ build/
 dist/
 .venv/
 .pytest_cache/
+
+# uv writes a lock file on every run; a library does not ship one
+uv.lock
