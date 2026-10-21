@@ -88,6 +88,7 @@ the example model with one defect each. Where that evidence and the
 | P001 | refresh-policy-repair | error | yes (unsafe; also adds P002's missing policies) |
 | M021 | culture-orphan-bindings | error | yes |
 | M022 | diagram-layout-blank (opt-in) | warning | yes |
+| M023 | model-validation-notes (opt-in) | info | no |
 | B005 | pages-metadata-schema (opt-in) | error | no |
 | B006 | hierarchy-level-binding-shape | error | no |
 | L001 | rls-role-grammar | error | no |
@@ -176,6 +177,17 @@ until configured.
   column whose expression is blank, and
   `<Table>[<Column>] is marked as calculated but has no expression` when the
   `=` has nothing at all.
+- **M023** (new, opt-in) carries the notes the file validator raised
+  without failing on them: `Missing recommended model property: <p>`,
+  `Column '<c>' missing dataType`,
+  `Column '<c>' has unknown summarizeBy: <v> (valid: none, sum, min, max,
+  count, distinctCount, average, standardDeviation, variance)`,
+  `Calculation group has no explicit precedence (defaults to 0)` and
+  `Calculation item should typically use SELECTEDMEASURE or
+  ISSELECTEDMEASURE`. The rule is off by default: the notes are advice,
+  and a run never fails because of one. The measure-prefix and
+  selector-table naming notes of the reference are tied to one template and
+  are not carried over.
 - **R001** messages say "not found"; an endpoint spelled with different
   casing is an error; new option `min_endpoint_success_rate` (default 0.95)
   notes a low share of valid relationships (each broken endpoint is an
@@ -588,7 +600,11 @@ stop a model from opening or deploying, so a baseline can never hide them.
 
 - The CLI invocation (`tmdl-preflight check <path>`) and the exit codes
   (`0` clean, `1` violations, `2` usage or path error) are unchanged. Exit
-  code `2` now also covers configuration and baseline errors.
+  code `2` now also covers configuration and baseline errors. BUGFIX: a
+  single-rule run exits `1` when the rule found something, where the
+  reference exited with the number of offending files. The tool's contract
+  is `0` clean, `1` violations, `2` a problem with the invocation, and a
+  caller can read the count from the report.
 - JSON output is additive only: `summary` gains `excluded`, `exempted` and
   `baselined`; the payload gains `scanned`, and `exemptions` / `baseline`
   when they apply; each violation gains `path` (project-relative). Existing
