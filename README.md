@@ -360,6 +360,11 @@ or delete.
 comments per model; `--floors FILE --tighten` lowers a ratchet file to
 today's counts and never raises it (rule S004 gates on the same file).
 
+`tmdl-preflight dead-facts <path>` lists the fact tables no measure reads.
+`--capture FILE` records them as the floor the dead-fact gate compares
+against (rule O007): a JSON object of model key to the sorted list of dead
+fact tables, with the models that have none left out.
+
 ## In CI and pre-commit
 
 ```yaml

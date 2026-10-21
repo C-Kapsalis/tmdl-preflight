@@ -553,6 +553,21 @@ def table_reads(name: str, expressions: list[str]) -> tuple[int, int]:
     return data, sensor
 
 
+def dead_fact_tables(model) -> list[tuple[str, int]]:
+    """``(table, sensor references)`` of every fact no measure reads.
+
+    A fact whose only mentions are filter-context sensors is dead: sensing
+    makes it look owned, so it is never dropped and keeps loading.
+    """
+    exprs = [m.expression for m in model.all_measures() if m.expression]
+    out = []
+    for name in fact_tables(model):
+        data, sensor = table_reads(name, exprs)
+        if data == 0:
+            out.append((name, sensor))
+    return out
+
+
 class DeadFactTablesRule(Rule):
     id = "O007"
     name = "dead-fact-tables"
@@ -580,6 +595,25 @@ class DeadFactTablesRule(Rule):
                     f"{exc}; record the accepted dead tables (or an empty object) "
                     f"before relying on this gate.",
                 )]
+        current: dict[str, list[str]] = {}
+        for model in ctx.models:
+            current[ctx.model_key(model)] = sorted(
+                name for name, _s in dead_fact_tables(model))
+        # every floor entry that is not dead now: the table came back, or the
+        # model was not scanned, or it does not exist any more
+        stale: list[str] = []
+        if floors is not None:
+            for key, value in floors.items():
+                entry = value if isinstance(value, list) else []
+                alive = current.get(key)
+                for name in entry:
+                    if alive is None or name not in alive:
+                        stale.append(f"{key}: {name}")
+        if stale:
+            ctx.notes.append(
+                "[dead-fact-table floor] entries no longer dead — tighten the "
+                "floor (tmdl-preflight dead-facts --capture):\n  "
+                + "\n  ".join(sorted(stale)))
         for model in ctx.models:
             exprs = [m.expression for m in model.all_measures() if m.expression]
             key = ctx.model_key(model)
@@ -592,7 +626,7 @@ class DeadFactTablesRule(Rule):
                 data, sensor = table_reads(name, exprs)
                 if data == 0:
                     dead.append((name, sensor))
-            dead_names = {n for n, _ in dead}
+            growth = [name for name, _s in dead if name not in accepted]
             for name, sensor in dead:
                 if name in accepted:
                     continue
@@ -603,11 +637,12 @@ class DeadFactTablesRule(Rule):
                     f"baseline with a reason.",
                     file=t.file, line=t.line, obj=name,
                 ))
-            for name in sorted(accepted - dead_names):
+            if growth and floors is not None:
                 ctx.notes.append(
-                    f"dead-fact-tables: {key}: {name} is recorded in the baseline but no "
-                    f"longer dead; tighten the baseline by removing it."
-                )
+                    f"{len(growth)} NEW dead fact table(s) beyond the committed "
+                    f"floor — no measure reads them; either finish the drop or "
+                    f"accept them into {self.options['baseline']} with a reason:\n  "
+                    + "\n  ".join(f"{key}: {name}" for name in sorted(growth)))
         return out
 
 

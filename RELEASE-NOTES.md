@@ -216,6 +216,10 @@ until configured.
 - `comment-refs <path> [--list] [--json] [--floors FILE] [--tighten]`
   counts ticket references in comments; `--tighten` only ever lowers floors
   and drops all-zero entries.
+- `dead-facts <path> [--capture FILE] [--json]` lists the fact tables no
+  measure reads. `--capture FILE` records them as the floor the dead-fact
+  gate compares against (a JSON object of model key to the sorted list of
+  dead fact tables, the models with none left out).
 - Ratchet files for O007, R008 and S004 keep the shape teams already use: a
   JSON object keyed by the `*.SemanticModel` folder relative to the scanned
   root (with or without the suffix). Recorded entries that no longer fail
@@ -323,6 +327,11 @@ until configured.
 
 ### Bug fixes
 
+- **The dead-fact gate reports the whole floor, not one table at a time.**
+  A floor entry that is no longer dead now produces one tighten block that
+  covers every such entry, including the ones of a model that was not
+  scanned or does not exist any more. A new dead fact table beyond the
+  floor produces a summary that names every one of them.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the
