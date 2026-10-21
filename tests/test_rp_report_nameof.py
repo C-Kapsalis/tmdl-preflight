@@ -155,6 +155,21 @@ def test_the_validation_block_starts_the_report(stand_in):
     assert lines[2] == "=" * 80
 
 
+def test_an_empty_member_is_an_invalid_reference(tmp_path):
+    """A reference with no member cannot be read; the report says so."""
+    d = tmp_path / "Shop.SemanticModel" / "definition" / "tables"
+    d.mkdir(parents=True)
+    (d / "Sales.tmdl").write_text(
+        "table 'Sales'\n\tlineageTag: 00000000-0000-0000-0000-000000000001\n\n"
+        "\tmeasure Lbl = NAMEOF([])\n\t\tlineageTag: "
+        "00000000-0000-0000-0000-000000000002\n", encoding="utf-8")
+    (tmp_path / "Shop.SemanticModel" / "definition" / "model.tmdl").write_text(
+        "model Model\n\tculture: en-US\n\nref table Sales\n", encoding="utf-8")
+    code, out, _err = run_cli("report", "nameof", str(tmp_path / "Shop.SemanticModel"))
+    assert code == 0
+    assert "Reason: Invalid reference format" in out
+
+
 def test_the_references_of_one_measure_are_listed_by_kind(stand_in):
     """The quoted-table columns first, then the unquoted-table ones, then the
     bare measures. That order decides which three are the samples and the

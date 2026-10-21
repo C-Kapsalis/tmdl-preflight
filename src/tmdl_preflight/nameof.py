@@ -177,6 +177,8 @@ class NameofResolver:
                 return [BrokenReference(ref, Severity.ERROR,
                                         f"invalid NAMEOF syntax: '{ref.raw_argument.strip()}' is "
                                         f"not a column or measure reference; target not found")]
+            if not ref.object_name.strip("[]'\" "):
+                return [BrokenReference(ref, Severity.ERROR, "Invalid reference format")]
             return []
         member = ref.object_name
         if ref.table_name is None:
@@ -263,7 +265,7 @@ def build_report(model: SemanticModel, prefixes: Optional[list[str]] = None) -> 
     the default ones.
     """
     resolver = NameofResolver(model)
-    refs = resolver.find_all_nameof_references()
+    refs = resolver.find_all_nameof_references(measures_only=False)
     broken = resolver.validate_references(refs)
     broken.sort(key=lambda b: (b.severity != Severity.ERROR, b.reference.source_table,
                                b.reference.source_measure, _kind(b.reference),
