@@ -701,6 +701,9 @@ def _cmd_fieldparam(args) -> int:
     except (RetagIncomplete, EditRefused) as exc:
         print(f"tmdl-preflight: {exc}", file=sys.stderr)
         return 1
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"tmdl-preflight: cannot read the file: {exc}", file=sys.stderr)
+        return 2
     for name in done:
         print(f"retagged \"{name}\": {args.old} -> {args.new}")
     return 0
@@ -803,6 +806,11 @@ def _cmd_schema_check(args) -> int:
         snapshot = json.loads(Path(args.schema).read_text(encoding="utf-8-sig"))
     except (OSError, ValueError) as exc:
         raise UsageError(f"cannot read the manifest or the schema snapshot: {exc}") from exc
+    for label, doc in (("manifest", manifest), ("schema snapshot", snapshot)):
+        if not isinstance(doc, dict):
+            raise UsageError(
+                f"the {label} is a {type(doc).__name__}, not an object; it "
+                f"cannot be read")
     ignore, exceptions = load_ignore_columns(Path(args.ignore_columns) if args.ignore_columns else None)
     doc = reconcile(manifest, snapshot, ignore, exceptions, Path(args.schema).name)
     mpath = Path(args.manifest)

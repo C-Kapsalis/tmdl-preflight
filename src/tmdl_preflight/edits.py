@@ -52,6 +52,25 @@ def read_text_file(path: Path) -> TextFile:
     return TextFile(Path(path), raw, bom, newline)
 
 
+def mixed_line_endings(path: Path) -> bool:
+    """Does the file mix its line endings?
+
+    A file that mixes them cannot be split on one style and joined on
+    another: the lines that use the other style fold into one, and an edit
+    computed on that would delete the model. Such a file is read but never
+    written.
+    """
+    try:
+        raw = Path(path).read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    body = raw[1:] if raw.startswith(_BOM) else raw
+    crlf = body.count("\r\n")
+    lf = body.count("\n") - crlf
+    cr = body.count("\r") - crlf
+    return sum(1 for n in (crlf, lf, cr) if n) > 1
+
+
 def verified_write(
     original: TextFile,
     new_text: str,
@@ -65,6 +84,13 @@ def verified_write(
     """
     if new_text == original.text:
         return False
+    if mixed_line_endings(original.path):
+        # A file that mixes its line endings cannot be rewritten safely:
+        # the edit was computed on a text whose lines had folded together.
+        # The file is left exactly as it is.
+        raise EditRefused(
+            f"{original.path.name} mixes its line endings; it was left "
+            f"untouched (normalize it to one style first)")
     if verify is not None:
         verify(original.text, new_text)
     current = read_text_file(original.path)
