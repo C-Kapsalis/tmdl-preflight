@@ -106,6 +106,19 @@ def test_the_tighten_hint_covers_a_model_that_is_gone(tmp_path):
     assert "  Gone.SemanticModel: Returns" in text, text
 
 
+def test_a_floor_key_without_the_suffix_is_the_same_model(tmp_path):
+    """PA29: the key of a model compares with or without the suffix."""
+    model = _model(tmp_path, {"Returns": _fact("Returns", 2)})
+    floor = tmp_path / "floor.json"
+    floor.write_text(json.dumps({"Shop": ["Returns"]}, indent=2), encoding="utf-8")
+    cfg = {"rules": {RULE: {"baseline": str(floor)}}}
+    code, payload = run_check(model, RULE, config=cfg)
+    assert code == 0, payload
+    assert violations(payload) == []
+    text = "\n".join(payload.get("notes") or [])
+    assert "no longer dead" not in text, text
+
+
 def test_the_failure_names_every_new_dead_table(tmp_path):
     """PA30: the summary of the growth."""
     model = _model(tmp_path, {

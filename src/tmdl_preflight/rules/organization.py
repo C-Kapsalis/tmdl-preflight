@@ -607,9 +607,9 @@ class DeadFactTablesRule(Rule):
         if floors is not None:
             for key, value in floors.items():
                 entry = value if isinstance(value, list) else []
-                alive = current.get(key)
+                found, alive = entry_for(current, key)
                 for name in entry:
-                    if alive is None or name not in alive:
+                    if not found or name not in (alive or []):
                         stale.append(f"{key}: {name}")
         if stale:
             ctx.notes.append(

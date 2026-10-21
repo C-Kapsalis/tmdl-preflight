@@ -123,7 +123,7 @@ def test_a_fact_without_measures_says_so(tmp_path):
     assert "No measures in fact tables" in out, out
 
 
-def test_the_internal_tokens_stay_configurable(tmp_path):
+def test_the_surfacing_tables_option_is_an_override(tmp_path):
     """PA22: the option still overrides the default."""
     model = _model(tmp_path, {"Sales": _fact("Sales", ["Orders related"], 1)})
     cfg = {"rules": {"measures-in-fact-tables": {
@@ -133,3 +133,18 @@ def test_the_internal_tokens_stay_configurable(tmp_path):
     assert code == 1
     found = violations(payload)
     assert len(found) == 1 and found[0]["severity"] == "warning", found
+
+
+def test_a_y_axis_field_parameter_does_not_surface_a_fact_measure(tmp_path):
+    """PA21: only the numbered x-axis tables surface a fact measure.
+
+    A visible lowercase measure on a fact that only a y-axis field
+    parameter names is advisory, not a warning.
+    """
+    out = _text(tmp_path, {
+        "Sales": _fact("Sales", ["lowercase measure"], 1),
+        "y-Selector 1": _axis("y-Selector 1", ["lowercase measure"], 9),
+    })
+    assert "ADVISORY" in out, out
+    assert "Found 1 USER-FACING measures in fact tables" not in out, out
+    assert "[lowercase]" in out, out
