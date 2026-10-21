@@ -172,6 +172,16 @@ SIMPLE_PROPERTIES = frozenset(
         "sortByColumn", "sourceColumn", "sourceLineageTag", "summarizeBy",
     }
 )
+#: The properties the reference knew. The tool knows a few more (a source
+#: column, its lineage tag, a nullability flag and the MDX flag): they are
+#: properties in the same place, and the engine rejects them the same way.
+REFERENCE_SIMPLE_PROPERTIES = frozenset(
+    {
+        "dataCategory", "dataType", "displayFolder", "displayOrdinal",
+        "formatString", "isDefaultImage", "isDefaultLabel", "isHidden",
+        "isKey", "isNameInferred", "lineageTag", "sortByColumn", "summarizeBy",
+    }
+)
 # Nested sections of an object. Once one has started, the object's simple
 # properties may no longer follow.
 CHILD_BLOCKS = frozenset(
@@ -201,6 +211,8 @@ class MisorderedProperty:
     owner: str  # the declaration line it belongs to, stripped
     token: str
     name: str = ""  # the object's own name
+    owner_line: int = -1  # 0-based index of the declaration itself
+    owner_level: int = 0  # the declaration's nesting level
 
 
 def _expression_end(lines: list[str], decl: int) -> int:
@@ -257,7 +269,8 @@ def find_properties_after_child_blocks(lines: list[str]) -> list[MisorderedPrope
             continue
         if tok in SIMPLE_PROPERTIES and parent[1]:
             target = _expression_end(lines, parent[2]) + 1
-            out.append(MisorderedProperty(idx, target, parent[0], tok, parent[3]))
+            out.append(MisorderedProperty(idx, target, parent[0], tok, parent[3],
+                                          parent[2], level - 1))
     return out
 
 
@@ -271,10 +284,37 @@ def _object_name(declaration: str) -> str:
     return name or rest
 
 
+def same_lines(old: list[str], new: list[str]) -> bool:
+    """Do the two lists hold the same lines, up to the copies of a moved
+    property that were dropped?
+
+    A repair that moves a property may drop a copy of it: Power BI rejects
+    a duplicated property, so an object that carried the same flag twice
+    keeps one. Every other line must survive unchanged.
+    """
+    rest = list(old)
+    for line in new:
+        if line not in rest:
+            return False
+        rest.remove(line)
+    for line in rest:
+        token = first_token(line)
+        if token not in SIMPLE_PROPERTIES:
+            return False
+        if not any(first_token(other) == token for other in new):
+            return False
+    return True
+
+
 def move_properties_before_child_blocks(
     lines: list[str], limit: int = 200
 ) -> tuple[list[str], int]:
     """Move every misordered property to its object's first property slot.
+
+    The moved line keeps its own indentation, and a blank line that stood
+    before it stays where it was: the repair moves one line, it does not
+    reformat the block around it. An object that carries the same flag
+    twice keeps one copy, in its first property slot.
 
     Returns ``(lines, moved)``; ``moved`` is -1 when ``limit`` moves did not
     clear the file (the caller then writes nothing).
@@ -289,15 +329,25 @@ def move_properties_before_child_blocks(
             return lines, -1
         f = found[0]
         prop = lines.pop(f.line)
-        # removing the line may leave two blank lines in a row; keep one
-        if (
-            0 < f.line < len(lines)
-            and not lines[f.line - 1].strip()
-            and not lines[f.line].strip()
-        ):
-            lines.pop(f.line)
+        lines = _drop_duplicate_flag(lines, f, prop)
         lines.insert(f.target, prop)
         moved += 1
+
+
+def _drop_duplicate_flag(lines: list[str], finding: MisorderedProperty,
+                         prop: str) -> list[str]:
+    """Drop a copy of the property that is about to be moved, when the
+    object already carries it in its first property slot. Power BI rejects
+    a duplicated property, so only one copy may stay."""
+    key = first_token(prop)
+    for idx in range(finding.target, len(lines)):
+        if first_token(lines[idx]) != key:
+            continue
+        if indent_level(lines[idx]) != finding.owner_level + 1:
+            continue
+        del lines[idx]
+        break
+    return lines
 
 
 # ---------------------------------------------------------------------------

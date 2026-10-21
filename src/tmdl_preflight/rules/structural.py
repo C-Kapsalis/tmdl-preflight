@@ -20,6 +20,7 @@ from ..recognizers import (
     leaked_property,
     move_properties_before_child_blocks,
     remove_dangling_descriptions,
+    same_lines,
     unpaired_fence,
 )
 
@@ -757,7 +758,7 @@ class PropertyAfterChildBlockRule(Rule):
             def verify(old: str, new: str) -> None:
                 old_l = [ln for ln in old.split(original.newline) if ln.strip()]
                 new_l = [ln for ln in new.split(original.newline) if ln.strip()]
-                if sorted(old_l) != sorted(new_l):
+                if not same_lines(old_l, new_l):
                     raise EditRefused("moving properties changed other lines")
                 if find_properties_after_child_blocks(new.split(original.newline)):
                     raise EditRefused("properties are still out of order")

@@ -136,7 +136,14 @@ until configured.
   section. Valued properties move like flags; a file that would need more
   than 200 moves is left alone. STRICTER: the rule applies to any object,
   not only to measures and columns, and a valued property moves like a
-  flag.
+  flag. The repair moves the one line: the blank line that stood before it
+  stays where it was, the line keeps its own indentation, and an object
+  that carried the same flag twice keeps one copy, in its first property
+  slot (Power BI rejects a duplicated property). BUGFIX: the file keeps
+  the final newline it had. STRICTER: the rule knows a few more simple
+  properties than the reference (`sourceColumn`, `sourceLineageTag`,
+  `isNullable`, `isAvailableInMdx`) and wants the property one level under
+  its owner, where the reference wanted any depth.
 - **M013** fix removes the run and the one blank line directly after it, at
   the end of the file too; blank lines before a run are never touched. New
   option `fix_mode = "attach"` deletes the blank lines between a

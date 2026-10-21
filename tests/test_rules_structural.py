@@ -339,7 +339,8 @@ class TestPropertyAfterChildBlock:
             "\tcolumn 'Metric Selector Order'\n\t\tdisplayFolder: Hidden helpers\n"
             "\t\tisHidden\n" in text
         )
-        assert "\n\n\n" not in text
+        # the blank line that stood before the moved line stays where it was
+        assert "\t\tannotation SummarizationSetBy = Automatic\n\n" in text
         assert rule.check(Context(project)) == []
         assert rule.fix(Context(project)) == []
 
