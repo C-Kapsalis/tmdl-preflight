@@ -48,8 +48,25 @@ def read_text_file(path: Path) -> TextFile:
     bom = raw.startswith(_BOM)
     if bom:
         raw = raw[1:]
-    newline = "\r\n" if "\r\n" in raw else "\n"
+    newline = _dominant_newline(raw)
     return TextFile(Path(path), raw, bom, newline)
+
+
+def _dominant_newline(raw: str) -> str:
+    """The file's line-ending style.
+
+    A file whose lines end with a lone CR (no LF) is read line by line like
+    any other file: treating it as one line would report a different set of
+    findings than the same model with LF.
+    """
+    crlf = raw.count("\r\n")
+    lf = raw.count("\n") - crlf
+    cr = raw.count("\r") - crlf
+    if crlf and not lf and not cr:
+        return "\r\n"
+    if cr and not lf and not crlf:
+        return "\r"
+    return "\r\n" if crlf else "\n"
 
 
 def mixed_line_endings(path: Path) -> bool:

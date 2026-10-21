@@ -61,3 +61,45 @@ def test_a_normal_file_is_not_mixed(tmp_path):
     crlf = tmp_path / "Crlf.tmdl"
     crlf.write_bytes(b"a\r\nb\r\nc\r\n")
     assert mixed_line_endings(crlf) is False
+
+
+def test_a_file_with_a_lone_cr_is_read_line_by_line(tmp_path):
+    """PA-3: a lone CR is a line ending like any other."""
+    from tmdl_preflight.edits import read_text_file
+    path = tmp_path / "Cr.tmdl"
+    path.write_bytes(b"a\rb\rc")
+    tf = read_text_file(path)
+    assert tf.lines() == ["a", "b", "c"], tf.lines()
+
+
+def test_a_file_with_a_lone_cr_keeps_it(tmp_path):
+    """PA-3: a fixer on such a file keeps the lone CR."""
+    from tmdl_preflight.edits import read_text_file, verified_write
+    path = tmp_path / "Cr.tmdl"
+    path.write_bytes(b"a\rb\rc")
+    original = read_text_file(path)
+    verified_write(original, "a\rb\rc\rd")
+    assert path.read_bytes() == b"a\rb\rc\rd", path.read_bytes()
+
+
+def test_a_file_with_a_lone_cr_is_not_mixed(tmp_path):
+    """PA-3: a lone-CR file has ONE style; it may be written."""
+    from tmdl_preflight.edits import mixed_line_endings
+    path = tmp_path / "Cr.tmdl"
+    path.write_bytes(b"a\rb\rc")
+    assert mixed_line_endings(path) is False
+
+
+def test_a_fix_that_adds_a_line_keeps_the_file_s_style(tmp_path):
+    """PA-2: the added line takes the file's own style."""
+    from tmdl_preflight.edits import read_text_file, verified_write
+    for ending in (b"\n", b"\r\n", b"\r"):
+        path = tmp_path / f"F{len(ending)}.tmdl"
+        path.write_bytes(b"a" + ending + b"b" + ending)
+        before = path.read_bytes()
+        original = read_text_file(path)
+        assert original.newline == ending.decode(), (ending, original.newline)
+        verified_write(original, "a" + ending.decode() + "b" + ending.decode()
+                       + "c" + ending.decode())
+        after = path.read_bytes()
+        assert after == b"a" + ending + b"b" + ending + b"c" + ending, after
