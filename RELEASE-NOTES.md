@@ -173,6 +173,10 @@ until configured.
   name contains a double quote.
 - Names declared with trailing spaces inside quotes (`'Frame Size   '`) are
   read trimmed.
+- **D012** checks every measure and calculated column by default, not only
+  the configured grain-guard measure: an over-long `||` chain breaks the
+  model on import wherever it sits. `or_chain_measures` narrows the rule to
+  the named measures. STRICTER.
 
 - **B002** reports a bookmark file that is not valid JSON.
 - **B001-B003** skip bookmarks of archived report copies: paths containing
@@ -312,6 +316,30 @@ until configured.
 
 ### Bug fixes
 
+- **A numeric floor in a guarded ratio is found whatever the spacing.** The
+  floor of a guarded ratio is a closing `]` followed by `<` and digits; the
+  gap between them may be any amount of whitespace, so `[Leads #]  <  5`
+  hides a floor no more than `[Leads #]<5` does. BUGFIX.
+- **The re-check gate of the policy exception matches the whole variable
+  name.** `notrecheck = 1` is not the re-check the rule asks for; the name
+  must stand as a word on both sides. BUGFIX.
+- **The reach guards find their own helpers.** Beside the configured helper
+  names, every measure of the host table whose name starts with
+  `-helper Filter Misses ` or `-helper Slicer Cannot Reach ` is collected and
+  checked like the configured ones (the prefixes are an option,
+  `helper_prefixes`). A helper nobody listed is exactly the one that drifts
+  silently. BUGFIX.
+- **The edge floor counts edges, not relationships.** Two active
+  relationships between the same two tables are one edge, so they count
+  once against `min_active_edges`. The self-test that asks whether some
+  active relationship touches the fact now runs for every reach guard, not
+  only for the ones with a floor. BUGFIX.
+- **A model without a relationships file skips the axis contract.** The
+  contracted edges are not reported as missing; the run notes the skip.
+  BUGFIX.
+- **The below-grain check says when it skips.** A model without the
+  configured host table skips the check, and the run names the skipped
+  check. BUGFIX.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the

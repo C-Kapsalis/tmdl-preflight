@@ -114,7 +114,7 @@ class GrainGuardCoverageRule(Rule):
         if below:
             for model in ctx.models:
                 if ctx.model_matches(below.get("model"), model):
-                    out.extend(self._below(model, below, prefixes))
+                    out.extend(self._below(ctx, model, below, prefixes))
         return out
 
     def _cost(self, model, cid, cfg, prefixes) -> list[Violation]:
@@ -158,7 +158,7 @@ class GrainGuardCoverageRule(Rule):
             if term_present(body, "ISINSCOPE", grain) or term_present(body, "ISFILTERED", grain):
                 v(f"(4b) guard [{guard}] blocks permitted grain {grain}; it must stay usable.",
                   obj=grain)
-        floor = re.compile(r"\]\s?<\s?\d")
+        floor = re.compile(r"\]\s*<\s*\d")
         for name in cfg.get("guarded_ratios") or []:
             m = host.measures.get(name) or next(
                 (x for t in model.table_list for x in t.measure_list if x.name == name), None)
@@ -182,10 +182,14 @@ class GrainGuardCoverageRule(Rule):
                   obj=name, file=m.file, line=m.line)
         return out
 
-    def _below(self, model, cfg, prefixes) -> list[Violation]:
+    def _below(self, ctx: Context, model, cfg, prefixes) -> list[Violation]:
         host = model.get_table(cfg.get("host_table", ""))
         if host is None:
-            return []  # the guard host is absent: the check does not apply here
+            ctx.notes.append(
+                f"C010: {ctx.model_key(model)}: the below-grain check was skipped: the host "
+                f"table '{cfg.get('host_table')}' is not in this model."
+            )
+            return []
         try:
             lines = host.file.read_text(encoding="utf-8-sig").splitlines()
         except (OSError, UnicodeDecodeError):
@@ -340,7 +344,7 @@ class GrainPolicyExceptionRule(Rule):
             if not recheck:
                 v(f"[{o['helper']}] has no VAR = CALCULATE( [{o['guard']}], REMOVEFILTERS( "
                   f"{column} ) ) re-check.")
-            elif not re.search(re.escape(recheck.group(1)) + r"\s*=\s*1\b", after):
+            elif not re.search(r"\b" + re.escape(recheck.group(1)) + r"\b\s*=\s*1\b", after):
                 v(f"[{o['helper']}] computes the re-check {recheck.group(1)} but does not "
                   f"require {recheck.group(1)} = 1 after RETURN; it would forgive more than "
                   f"the policy filter.")
@@ -364,13 +368,16 @@ class ReachGuardHelperConsistencyRule(Rule):
     severity = Severity.ERROR
     option_defaults = {"model": None, "host_table": None, "helpers": [], "min_filter_misses": 0,
                        "reference_helper": None, "canary": [], "exclusions": {},
-                       "natural_keys": {}}
+                       "natural_keys": {}, "helper_prefixes": ["-helper Filter Misses ",
+                                                             "-helper Slicer Cannot Reach "]}
     description = (
         "Reach-guard helpers blank a fact's measures when the filter cannot "
         "reach the fact. Each repeats the per-dimension test ISFILTERED('T') "
         "&& NOT CALCULATE(..., REMOVEFILTERS(), VALUES('T'[key])); a "
         "dimension missing from one helper repeats the total on that family. "
-        "All configured helpers must exist and list the same (table, key) "
+        "Beside the configured helpers, every measure of the host table whose "
+        "name starts with one of helper_prefixes is collected and checked too. "
+        "All helpers must exist and list the same (table, key) "
         "pairs as the reference helper, cover every '_' dimension table "
         "(minus documented exclusions), key each table by the to-column of an "
         "active relationship (or its declared natural key), and never use a "
@@ -399,7 +406,12 @@ class ReachGuardHelperConsistencyRule(Rule):
             v(f"host table '{o['host_table']}' not found.")
             return out
         pairs: dict[str, set[tuple[str, str]]] = {}
-        for name in o["helpers"]:
+        prefixes = list(o.get("helper_prefixes") or [])
+        collected = list(o["helpers"])
+        for m in host.measure_list:
+            if any(m.name.startswith(p) for p in prefixes) and m.name not in collected:
+                collected.append(m.name)
+        for name in collected:
             body = fenced_body(host, name)
             if body is None:
                 v(f"helper [{name}] not found (fenced) in {host.name}.", obj=name)

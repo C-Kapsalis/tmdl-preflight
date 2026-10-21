@@ -207,6 +207,13 @@ class ModelContractRelationshipsRule(Rule):
         out: list[Violation] = []
         for axis in self.options.get("axes") or []:
             for model in _models_for(ctx, axis):
+                if not (model.definition_path / "relationships.tmdl").is_file():
+                    ctx.notes.append(
+                        f"C003: {ctx.model_key(model)}: the axis contract for "
+                        f"'{axis.get('dimension')}' was skipped: the model has no "
+                        f"relationships file."
+                    )
+                    continue
                 out.extend(self._axis(model, axis))
         for guard in self.options.get("reach_guards") or []:
             for model in _models_for(ctx, guard):
@@ -267,16 +274,16 @@ class ModelContractRelationshipsRule(Rule):
         where = self._where(model)
         n = g.get("min_active_edges")
         if n is not None:
-            active = sum(1 for r in model.relationships if r.is_active)
+            active = len(pairs)
             if active < int(n):
                 out.append(self.violation(
                     f"reach guard: only {active} active relationship(s) parsed; expected at "
                     f"least {n}. The check would pass vacuously.", file=where,
                 ))
-            if not any(fact in p for p in pairs):
-                out.append(self.violation(
-                    f"reach guard: no active relationship touches '{fact}'.", file=where, obj=fact,
-                ))
+        if not any(fact in p for p in pairs):
+            out.append(self.violation(
+                f"reach guard: no active relationship touches '{fact}'.", file=where, obj=fact,
+            ))
         for t in g.get("guarded") or []:
             if frozenset((t, fact)) in pairs:
                 out.append(self.violation(
