@@ -47,7 +47,9 @@ class RequiredCalcGroupsRule(Rule):
         "Format) and the time-intelligence selector (z-Selector Time "
         "Intelligence Function), each switchable, plus any names listed. "
         "Without them every visual that applies the selector loses its "
-        "format or its time logic. All switches off skips the rule."
+        "format or its time logic. All switches off skips the rule. Opt-in: "
+        "the rule encodes one team's template, so it runs only when it is "
+        "named."
     )
 
     def _required(self) -> list[str]:
@@ -131,7 +133,8 @@ class IntermediaryHelperFolderRule(Rule):
     description = (
         "Intermediary helper measures ('-Name') are building blocks other "
         "measures reuse; each needs a display folder so they stay grouped "
-        "instead of cluttering the measure list."
+        "instead of cluttering the measure list. Opt-in: the rule encodes "
+        "one team's template, so it runs only when it is named."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -166,7 +169,8 @@ class HelperMeasuresHiddenRule(Rule):
         "Helper measures (names classified as helpers) are plumbing and must "
         "be hidden, except the ones on the always_visible list that report "
         "pages bind directly. Auto-fix adds isHidden to the measure's "
-        "property section."
+        "property section. Opt-in: the rule encodes one team's template, so "
+        "it runs only when it is named."
     )
 
     def _offenders(self, ctx: Context, model=None):
@@ -256,7 +260,8 @@ class UnusedHelperMeasuresRule(Rule):
         "Inventory (never fails): helper measures no expression in the model "
         "and no report file next to it references, and the most used "
         "helpers. Check the other models built from the same template before "
-        "deleting one."
+        "deleting one. Opt-in: the rule encodes one team's template, so it "
+        "runs only when it is named."
     )
 
     #: the report files that can name a measure
@@ -352,7 +357,8 @@ class UserFacingMeasureVisibleRule(Rule):
         "A measure whose name says it is for report authors (not a helper "
         "name) must not be hidden: hidden, it disappears from the field list "
         "and from Q&A. Either unhide it or rename it with a helper prefix; "
-        "decide per measure."
+        "decide per measure. Opt-in: the rule encodes one team's template, "
+        "so it runs only when it is named."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -412,7 +418,8 @@ class UserFacingDisplayFolderRule(Rule):
     opt_in = True
     description = (
         "Advisory: user-facing measures without a display folder, with the "
-        "folder coverage of the model."
+        "folder coverage of the model. Opt-in: the rule encodes one team's "
+        "template, so it runs only when it is named."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -450,7 +457,8 @@ class UserFacingMeasureDescriptionRule(Rule):
     description = (
         "Advisory: user-facing measures (by name, hidden or not) whose /// "
         "description is missing or shorter than min_length characters "
-        "(default 10). enabled = false skips the rule."
+        "(default 10). enabled = false skips the rule. Opt-in: the rule "
+        "encodes one team's template, so it runs only when it is named."
     )
 
     def disabled_by_policy(self) -> bool:
@@ -488,7 +496,10 @@ class TableDescriptionCoverageRule(Rule):
     name = "table-description-coverage"
     severity = Severity.INFO
     opt_in = True
-    description = "Advisory: how many tables carry a /// description."
+    description = (
+        "Advisory: how many tables carry a /// description. Opt-in: the rule "
+        "encodes one team's template, so it runs only when it is named."
+    )
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
@@ -578,7 +589,9 @@ class FactTableFilterCoverageRule(Rule):
         "(f- prefix); otherwise visual-level filters never narrow that "
         "fact's rows. Facts reached only through the analysis-category "
         "mechanism (an axis measure whose group maps to a category) are "
-        "exempt. pbip-forge can write the missing filter measure."
+        "exempt. pbip-forge can write the missing filter measure. Opt-in: "
+        "the rule encodes one team's template, so it runs only when it is "
+        "named."
     )
 
     def check(self, ctx: Context) -> list[Violation]:

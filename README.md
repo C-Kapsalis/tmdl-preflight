@@ -228,7 +228,9 @@ Details, scopes, examples and severity semantics: see the generated
 [documentation](#documentation) below. Print the same catalog from the
 tool: `tmdl-preflight rules` (or `--json`, or `--format markdown --out
 FILE`, with `--check` to fail when a committed copy is stale). Opt-in rules
-run only when named in `--select` or the configuration's `select`.
+run only when named in `--select` or the configuration's `select`; the
+generated catalog lists the whole opt-in set as a `select` line you can
+paste into your configuration file.
 
 ## Selecting rules and other flags
 

@@ -287,6 +287,12 @@ until configured.
 
 ### Changed
 
+- **The opt-in rules say so, and the catalog lists how to enable them.**
+  Every rule that encodes one team's conventions (the organisation, naming
+  and coverage rules, the required calculation groups and the format
+  inference naming) now says in its description that it is opt-in, and
+  the generated catalog prints the `select` line that turns the whole
+  opt-in set on.
 - **The unused-helper check prints the reference's inventory.** It reports
   per model how many TMDL and report files it scanned, how many helper
   measures there are, how many are used and how many are not, the helpers
