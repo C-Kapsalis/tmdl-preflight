@@ -129,4 +129,17 @@ def test_the_missing_directories_and_files(tmp_path):
     cfg = write_config(tmp_path, config)
     found = violations(run_check(root, "M016", config=cfg)[1], "M016")
     messages = [f["message"] for f in found]
-    assert any("required files missing: [database.tmdl]" in m for m in messages), messages
+    assert any("required files missing: ['database.tmdl']" in m for m in messages), messages
+
+
+def test_the_missing_directories(tmp_path):
+    """PA14: the directories message."""
+    root = tmp_path / "Cafe.SemanticModel"
+    (root / "definition").mkdir(parents=True)
+    (root / "definition" / "model.tmdl").write_text("model Model\n", encoding="utf-8")
+    found = violations(run_check(root, "M016")[1], "M016")
+    messages = [f["message"] for f in found]
+    assert any("required directories missing: ['tables']" in m for m in messages), messages
+    found = violations(run_check(root, "M001")[1], "M001")
+    messages = [f["message"] for f in found]
+    assert any("required directories missing: ['tables']" in m for m in messages), messages

@@ -83,8 +83,8 @@ class ModelStructureRule(Rule):
                 out.append(
                     self.violation(
                         f"{d.parent.name}: required directories missing: "
-                        f"[{', '.join(missing_dirs)}]. The model cannot be "
-                        f"opened or deployed without them; this usually means a "
+                        f"{missing_dirs}. The model cannot be opened or "
+                        f"deployed without them; this usually means a "
                         f"truncated export or a bad merge. Restore them from "
                         f"source control, or save the project again from Power "
                         f"BI Desktop.",
@@ -1115,17 +1115,19 @@ class TmdlFileSanityRule(Rule):
         for d in ctx.definition_dirs:
             if not (d / "tables").is_dir():
                 out.append(self.violation(
-                    f"{d.parent.name}: required directories missing: [tables]",
+                    f"{d.parent.name}: required directories missing: "
+                    f"['tables']. The model defines no tables without them; "
+                    f"restore the folder from source control, or save the "
+                    f"project again from Power BI Desktop.",
                     file=d,
                 ))
             missing_files = [name for name in required_files if not (d / name).is_file()]
             if missing_files:
                 out.append(self.violation(
-                    f"{d.parent.name}: required files missing: "
-                    f"[{', '.join(missing_files)}]. Power BI Desktop always "
-                    f"writes them, so this usually means a partial export or a "
-                    f"bad merge; restore them from source control or save the "
-                    f"project again.",
+                    f"{d.parent.name}: required files missing: {missing_files}. "
+                    f"Power BI Desktop always writes them, so this usually "
+                    f"means a partial export or a bad merge; restore them from "
+                    f"source control or save the project again.",
                     file=d, obj=", ".join(missing_files),
                 ))
             table_files = {f"tables/{t}.tmdl" for t in required_tables}
