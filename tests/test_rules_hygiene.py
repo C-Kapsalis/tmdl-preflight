@@ -73,15 +73,20 @@ class TestSpaceIndentation:
         found = violations(payload, "M017")
         assert code == 1 and len(found) == 1 and found[0]["line"] == 9
 
-    def test_fenced_body_exempt_unless_strict(self, tmp_path):
+    def test_a_fenced_body_is_flagged_too(self, tmp_path):
+        """Every line that starts with four spaces is an error, expression
+        bodies included."""
         body = BEANS.replace(
             "\tmeasure Kg = SUM(Beans[kg])\n",
             "\tmeasure Kg = ```\n    VAR x = SUM(Beans[kg])\n    RETURN x\n\t\t\t```\n",
         )
         model = _model(tmp_path, {"Beans": body})
-        assert violations(run_check(model, "M017")[1]) == []
-        strict = run_check(model, "M017", config={"rules": {"M017": {"strict": True}}})[1]
-        assert len(violations(strict, "M017")) == 2
+        found = violations(run_check(model, "M017")[1], "M017")
+        assert len(found) == 2, found
+        assert all("Uses spaces instead of tabs" in f["message"] for f in found)
+        lenient = run_check(model, "M017",
+                            config={"rules": {"M017": {"strict": False}}})[1]
+        assert violations(lenient, "M017") == []
 
     def test_tabs_then_spaces_and_three_spaces_are_clean(self, tmp_path):
         body = BEANS.replace("\t\tdataType: double\n", "\t\t    dataType: double\n").replace(
@@ -89,13 +94,13 @@ class TestSpaceIndentation:
         model = _model(tmp_path, {"Beans": body})
         assert violations(run_check(model, "M017")[1]) == []
 
-    def test_bare_multiline_info_is_opt_in(self, tmp_path):
+    def test_a_bare_multiline_body_is_an_info_note(self, tmp_path):
+        """The bare quoted multi-line measure note is always computed as a
+        non-failing note."""
         body = BEANS.replace("\tmeasure Kg = SUM(Beans[kg])\n",
                              "\tmeasure 'Kg' =\n\t\t\tSUM(Beans[kg])\n")
         model = _model(tmp_path, {"Beans": body})
-        assert violations(run_check(model, "M017")[1]) == []
-        payload = run_check(model, "M017", config={"rules": {"M017": {"bare_multiline_info": True}}})[1]
-        found = violations(payload, "M017")
+        found = violations(run_check(model, "M017")[1], "M017")
         assert len(found) == 1 and found[0]["severity"] == "info"
         assert "Multiline DAX should use triple backticks" in found[0]["message"]
 

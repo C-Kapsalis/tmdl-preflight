@@ -277,6 +277,21 @@ until configured.
 
 ### Bug fixes
 
+- **Every line that starts with four spaces is an M017 error, expression
+  bodies included.** The rule's `strict` option (on by default) exempts
+  expression bodies; the default now flags them too, and the message is
+  `Line <N>: Uses spaces instead of tabs for indentation`. A line that
+  starts with tabs and then has spaces is still never flagged. The bare
+  quoted multi-line measure note is always computed, as a non-failing info
+  note.
+- **M018 reports one finding per duplicated annotation name.** A name used
+  three times yielded two findings that each said "appears twice". There is
+  now one finding per name, saying how many times it occurs and listing
+  every line.
+- **Archived copies are skipped by default.** With no `exclude` list
+  configured, every file whose path relative to the scan root has a folder
+  segment that holds `legacy`, `_backup` or `_b2` is skipped. A configured
+  `exclude` list replaces the default; an empty list turns it off.
 - **A file that mixes its line endings is never rewritten.** A fleet
   committed from Windows and then touched by a tool that writes LF ends up
   with a file that mixes CRLF and LF. Such a file cannot be split on one

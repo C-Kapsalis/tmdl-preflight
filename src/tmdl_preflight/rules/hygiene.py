@@ -55,16 +55,16 @@ class SpaceIndentationRule(Rule):
     id = "M017"
     name = "space-indentation"
     severity = Severity.ERROR
-    option_defaults = {"strict": False, "bare_multiline_info": False}
+    option_defaults = {"strict": True, "bare_multiline_info": True}
     description = (
         "TMDL nests objects by tab indentation, and Power BI Desktop always "
-        "writes tabs. A declaration or property line that starts with four "
-        "spaces (usually pasted from an editor that turned tabs into spaces, "
-        "or written by a script) may attach to the wrong object or fail to "
-        "load. Lines inside expression bodies are exempt unless strict is "
-        "on; a line that starts with tabs and then has spaces is never "
-        "flagged. Optional info (bare_multiline_info): a quoted measure whose "
-        "multi-line body is not fenced with ```."
+        "writes tabs. A line that starts with four spaces (usually pasted "
+        "from an editor that turned tabs into spaces, or written by a "
+        "script) may attach to the wrong object or fail to load. Every such "
+        "line is an error, expression bodies included; a line that starts "
+        "with tabs and then has spaces is never flagged. Optional info "
+        "(bare_multiline_info): a quoted measure whose multi-line body is "
+        "not fenced with ```."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -83,9 +83,8 @@ class SpaceIndentationRule(Rule):
                 for idx, line in enumerate(lines):
                     if line.startswith("    ") and idx not in exempt:
                         out.append(self.violation(
-                            f"line {idx + 1} is indented with spaces where TMDL "
-                            f"expects tabs; replace each four-space step with "
-                            f"one tab.",
+                            f"Line {idx + 1}: Uses spaces instead of tabs for "
+                            f"indentation",
                             file=f, line=idx + 1,
                         ))
                     if style and _BARE_QUOTED_MEASURE_RE.match(line):
