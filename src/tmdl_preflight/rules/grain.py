@@ -458,6 +458,11 @@ class ReachGuardHelperConsistencyRule(Rule):
 # The `grain` command: derive blocked and conformed dimensions from the graph
 # ---------------------------------------------------------------------------
 
+#: The fact the cost side reads and the facts the population side reads, when
+#: the caller names none.
+DEFAULT_COST_FACT = "Campaigns"
+DEFAULT_BACKEND_FACTS = ("_Users", "Transactions")
+
 _USEREL_RE = re.compile(
     r"USERELATIONSHIP\s*\(\s*(?:'((?:[^']|'')+)'|([A-Za-z_][\w ]*?))\s*\[[^\]]*\]\s*,"
     r"\s*(?:'((?:[^']|'')+)'|([A-Za-z_][\w ]*?))\s*\[[^\]]*\]\s*\)",
@@ -500,13 +505,15 @@ def propagation_graph(model: SemanticModel) -> dict[str, set[str]]:
 
 
 def _reach(steps: dict[str, set[str]], start: str) -> set[str]:
+    """Tables a filter on ``start`` reaches. The table itself counts as
+    reached: a dimension that is also a fact filters that fact."""
     seen, todo = {start}, [start]
     while todo:
         for nxt in steps.get(todo.pop(), ()):
             if nxt not in seen:
                 seen.add(nxt)
                 todo.append(nxt)
-    return seen - {start}
+    return seen
 
 
 def grain_verdicts(model: SemanticModel, cost_fact: str, backend_facts: list[str],
@@ -541,19 +548,24 @@ def grain_gaps(model: SemanticModel, rows: list[dict], guard_table: str,
     host = model.get_table(guard_table)
     body = fenced_body(host, guard_measure) if host else None
     if body is None:
-        return f"guard [{guard_measure}] is not declared in fenced form in {guard_table}", []
+        return (f"guard measure {guard_measure!r} not found in {guard_table}.tmdl "
+                f"(fenced form expected)"), []
     gaps = []
     for row in rows:
         d = row["dimension"]
         if row["verdict"] == "CONFORMED":
-            if term_present(body, "ISFILTERED", _qt(d)):
-                gaps.append(f"{d}: conformed but blocked table-wide by ISFILTERED({_qt(d)})")
             continue
         if d.startswith("z-") or not row["exposed_columns"]:
             continue
         if not term_present(body, "ISFILTERED", _qt(d)):
-            gaps.append(f"{d}: {row['verdict']}, guard lacks ISFILTERED({_qt(d)})")
+            gaps.append(f"{d}: no table-level ISFILTERED")
         for col in row["exposed_columns"]:
             if not term_present(body, "ISINSCOPE", col):
-                gaps.append(f"{d}: guard lacks ISINSCOPE({col})")
+                gaps.append(f"{d}: axis column {col} has no ISINSCOPE term")
+    for row in rows:
+        d = row["dimension"]
+        if row["verdict"] == "CONFORMED" and term_present(body, "ISFILTERED", _qt(d)):
+            gaps.append(f"{d}: conformed table is blocked table-wide — that blanks the headline "
+                        f"ratios (column-level ISINSCOPE terms on it are rate-eligibility rulings "
+                        f"and stay allowed)")
     return None, gaps

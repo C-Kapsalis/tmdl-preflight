@@ -200,10 +200,18 @@ until configured.
 - `fix --clear-cache` deletes `<Model>.SemanticModel/.pbi/cache.abf` after
   lineage tags changed; without it the tool prints a hint when the cache
   exists.
-- `grain <path> --cost-fact T --backend-fact T ... [--permit T] [--check
-  --guard-table T --guard-measure M] [--emit-config]` derives conformed and
+- `grain <path> [--cost-fact T] [--backend-fact T ...] [--permit T] [--check
+  --guard-table T [--guard-measure M]] [--emit-config]` derives conformed and
   blocked dimensions from the relationship graph (USERELATIONSHIP to a
-  calendar counts) and checks a grain guard against it.
+  calendar counts) and checks a grain guard against it. The cost fact
+  defaults to `Campaigns`, the backend facts to `_Users` and `Transactions`
+  (naming one replaces the default list) and the guard measure to
+  `-helper Cost Grain Valid`; a guard measure whose name starts with `-`
+  needs the `--guard-measure=...` form. The verdict table is one row per
+  dimension, left-aligned and padded, and `--check` prints the coverage
+  gaps (or the clean line) under it. BUGFIX: a dimension that is also a
+  fact counts as reaching itself, so a backend fact that is a dimension is
+  CONFORMED when it reaches every backend fact.
 - `report complexity|nameof|relationships <path> [--json]`: read-only
   reports (measure length distribution and threshold suggestions, NAMEOF
   inventory, relationship topology).
