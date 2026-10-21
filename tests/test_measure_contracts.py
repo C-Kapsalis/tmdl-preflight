@@ -75,6 +75,23 @@ def test_one_model_with_the_anchor_reports_the_universe_finding(tmp_path):
     assert "discovery is broken" in found[0]["message"]
 
 
+def test_the_minimum_universe_defaults_to_two(tmp_path):
+    """A contract that only names a template still needs two models."""
+    measures = ("\tmeasure '-helper Paid Surface' =\n\t\t\t1\n"
+                "\t\tlineageTag: " + TAG.format(2001) + "\n\n")
+    model = _model(tmp_path, measures)
+    config = {"rules": {"measure-reference-contract": {"contracts": [{
+        "kind": "must_not_reference",
+        "table": "#Report Measures",
+        "measure": "-helper Paid Surface",
+        "tables": ["_Queries"],
+        "template": "Delivery",
+    }]}}}
+    code, payload = run_check(model, "measure-reference-contract", config=config)
+    assert code == 1
+    assert len(_violations(payload, "universe")) == 1
+
+
 # ---------------------------------------------------------------------------
 # CG-16: a commented-out DIVIDE is not live DAX
 # ---------------------------------------------------------------------------

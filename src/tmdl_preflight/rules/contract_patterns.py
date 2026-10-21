@@ -90,7 +90,8 @@ class MeasureReferenceContractRule(Rule):
             return []
         universe = [m for m in models if m.find_measures(anchor)]
         template_found = any(ctx.model_matches(template, m) for m in universe)
-        if len(universe) >= int(floor or 0) and (not template or template_found):
+        want = int(floor) if floor is not None else 2
+        if len(universe) >= want and (not template or template_found):
             return []
         return [self.violation(
             f"universe check: found {len(universe)} model(s) declaring [{anchor}]"
