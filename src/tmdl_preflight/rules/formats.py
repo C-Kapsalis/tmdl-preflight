@@ -38,6 +38,7 @@ class FormatMinDecimalsRule(Rule):
             except (OSError, UnicodeDecodeError):
                 continue
             axes = [None, *branched_axes(text)]
+            where = ctx.scan_relative(table.file) or table.file.name
             for exp in expectations:
                 name = exp.get("name", "")
                 floor = int(exp.get("min_decimals", 1))
@@ -46,11 +47,9 @@ class FormatMinDecimalsRule(Rule):
                     places = decimals(fmt)
                     if fmt == UNKNOWN or places is None or places >= floor:
                         continue
-                    where = f"axis '{axis}'" if axis else "the measure-name path"
                     out.append(self.violation(
-                        f"{ctx.model_key(model)}: '{name}' resolves to '{fmt}' on {where} "
-                        f"({places} decimal(s), at least {floor} required). Reorder or add a "
-                        f"SWITCH arm, or rename the measure.",
-                        file=table.file, obj=f"{name}@{axis or 'measure name'}",
+                        f"{where} axis={axis or 'SELECTEDMEASURENAME'} renders "
+                        f"'{name}' as {fmt!r} — {places} decimals",
+                        file=table.file, obj=f"{name}@{axis or 'SELECTEDMEASURENAME'}",
                     ))
         return out

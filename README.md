@@ -312,8 +312,9 @@ measure-length distribution with threshold suggestions, the NAMEOF inventory
 (with the broken references and per-table counts), or the relationship
 topology (cardinalities, both-direction filters, hubs, unrelated tables).
 `tmdl-preflight format-resolve <path> --name NAME [--compare NAME2]` shows
-the format a measure name gets from a format calculation group on every
-axis the group branches on, before a rename ships.
+the format a measure name gets from a format calculation group, for every
+model under the path and on every axis the group branches on, before a
+rename ships.
 
 `tmdl-preflight grain <path> --cost-fact T --backend-fact T ...` works out
 from the relationship graph which dimensions can filter both sides of a

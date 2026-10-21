@@ -283,6 +283,32 @@ until configured.
 
 ### Changed
 
+- **`format-resolve` resolves every model under the path.** It used to
+  answer for the first model it found; now it answers for each model under
+  the path, in model-path order, one row for the measure-name path and one
+  row for every axis the calculation group branches on. A model without the
+  calculation group is skipped silently. Each row reads
+  `  <model> axis=<axis> <format>`, the format quoted the Python way, with
+  `  ->  <format>` and `   ⚠ CHANGES` appended under `--compare`. A row
+  whose conditions could not be read is followed by
+  `       unresolved: [...]` with the first two conditions named.
+- **`format-resolve` reads a wider grammar.** A parenthesised condition,
+  `FALSE()`, a `TRUE ()` selector, a lower-case `return`, a fenced
+  definition and a `{...}` list inside a condition are now evaluated
+  instead of reported as unknown. BUGFIX.
+- **An unquoted table in `SELECTEDVALUE` means "nothing selected".** The
+  condition is then readable (usually false) and the evaluation continues,
+  so the format resolves instead of coming back unknown. BUGFIX.
+- **The format resolver names every unreadable condition of a chain.** It
+  recorded only the first; now each unreadable condition of an `&&` / `||`
+  chain is named. A non-literal needle in `CONTAINSSTRING` and an unquoted
+  table in `ISINSCOPE` give the unknown result without a note, and the
+  note for a selector that is not `TRUE()` is exactly
+  `SWITCH on a non-TRUE() selector`. BUGFIX.
+- **S005 names the file and the axis it failed on.** The finding reads
+  `<file> axis=<axis> renders '<name>' as <format> — <n> decimals`, so a
+  reviewer sees which calculation group and which branch lost the
+  decimals. One finding per failing axis, not one per model.
 - **`stats --measures` prints one summary per model.** A folder with two
   models prints two summaries, each with its own totals, in the layout a
   reviewer reads: the totals, the user-facing and helper split, the

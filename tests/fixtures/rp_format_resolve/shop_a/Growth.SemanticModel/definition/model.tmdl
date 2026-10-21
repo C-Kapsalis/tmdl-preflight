@@ -1,0 +1,11 @@
+model Model
+	culture: en-US
+
+ref table 'Sales'
+ref table '_Products'
+ref table '__Calendar'
+ref table 'x-Selector 1'
+ref table 'y-Selector 1'
+ref table 'z-Selector Format'
+ref table 'Old Import'
+ref table 'Report Helpers'

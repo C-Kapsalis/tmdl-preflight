@@ -602,34 +602,36 @@ def _cmd_format_resolve(args) -> int:
     from .format_resolver import UNKNOWN, branched_axes, decimals, resolve
 
     ctx = _context(args.path)
-    table = next((t for m in ctx.models for t in m.table_list if t.name == args.table), None)
-    if table is None:
-        raise UsageError(f"no table '{args.table}' in {args.path}")
-    text = table.file.read_text(encoding="utf-8-sig")
-    axes = [args.axis] if args.axis else [None, *branched_axes(text)]
     rows = []
-    for axis in axes:
-        fmt, unresolved = resolve(table.file, args.name, axis=axis, label=args.label)
-        row = {"axis": axis, "format": fmt, "decimals": decimals(fmt), "unresolved": unresolved}
-        if args.compare:
-            other, _u = resolve(table.file, args.compare, axis=axis)
-            row["compare_format"] = other
-            row["compare_decimals"] = decimals(other)
-            row["decimals_differ"] = decimals(other) != decimals(fmt)
-        rows.append(row)
+    for model in ctx.models:
+        table = model.get_table(args.table)
+        if table is None:
+            continue
+        text = table.file.read_text(encoding="utf-8-sig")
+        axes = [args.axis] if args.axis else [None, *branched_axes(text)]
+        for axis in axes:
+            fmt, unresolved = resolve(table.file, args.name, axis=axis, label=args.label)
+            row = {"model": ctx.model_key(model), "axis": axis, "format": fmt,
+                   "decimals": decimals(fmt), "unresolved": unresolved}
+            if args.compare:
+                other, _u = resolve(table.file, args.compare, axis=axis)
+                row["compare_format"] = other
+                row["compare_decimals"] = decimals(other)
+                row["decimals_differ"] = decimals(other) != decimals(fmt)
+            rows.append(row)
     if args.json:
         print(json.dumps({"name": args.name, "compare": args.compare, "results": rows}, indent=2))
         return 0
     for row in rows:
-        where = row["axis"] or "(measure name)"
-        line = f"{where}: {row['format'] if row['format'] != UNKNOWN else '<unknown>'}"
+        where = row["axis"] or "SELECTEDMEASURENAME"
+        line = f"  {row['model']:<46} axis={where:<24} {row['format']!r}"
         if args.compare:
-            line += f"   {args.compare}: {row['compare_format']}"
+            line += f"  ->  {row['compare_format']!r}"
             if row["decimals_differ"]:
-                line += "   (decimals differ)"
+                line += "   ⚠ CHANGES"
         print(line)
-        for u in row["unresolved"]:
-            print(f"    unresolved: {u}")
+        if row["unresolved"]:
+            print(f"       unresolved: {row['unresolved'][:2]!r}")
     return 0
 
 
