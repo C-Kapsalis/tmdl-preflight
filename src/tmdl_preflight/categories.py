@@ -196,6 +196,25 @@ def axis_rows(model: SemanticModel, globs: Iterable[str]) -> list[AxisRow]:
 # ---------------------------------------------------------------------------
 
 _BARE_REF_RE = re.compile(r"(?<![\w'\]])\[([^\]]+)\]")
+#: A reference with a table qualifier: `'Table'[Name]` or `Table[Name]`.
+_QUALIFIED_REF_RE = re.compile(
+    r"(?:'((?:[^'\n]|'')+)'|([A-Za-z_][\w ]*?))\s*\[([^\]\n]+)\]")
+
+
+def _measure_refs(expr: str) -> set[str]:
+    """The measure names an expression references.
+
+    A bare ``[Name]`` and a qualified ``'Table'[Name]`` (or
+    ``Table[Name]``) are the same reference when ``Name`` is a measure the
+    model declares. The qualifier is how a model says which table owns the
+    measure; it does not change what the reference means.
+    """
+    out: set[str] = set()
+    for m in _BARE_REF_RE.finditer(expr):
+        out.add(m.group(1))
+    for m in _QUALIFIED_REF_RE.finditer(expr):
+        out.add(m.group(3).strip())
+    return out
 
 
 def _direct_facts(expr: str, facts: list[str]) -> set[str]:
@@ -227,7 +246,8 @@ class FactTracer:
             return
         expr = self.by_name[name].expression or ""
         self._direct[name] = _direct_facts(expr, self.facts)
-        self._edges[name] = {r for r in _BARE_REF_RE.findall(expr) if r in self.by_name and r != name}
+        self._edges[name] = {r for r in _measure_refs(expr)
+                             if r in self.by_name and r != name}
 
     def trace(self, name: str) -> set[str]:
         if name not in self.by_name:

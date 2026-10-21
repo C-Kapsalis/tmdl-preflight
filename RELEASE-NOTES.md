@@ -277,6 +277,13 @@ until configured.
 
 ### Bug fixes
 
+- **A qualified measure reference is an edge in the fact trace.** A
+  reference of the form `'Table'[Name]` or `Table[Name]`, where `Name` is a
+  measure the model declares, is followed like a bare `[Name]`. The
+  qualifier says which table owns the measure; it does not change what the
+  reference means. Without this, a filter measure that reached a fact
+  through a qualified reference was not counted as coverage, and the
+  filter-coverage rule reported a false error.
 - **A single-model lineage fix clears Desktop's cache by default.** The
   cache (`.pbi/cache.abf`) is what makes Power BI Desktop reuse the old
   lineage tags, so a run that changed a tag now deletes it and says
