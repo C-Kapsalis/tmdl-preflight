@@ -171,6 +171,8 @@ until configured.
   the per-kind counts the way the reference does: `[OK] Extracted 3
   non-measure DAX blocks:` with one `   - {kind}: {count}` line per kind,
   sorted by kind name. It stays opt-in: the convention is one template's.
+  STRICTER: the reference failed the run on a model without such blocks,
+  and so does the tool now.
 - **X001** says `'Left'[key] compared against VALUES('Right'[key])` and
   advises comparing at the grain the question is asked at: build each
   side's set of business keys with
@@ -179,9 +181,9 @@ until configured.
 - **D002** is rebuilt on the new `tmdl_preflight.nameof` module: quoted
   members (`Sales['Amount']`), double-quoted tables and dotted table names
   are accepted; an unparseable NAMEOF in a field-parameter row is an error;
-  a table-qualified measure outside a field parameter is a warning ("use
-  the bare form"); new option `excluded_tables`. Every unresolved-reference
-  message contains "not found".
+  a table-qualified measure outside a field parameter is a warning (it
+  names the bare form to use instead); new option `excluded_tables`. Every
+  unresolved-reference message contains "not found".
 - **D002** says why a reference does not resolve, in the reference's
   wording: `Measure 'X' not found in any table`, `Ambiguous: measure 'X'
   exists in multiple tables: ['A', 'B']`, `Table 'T' not found`, `Column 'C'
@@ -217,7 +219,9 @@ until configured.
   y-axis field-parameter tables before it removes anything else, and says
   what it repaired and what it could not: `repaired 1 site-group(s)` and
   `NOT auto-fixable: Sales[Revenue] -> Alpha`. Every model is processed
-  before the run ends, and the run fails when something is left to a human.
+  before the run ends, and the run fails when something is left to a
+  human. BUGFIX: the repair no longer stops at the first model that needs
+  a human.
 - **NAMEOF** extraction ignores a malformed reference whose quoted table
   name contains a double quote.
 - Names declared with trailing spaces inside quotes (`'Frame Size   '`) are
