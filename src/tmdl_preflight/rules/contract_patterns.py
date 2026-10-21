@@ -348,11 +348,11 @@ class TypedFlagPredicatesRule(Rule):
 
         if len(found) < int(o.get("min_predicates") or 0):
             self_test(f"only {len(found)} flag predicate(s) found, fewer than {o.get('min_predicates')}.")
-        seen = {(c, op, lit.upper()) for c, op, lit, _f, _n in found}
-        seen |= {(c, op, lit.rstrip("()").upper()) for c, op, lit, _f, _n in found}
+        seen = {(c, op, lit) for c, op, lit, _f, _n in found}
+        seen |= {(c, op, lit.rstrip("()")) for c, op, lit, _f, _n in found}
         for canary in o.get("canaries") or []:
             col, op, lit = canary
-            if (col, op, str(lit).upper()) not in seen:
+            if (col, op, str(lit)) not in seen:
                 self_test(f"canary predicate {col} {op} {lit} was not found.")
         ints = {c for c, t in flags.items() if t.lower() == "int64"}
         bools = {c for c, t in flags.items() if t.lower() == "boolean"}

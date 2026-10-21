@@ -195,6 +195,18 @@ def test_the_canary_literal_drops_a_trailing_pair_of_parentheses(tmp_path):
     assert _violations(payload) == []
 
 
+def test_the_canary_literal_stays_case_sensitive(tmp_path):
+    """The model writes `= true()`, the canary asks for `= TRUE`."""
+    measures = ("\tmeasure 'Subs #' =\n"
+                "\t\t\tCOUNTROWS(FILTER(Subscriptions, Subscriptions[has_limbo] = true()))\n"
+                "\t\tlineageTag: " + TAG.format(2001) + "\n\n")
+    model = _model(tmp_path, measures)
+    code, payload = run_check(model, "typed-flag-predicates", config=_flag_config(
+        min_predicates=1, canaries=[["has_limbo", "=", "TRUE"]]))
+    assert code == 1
+    assert len(_violations(payload, "canary predicate")) == 1
+
+
 # ---------------------------------------------------------------------------
 # CG-19: the tolerant numerator brackets
 # ---------------------------------------------------------------------------
