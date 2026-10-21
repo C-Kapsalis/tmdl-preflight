@@ -26,10 +26,12 @@ class DaxDelimiterBalanceRule(Rule):
         "calculated-partition sources, calculation items, dynamic format "
         "strings) must have balanced parentheses, braces, brackets and "
         "quotes, with comments and string contents excluded. Each unbalanced "
-        "expression is an error. The share of clean measure and "
-        "calculated-column expressions is reported; below min_success_rate "
-        "(default 0.90) one extra error says so. A model with tables but no "
-        "measures gets a warning (usually a parsing or layout problem)."
+        "expression is an error, and the message names the delimiter kind "
+        "and the character position of the problem. The share of clean "
+        "measure and calculated-column expressions is reported; below "
+        "min_success_rate (default 0.90) one extra error says so. A model "
+        "with tables but no measures gets a warning (usually a parsing or "
+        "layout problem)."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -39,7 +41,7 @@ class DaxDelimiterBalanceRule(Rule):
             counted = clean = 0
             for block in model.dax_blocks():
                 errors = check_balanced_delimiters(block.expression)
-                if block.kind in ("measure", "calculated_column") and block.expression.strip():
+                if block.kind in ("measure", "calculated_column") and block.expression:
                     counted += 1
                     clean += 0 if errors else 1
                 for err in errors:

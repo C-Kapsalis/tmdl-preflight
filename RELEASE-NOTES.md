@@ -151,10 +151,17 @@ until configured.
 - A fixer marked unsafe can be opted into a blanket `fix` by its own option
   (R007 `fix_autodetected_relationships`).
 - **D001** messages name the delimiter kind ("double quote", "single
-  quote", "bracket", "parenthesis", "brace"). New option `min_success_rate`
-  (default 0.90): when fewer measure and calculated-column expressions are
-  clean, one extra error says so (each unbalanced expression stays an error
-  whatever the share). A model with tables but no measures gets a warning.
+  quote", "bracket", "parenthesis", "brace") and the character position of
+  the problem inside the expression: `Unmatched opening parenthesis '(' at
+  position 3`. The closers come first, in text order; only the earliest
+  still-open opener of each kind is reported, in the order parenthesis,
+  bracket, brace, double quote, single quote. The object label is
+  `Table[Measure]` (or `Table[Column]`, `Table (partition source)`,
+  `Table[Item] (calculationItem)`, `Table (formatStringDefinition)`). New
+  option `min_success_rate` (default 0.90): when fewer measure and
+  calculated-column expressions are clean, one extra error says so (each
+  unbalanced expression stays an error whatever the share). A model with
+  tables but no measures gets a warning.
 - **D002** is rebuilt on the new `tmdl_preflight.nameof` module: quoted
   members (`Sales['Amount']`), double-quoted tables and dotted table names
   are accepted; an unparseable NAMEOF in a field-parameter row is an error;
@@ -304,6 +311,26 @@ until configured.
 
 ### Bug fixes
 
+- **An apostrophe or a parenthesis inside a bracketed name belongs to the
+  name.** `SUM([Customer's Count])` and `SUM([Cost (USD])` are legal DAX:
+  the checker reads the whole bracketed name as one region and reports
+  nothing. The reference read the characters inside the brackets as code
+  and reported three unclosed delimiters for the first name. BUGFIX.
+- **A delimiter of one kind inside another is reported.** `{(})` reports
+  the closing brace and the opening brace. The reference paired every kind
+  separately and reported nothing. STRICTER.
+- **An unterminated block comment is ordinary text.** `/* unterminated (`
+  no longer hides the rest of the expression: the delimiters after it are
+  checked, so a broken comment surfaces instead of passing unnoticed.
+  BUGFIX.
+- **An escaped quote inside a string is blanked as two spaces.** The
+  contents of a string literal are blanked and the length of the text
+  never changes; only the two quotes of the literal itself survive.
+  BUGFIX.
+- **A clean share of exactly 90% is not below the threshold.** Nine clean
+  expressions out of ten meet the 90% threshold: the share is compared as
+  a share, not as a floating-point percentage, so the boundary is not a
+  coin toss. BUGFIX.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the
@@ -392,6 +419,12 @@ and rule wins; DESKTOP: Power BI Desktop evidence).
 - STRICTER: `test_dax_parsable::test_dax_comprehensive_syntax_check[one_unmatched_paren]`
   asserts the D001 error even though the clean share (90.9%) meets the
   threshold (earlier versions passed).
+- Existing test updated: `test_dax_parsable::test_dax_balanced_brackets` and
+  `::test_dax_comprehensive_syntax_check` find the measure and
+  calculated-column findings in the message; the object label is now
+  `Table[Object]`, with no kind in brackets.
+- Existing test updated: `test_dax::TestBalancedDelimiters::test_unterminated_string`
+  expects the quote wording (`Unmatched opening double quote at position 11`).
 - Existing test updated: `test_rules_dax::test_case_mismatch_resolves_but_is_an_error`
   (was `test_case_insensitive_resolution`) expects three casing errors.
 - STRICTER (project decision): `test_relationships::test_relationship_endpoints_exist[rel_casing-fail]`
