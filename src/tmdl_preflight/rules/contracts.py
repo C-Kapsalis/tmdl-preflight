@@ -486,15 +486,13 @@ class FieldParamRegistrationContractRule(Rule):
                           f"groups {', '.join(groups)}.")]
             out = []
             for n, ln in hits:
-                ordinals = [int(x) for x in _ORDINAL_RE.findall(ln)]
-                if not ordinals:
-                    out.append(v(f"contract: column '{col}' is registered, but no ordinal "
-                                 f"parsed from the row; it cannot be checked against the "
-                                 f"free range {lo}-{hi}.", n))
-                    continue
-                for o in ordinals:
+                for o in (int(x) for x in _ORDINAL_RE.findall(ln)):
                     if lo is not None and not (lo <= o <= hi):
                         out.append(v(f"contract: column '{col}' has ordinal {o}, outside the "
                                      f"free range {lo}-{hi}.", n))
+            if not any(_ORDINAL_RE.findall(ln) for _n, ln in hits):
+                out.append(v(f"contract: column '{col}' is registered, but no ordinal "
+                             f"parsed from its row; it cannot be checked against the free "
+                             f"range {lo}-{hi}.", hits[0][0]))
             return out
         return [v(f"unknown field-parameter contract kind {kind!r}.")]
