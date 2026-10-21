@@ -826,3 +826,53 @@ def test_r016_capture_message(tmp_path, capsys):
     )
     assert code == 0
     assert "[dead-anchor-calendar floor] captured 1 across 1 models" in out
+
+
+def test_r007_fixer_console_lines(tmp_path):
+    d = _model(tmp_path)
+    _table(d / "tables", "Orders", ["id"])
+    _table(d / "tables", "Stores", ["id"])
+    _rels(d,
+          "relationship 11111111-2222-4333-8444-555555555555\n"
+          "\tfromColumn: Orders.id\n"
+          "\ttoColumn: Stores.id\n"
+          "\n"
+          "relationship AutoDetected_22222222-2222-4333-8444-555555555555\n"
+          "\tfromColumn: Orders.id\n"
+          "\ttoColumn: Stores.id\n")
+    code, out, _err = run_cli("fix", d.parent, "--select", "R007", "--no-config")
+    assert code == 0
+    assert "Found 1 autodetected relationships:" in out
+    assert "   - AutoDetected_22222222-2222-4333-8444-555555555555" in out
+    assert "Deleted 1 autodetected relationships" in out
+    text = (d / "relationships.tmdl").read_text(encoding="utf-8")
+    assert text.endswith("toColumn: Stores.id\n\n")
+
+
+def test_r007_dry_run_console_lines(tmp_path):
+    d = _model(tmp_path)
+    _table(d / "tables", "Orders", ["id"])
+    _table(d / "tables", "Stores", ["id"])
+    _rels(d,
+          "relationship AutoDetected_22222222-2222-4333-8444-555555555555\n"
+          "\tfromColumn: Orders.id\n"
+          "\ttoColumn: Stores.id\n")
+    before = (d / "relationships.tmdl").read_text(encoding="utf-8")
+    code, out, _err = run_cli("fix", d.parent, "--select", "R007", "--dry-run",
+                              "--no-config")
+    assert code == 1  # the violation is still there: nothing was repaired
+    assert "Would delete 1 autodetected relationships (strict policy)" in out
+    assert (d / "relationships.tmdl").read_text(encoding="utf-8") == before
+
+
+def test_r007_fixer_with_nothing_to_remove(tmp_path):
+    d = _model(tmp_path)
+    _table(d / "tables", "Orders", ["id"])
+    _table(d / "tables", "Stores", ["id"])
+    _rels(d,
+          "relationship 11111111-2222-4333-8444-555555555555\n"
+          "\tfromColumn: Orders.id\n"
+          "\ttoColumn: Stores.id\n")
+    code, out, _err = run_cli("fix", d.parent, "--select", "R007", "--no-config")
+    assert code == 0
+    assert "No autodetected relationships found" in out

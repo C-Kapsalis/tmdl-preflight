@@ -108,6 +108,8 @@ class Context:
         self.options: dict[str, Any] = {}
         # free-text notes rules want shown with the report (tighten hints)
         self.notes: list[str] = []
+        # lines a fixer prints while it works (progress, counts)
+        self.fix_notes: list[str] = []
         # fixes a fixer had to refuse (the proof failed; the file is untouched)
         self.refused_fixes: list[str] = []
 
@@ -278,6 +280,10 @@ class Rule:
     def floor_captured_message(self, floors: dict[str, list[str]]) -> str:
         """The line the tool prints after it captured a floor."""
         return f"captured floor for {len(floors)} model(s)"
+
+    def dry_run_notes(self, ctx: Context) -> list[str]:
+        """The lines a dry run prints instead of repairing anything."""
+        return []
 
     def fix(self, ctx: Context) -> list[str]:
         """Apply the auto-repair; return human-readable descriptions of each

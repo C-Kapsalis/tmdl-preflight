@@ -430,6 +430,10 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
             report.would_fix = [
                 f"{rid}: {n} violation(s)" for rid, n in sorted(counts.items())
             ]
+            for rule in ruleset.rules:
+                if not rule.fixable:
+                    continue
+                report.fix_notes.extend(rule.dry_run_notes(ctx))
     apply_policy(report, cfg, ctx=ctx)
     ran = {r.id for r in ruleset.rules}
     report.unused_exemptions = [e for e in report.unused_exemptions if e.rule in ran]

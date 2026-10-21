@@ -390,6 +390,11 @@ class AutodetectedRelationshipsRule(Rule):
     def unsafe_fix_enabled(self) -> bool:
         return bool(self.options.get("fix_autodetected_relationships"))
 
+    def pending_repairs(self, ctx: Context) -> bool:
+        """The fixer always runs when it is selected: it also says what it
+        found when there is nothing to remove."""
+        return True
+
     @staticmethod
     def _matches(rel) -> bool:
         return "autodetected" in rel.rel_id.lower()
@@ -426,6 +431,25 @@ class AutodetectedRelationshipsRule(Rule):
             )
         return out
 
+    def dry_run_notes(self, ctx: Context) -> list[str]:
+        out: list[str] = []
+        for model in ctx.models:
+            path = model.definition_path / "relationships.tmdl"
+            if not path.is_file():
+                out.append("No relationships file")
+                continue
+            doomed = [r for r in model.relationships + model.malformed_relationships
+                      if self._matches(r)]
+            if not doomed:
+                out.append("No autodetected relationships found")
+                continue
+            out.append(f"Found {len(doomed)} autodetected relationships:")
+            out.extend(f"   - {r.rel_id}" for r in doomed)
+            out.append(
+                f"Would delete {len(doomed)} autodetected relationships (strict policy)"
+            )
+        return out
+
     def fix(self, ctx: Context) -> list[str]:
         from ..edits import EditRefused, read_text_file, verified_write
 
@@ -433,11 +457,17 @@ class AutodetectedRelationshipsRule(Rule):
         for model in ctx.models:
             path = model.definition_path / "relationships.tmdl"
             if not path.is_file():
+                ctx.fix_notes.append("No relationships file")
                 continue
             doomed = [r for r in model.relationships + model.malformed_relationships
                       if self._matches(r)]
             if not doomed:
+                ctx.fix_notes.append("No autodetected relationships found")
                 continue
+            ctx.fix_notes.append(
+                f"Found {len(doomed)} autodetected relationships:"
+            )
+            ctx.fix_notes.extend(f"   - {r.rel_id}" for r in doomed)
             original = read_text_file(path)
             # every line keeps its own terminator, so the bytes that are not
             # part of a removed block come out exactly as they went in
@@ -459,6 +489,9 @@ class AutodetectedRelationshipsRule(Rule):
 
             try:
                 if verified_write(original, text, verify):
+                    ctx.fix_notes.append(
+                        f"Deleted {len(doomed)} autodetected relationships"
+                    )
                     applied.extend(
                         f"relationships.tmdl: removed relationship {r.rel_id}"
                         for r in doomed
