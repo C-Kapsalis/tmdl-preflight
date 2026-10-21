@@ -277,6 +277,19 @@ until configured.
 
 ### Bug fixes
 
+- **A file that mixes its line endings is never rewritten.** A fleet
+  committed from Windows and then touched by a tool that writes LF ends up
+  with a file that mixes CRLF and LF. Such a file cannot be split on one
+  style and joined on another: the lines that use the other style fold into
+  one, and the edit computed on that deleted the model — a three-measure
+  table went from 28 lines to 3. Such a file is now left exactly as it is,
+  and the violation stays on the report.
+- A file whose lines end with a lone CR (no LF) is read line by line like
+  any other file. Before, it was read as one line, so the check reported a
+  different set of findings than the same model with LF.
+- A manifest or a schema snapshot that is valid JSON but not an object, and
+  a field-parameter table that is not UTF-8, are configuration errors:
+  exit 2, a message on standard error, and never a Python traceback.
 - A lineage tag followed by a tab or several spaces after `lineageTag:` is
   rewritten like any other (before, only one space was handled).
 - Three or more copies of a tag in one file: the later copies are
