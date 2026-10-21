@@ -443,6 +443,18 @@ def code_only(text: str) -> str:
     )
 
 
+def unquote_member(member: str) -> str:
+    """A member written in the quoted form: ``'Amount'`` -> ``Amount``.
+
+    The quoted form is what NAMEOF accepts inside the brackets; the rest of
+    the tool resolves the member the same way.
+    """
+    member = member.replace("]]", "]").strip()
+    if len(member) >= 2 and member[0] == member[-1] == "'":
+        member = member[1:-1].replace("''", "'").strip()
+    return member
+
+
 def string_literals(text: str) -> set[str]:
     """Contents of every string literal in ``text`` (escapes resolved)."""
     tags = classify(text)
@@ -491,7 +503,7 @@ def extract_references(text: str) -> list[DaxReference]:
                 m = _region_end(tags, k, BRACKET)
                 bregion = text[k:m]
                 if bregion.endswith("]") and len(bregion) >= 2:
-                    member = bregion[1:-1].replace("]]", "]")
+                    member = unquote_member(bregion[1:-1])
                     refs.append(DaxReference("column", name, member, i, _line_of(text, i)))
                 i = m
                 continue
@@ -504,7 +516,7 @@ def extract_references(text: str) -> list[DaxReference]:
             if not (region.endswith("]") and len(region) >= 2):
                 i = j
                 continue
-            member = region[1:-1].replace("]]", "]")
+            member = unquote_member(region[1:-1])
             # a word glued to the bracket qualifies it: Sales[Amount]
             w = i
             while w > 0 and tags[w - 1] == CODE and _WORD_CHAR_RE.match(text[w - 1]):

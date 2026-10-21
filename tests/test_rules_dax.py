@@ -109,7 +109,8 @@ class TestNameofResolution:
         f.write_text(text, encoding="utf-8")
         violations = NameofResolutionRule().check(Context(project))
         assert any(
-            "ambiguous" in v.message and v.severity == Severity.WARNING
+            "Ambiguous: measure 'Units Sold' exists in multiple tables:"
+            in v.message and v.severity == Severity.WARNING
             for v in violations
         )
 

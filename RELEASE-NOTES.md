@@ -170,6 +170,14 @@ until configured.
   a table-qualified measure outside a field parameter is a warning ("use
   the bare form"); new option `excluded_tables`. Every unresolved-reference
   message contains "not found".
+- **D002** says why a reference does not resolve, in the reference's
+  wording: `Measure 'X' not found in any table`, `Ambiguous: measure 'X'
+  exists in multiple tables: ['A', 'B']`, `Table 'T' not found`, `Column 'C'
+  not found in table 'T'`, `'M' is a measure, not a column. Use
+  NAMEOF([M]) instead` and `Invalid reference format`. A finding in a
+  field-parameter row names the row it sits in: the object label is
+  `x-Plot Specific 1['Bad']`. BUGFIX: a broken row said nothing about which
+  row it was.
 - **Casing mismatches are errors** (project decision): D002 and D004 report
   a table, column or measure spelled with different casing from its
   declaration as an error, although DAX itself resolves it.
@@ -178,6 +186,16 @@ until configured.
   lines that leaked into an expression (M010 reports those), and gains a
   fixer marked unsafe: selected explicitly, it deletes whole generated
   `ISFILTERED('<missing table>') || ...` lines and nothing else.
+- **D004** ignores every property line that can leak into an expression:
+  `sortByColumn`, `lineageTag`, `sourceLineageTag`, `displayFolder`,
+  `formatString`, `dataType`, `summarizeBy`, `sourceColumn`, `isHidden`,
+  `isKey`, `isNullable`, `isUnique`, `isDataTypeInferred`,
+  `isAvailableInMdx`, `dataCategory`, `encodingHint`, `queryGroup`,
+  `contentType`, `mode`, `annotation`, `changedProperty`,
+  `extendedProperty`, `relatedColumnDetails` and `description`. A member
+  written in the quoted form (`Sales['Amount']`) resolves without the
+  quotes, the way the NAMEOF rule reads it. BUGFIX: both were false
+  positives on legal expressions.
 - **D004** reports a missing table as one finding per object, with the
   missing tables in sorted order: `measure Sales[Revenue] -> missing
   'Alpha', 'Beta'`. The model carries the note `DANGLING TABLE REFS (1
@@ -459,6 +477,10 @@ and rule wins; DESKTOP: Power BI Desktop evidence).
   (was `test_case_insensitive_resolution`) expects three casing errors.
 - Existing test updated: `test_rules_dax::test_missing_table_is_error` expects
   the finding text `measure Sales Measures[Revenue] -> missing 'Orders'`.
+- Existing test updated: `test_rules_dax::test_ambiguous_measure_is_warning`
+  expects `Ambiguous: measure 'Units Sold' exists in multiple tables:`.
+- Existing test updated: `test_dax_spec_cases::test_qualified_measure_in_a_measure_is_a_warning`
+  expects `'Units' is a measure, not a column. Use NAMEOF([Units]) instead`.
 - STRICTER (project decision): `test_relationships::test_relationship_endpoints_exist[rel_casing-fail]`
   expects the casing mismatch as an error that fails without `--strict`
   (a warning was expected before).

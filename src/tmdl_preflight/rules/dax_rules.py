@@ -111,7 +111,10 @@ class NameofResolutionRule(Rule):
             refs = resolver.find_all_nameof_references(measures_only=False)
             for broken in resolver.validate_references(refs):
                 ref = broken.reference
-                label = f"{ref.source_table}[{ref.source_measure}] ({ref.source_kind})"
+                if ref.row_label:
+                    label = f"{ref.source_table}['{ref.row_label}']"
+                else:
+                    label = f"{ref.source_table}[{ref.source_measure}] ({ref.source_kind})"
                 call = f"NAMEOF({ref.raw_argument.strip()})"
                 if broken.casing:
                     hint = "Spell the name exactly as it is declared."
@@ -181,8 +184,11 @@ def _is_virtual(name: str) -> bool:
 
 
 _PROPERTY_LINE_RE = re.compile(
-    r"^\s*(?:annotation|changedProperty|dataType|description|displayFolder|formatString|"
-    r"isHidden|lineageTag|sortByColumn|summarizeBy)\b"
+    r"^\s*(?:annotation|changedProperty|contentType|dataCategory|dataType|description|"
+    r"displayFolder|encodingHint|extendedProperty|formatString|isAvailableInMdx|"
+    r"isDataTypeInferred|isHidden|isKey|isNullable|isUnique|lineageTag|mode|"
+    r"queryGroup|relatedColumnDetails|sortByColumn|sourceColumn|sourceLineageTag|"
+    r"summarizeBy)\b"
 )
 _ENUMERATION_LINE_RE = re.compile(r"^\s*ISFILTERED\(\s*'(?P<table>(?:[^']|'')+)'\s*\)\s*\|\|.*$")
 

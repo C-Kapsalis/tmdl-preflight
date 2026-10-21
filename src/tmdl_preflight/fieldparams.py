@@ -292,6 +292,22 @@ def field_spans(line: str, open_at: int, close_at: int) -> list[tuple[int, int]]
     return out
 
 
+def row_label(line: str) -> Optional[str]:
+    """The first value of the first top-level group on the line.
+
+    A field-parameter row starts with its label: ``("Revenue", NAMEOF(...))``.
+    """
+    for open_at, close_at in _groups(line):
+        fields = split_fields(line[open_at + 1:close_at])
+        if not fields:
+            continue
+        value = fields[0].strip()
+        if len(value) >= 2 and value[0] == value[-1] == '"':
+            value = value[1:-1]
+        return value.replace('""', '"')
+    return None
+
+
 def is_live_row(row: Row) -> bool:
     """False when a comment marker precedes the row on its line."""
     return mask_line(row.text)[row.open_at] == "("

@@ -76,7 +76,7 @@ def test_qualified_measure_in_a_measure_is_a_warning(tmp_path):
                   measures=f"\tmeasure Label = NAMEOF('Sales'[Units])\n\t\tlineageTag: {TAG.format(9)}\n\n")
     found = violations(run_check(model, "D002")[1])
     assert [v["severity"] for v in found] == ["warning"]
-    assert "bare form" in found[0]["message"]
+    assert "is a measure, not a column. Use NAMEOF([Units]) instead" in found[0]["message"]
 
 
 def test_excluded_tables_and_double_quoted_and_block_comment(tmp_path):
