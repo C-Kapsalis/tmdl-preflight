@@ -619,8 +619,6 @@ class FactConformedDimensionJoinRule(Rule):
         return bool(value)
 
     def capture_floor(self, ctx: Context) -> Optional[dict[str, list[str]]]:
-        from ..roles import fact_tables
-
         dim = self.options.get("dimension_table")
         key = self.options.get("key_column")
         if not dim or not key:

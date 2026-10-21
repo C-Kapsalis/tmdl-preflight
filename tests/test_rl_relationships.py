@@ -916,3 +916,19 @@ def test_r015_run_note(tmp_path):
     assert "Cohort calendar cannot reach a subject-bearing fact — every cohort " \
            "measure on that pairing is inert:" in joined
     assert "Fix by anchoring the calendar on the subject DIMENSION" in joined
+
+
+def test_r016_retained_only_counts_double_underscore_names(tmp_path):
+    root = tmp_path
+    client = _model(root, "Client.SemanticModel")
+    _table(client / "tables", "__X Calendar", ["Date"])
+    _table(client / "tables", "__Y Calendar", ["Date"])
+    _rels(client, "")
+    rule = DeadAnchorCalendarRule()
+    # "X Calendar" does not start with the double underscore: it is not an
+    # anchor calendar at all and the retained list does not mention it
+    rule.options["retained"] = {"Client": ["__X Calendar", "X Calendar"]}
+    found = rule.check(Context(root))
+    assert len(found) == 1
+    assert "__Y Calendar" in found[0].message
+    assert "__X Calendar" not in found[0].message
