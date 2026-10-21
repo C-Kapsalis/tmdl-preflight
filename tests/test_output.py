@@ -20,7 +20,7 @@ def _break_lineage(definition):
 def test_text_prints_scanned_summary(project, capsys):
     assert main(["check", str(project)]) == 0
     lines = capsys.readouterr().out.strip().splitlines()
-    assert lines[-2].startswith("scanned: 1 model, 6 tables,")
+    assert any(l.startswith("scanned: 1 model, 6 tables,") for l in lines)
     assert lines[-1].startswith("tmdl-preflight: 0 error(s)")
 
 

@@ -108,12 +108,13 @@ def test_dax_success_rate_summary_finding(tmp_path):
     assert any("are balanced" in n for n in payload["notes"])
 
 
-def test_measureless_model_warns(tmp_path):
+def test_measureless_model_fails(tmp_path):
     d = tmp_path / "Empty.SemanticModel" / "definition" / "tables"
     d.mkdir(parents=True)
     (d / "T.tmdl").write_text(f"table T\n\tlineageTag: {TAG.format(1)}\n", encoding="utf-8")
     found = violations(run_check(d.parent.parent, "D001")[1])
-    assert [v["severity"] for v in found] == ["warning"] and "no measures found" in found[0]["message"]
+    assert [v["severity"] for v in found] == ["error"]
+    assert found[0]["message"] == "Empty.SemanticModel: no measures found (suspicious)"
 
 
 def test_report_complexity_numbers(tmp_path):

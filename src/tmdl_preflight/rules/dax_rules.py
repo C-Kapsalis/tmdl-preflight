@@ -30,8 +30,7 @@ class DaxDelimiterBalanceRule(Rule):
         "and the character position of the problem. The share of clean "
         "measure and calculated-column expressions is reported; below "
         "min_success_rate (default 0.90) one extra error says so. A model "
-        "with tables but no measures gets a warning (usually a parsing or "
-        "layout problem)."
+        "with no measures is an error: the model was probably not parsed."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -57,6 +56,14 @@ class DaxDelimiterBalanceRule(Rule):
                     )
             share = clean / counted if counted else 1.0
             key = ctx.model_key(model)
+            if counted:
+                ctx.notes.append(
+                    "DAX Validation Summary:\n"
+                    f"   Total expressions: {counted}\n"
+                    f"   Valid: {clean} ({share * 100:.1f}%)\n"
+                    f"   Invalid: {counted - clean} "
+                    f"({(counted - clean) / counted * 100:.1f}%)"
+                )
             if clean < counted:
                 ctx.notes.append(
                     f"D001: {key}: {clean} of {counted} measure/calculated-column "
@@ -69,11 +76,10 @@ class DaxDelimiterBalanceRule(Rule):
                     f"{threshold:.0%}.",
                     file=model.definition_path, obj=key,
                 ))
-            if model.table_list and not any(True for _ in model.all_measures()):
+            if not any(True for _ in model.all_measures()):
                 out.append(self.violation(
-                    "no measures found; check the model was parsed (a layout or "
-                    "indentation problem can hide every measure).",
-                    file=model.definition_path, obj=key, severity=Severity.WARNING,
+                    f"{key}: no measures found (suspicious)",
+                    file=model.definition_path, obj=key,
                 ))
         return out
 

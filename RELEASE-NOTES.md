@@ -160,8 +160,10 @@ until configured.
   `Table[Item] (calculationItem)`, `Table (formatStringDefinition)`). New
   option `min_success_rate` (default 0.90): when fewer measure and
   calculated-column expressions are clean, one extra error says so (each
-  unbalanced expression stays an error whatever the share). A model with
-  tables but no measures gets a warning.
+  unbalanced expression stays an error whatever the share). Every model
+  with expressions gets the summary note (`DAX Validation Summary:` with
+  the expression count and the clean share), a clean model too. A model
+  with no measures is an error.
 - **D002** is rebuilt on the new `tmdl_preflight.nameof` module: quoted
   members (`Sales['Amount']`), double-quoted tables and dotted table names
   are accepted; an unparseable NAMEOF in a field-parameter row is an error;
@@ -193,6 +195,10 @@ until configured.
 
 ### Commands and options
 
+- The parseability check is `check --select D001`. Every finding is
+  labelled `Table[Measure]` and names the delimiter kind and the character
+  position, so the same information the standalone console printed is in
+  the report; there is no separate console for it.
 - `exclude` globs match the path relative to the scan root (the folder you
   pass), as well as the path inside the PBIP item. Folders above the scan
   root never take part, so a checkout under `~/legacy/` is still scanned. A
@@ -331,6 +337,10 @@ until configured.
   expressions out of ten meet the 90% threshold: the share is compared as
   a share, not as a floating-point percentage, so the boundary is not a
   coin toss. BUGFIX.
+- **A model with no measures is an error, not a warning.** The parse
+  check failed on a model without measures, whether or not the model had
+  tables; the tool now says `<model>: no measures found (suspicious)` and
+  fails. STRICTER.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the
@@ -423,8 +433,13 @@ and rule wins; DESKTOP: Power BI Desktop evidence).
   `::test_dax_comprehensive_syntax_check` find the measure and
   calculated-column findings in the message; the object label is now
   `Table[Object]`, with no kind in brackets.
+- Existing test updated: `test_dax_spec_cases::test_measureless_model_fails`
+  (was `test_measureless_model_warns`) expects the reference's error text.
 - Existing test updated: `test_dax::TestBalancedDelimiters::test_unterminated_string`
   expects the quote wording (`Unmatched opening double quote at position 11`).
+- Existing test updated: `test_output::test_text_prints_scanned_summary`
+  looks for the scanned line in the output; the D001 summary note is
+  printed with the other notes, before the final count.
 - Existing test updated: `test_rules_dax::test_case_mismatch_resolves_but_is_an_error`
   (was `test_case_insensitive_resolution`) expects three casing errors.
 - STRICTER (project decision): `test_relationships::test_relationship_endpoints_exist[rel_casing-fail]`
