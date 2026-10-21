@@ -309,6 +309,12 @@ until configured.
 - **`check --capture-floor FILE` writes the ratchet floor** of the
   selected rules and prints what it captured; the file keeps the entries
   of the models it did not see.
+- **The cohort-calendar check stays opt-in on "nothing checked".** The
+  earlier gate failed a run in which no model had a cohort calendar with
+  subject facts; here a single-model run without cohort calendars would
+  fail for no reason, so the check is off by default. Set
+  `require_cohort_calendars: true` to make a run that checked nothing an
+  error.
 - **The relationship rules speak the reference's language.** R001 names a
   missing endpoint ("From table not found: X (in relationship abcdef12...)")
   and prints the validation summary as a note; R002 says "Invalid from
@@ -322,10 +328,19 @@ until configured.
   cardinality and completeness notes. STRICTER: R010 now reports a table
   joined to itself, and R011/R012 are errors (the reference fails on
   them).
+- **R005 exempts the tables that stand alone by name.** A table whose name
+  holds "Plot Specific", "Selector" or "Measure", or that starts with
+  "z-", is expected to have no relationship; the rest are reported and
+  listed. The rule never fails the run.
 - **R009 runs by default.** A model without relationships.tmdl, or with a
   file that parses to zero relationships, is an error. A single-table model
   legitimately has none: switch the rule off with
-  `rules: {R009: {enabled: false}}`.
+  `rules: {R009: {enabled: false}}`. STRICTER: the rule was a warning and
+  opt-in; the earlier gate failed the run.
+- **R013 and R014 run by default.** They are advisory (info), so they never
+  fail the run, and they print the completeness and the key-coverage
+  analysis. STRICTER: both were opt-in; the earlier gate always printed
+  them.
 - **R011 checks a model that has no calendar table.** Coverage is then 0%
   and every fact is listed, instead of the model being skipped.
 - **R012 compares the cardinalities exactly as written.** "Many" is not

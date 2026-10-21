@@ -468,6 +468,9 @@ class AutodetectedRelationshipsRule(Rule):
                 f"Found {len(doomed)} autodetected relationships:"
             )
             ctx.fix_notes.extend(f"   - {r.rel_id}" for r in doomed)
+            ctx.fix_notes.append(
+                f"Deleting {len(doomed)} autodetected relationships (strict policy)..."
+            )
             original = read_text_file(path)
             # every line keeps its own terminator, so the bytes that are not
             # part of a removed block come out exactly as they went in

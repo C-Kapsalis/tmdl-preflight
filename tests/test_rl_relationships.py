@@ -844,6 +844,7 @@ def test_r007_fixer_console_lines(tmp_path):
     assert code == 0
     assert "Found 1 autodetected relationships:" in out
     assert "   - AutoDetected_22222222-2222-4333-8444-555555555555" in out
+    assert "Deleting 1 autodetected relationships (strict policy)..." in out
     assert "Deleted 1 autodetected relationships" in out
     text = (d / "relationships.tmdl").read_text(encoding="utf-8")
     assert text.endswith("toColumn: Stores.id\n\n")
