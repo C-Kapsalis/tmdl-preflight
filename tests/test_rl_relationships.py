@@ -876,3 +876,42 @@ def test_r007_fixer_with_nothing_to_remove(tmp_path):
     code, out, _err = run_cli("fix", d.parent, "--select", "R007", "--no-config")
     assert code == 0
     assert "No autodetected relationships found" in out
+
+
+def test_r009_note(tmp_path):
+    d = _model(tmp_path)
+    _table(d / "tables", "Orders", ["id"])
+    _table(d / "tables", "Stores", ["id"])
+    _rels(d,
+          "relationship 11111111-2222-4333-8444-555555555555\n"
+          "\tfromColumn: Orders.id\n\ttoColumn: Stores.id\n"
+          "\n"
+          "relationship 22222222-2222-4333-8444-555555555555\n"
+          "\tisActive: false\n"
+          "\tfromColumn: Orders.id\n\ttoColumn: Stores.id\n")
+    ctx = Context(tmp_path)
+    RelationshipsPresenceRule().check(ctx)
+    joined = "\n".join(ctx.notes)
+    assert "Found 2 relationships (1 active, 1 inactive)" in joined
+
+
+def test_r015_run_note(tmp_path):
+    d = _cohort_model(tmp_path)
+    _rels(d,
+          "relationship 11111111-1111-4333-8444-555555555555\n"
+          "\tfromColumn: _Users.user_id\n\ttoColumn: __Cohort Calendar.Date\n"
+          "\n"
+          "relationship 22222222-2222-4333-8444-555555555555\n"
+          "\tfromColumn: Orders.order_id\n\ttoColumn: __Other Calendar.Date\n"
+          "\n"
+          "relationship 33333333-3333-4333-8444-555555555555\n"
+          "\tfromColumn: Orders.user_id\n\ttoColumn: _Users.user_id\n"
+          "\n"
+          "relationship 44444444-4444-4333-8444-555555555555\n"
+          "\tfromColumn: Views.user_id\n\ttoColumn: _Users.user_id\n")
+    ctx = Context(tmp_path)
+    CohortCalendarReachRule().check(ctx)
+    joined = "\n".join(ctx.notes)
+    assert "Cohort calendar cannot reach a subject-bearing fact — every cohort " \
+           "measure on that pairing is inert:" in joined
+    assert "Fix by anchoring the calendar on the subject DIMENSION" in joined

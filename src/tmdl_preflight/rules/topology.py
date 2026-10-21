@@ -80,6 +80,12 @@ class RelationshipsPresenceRule(Rule):
         out: list[Violation] = []
         for model in ctx.models:
             path = model.definition_path / "relationships.tmdl"
+            total = len(model.relationships) + len(model.malformed_relationships)
+            active = sum(1 for r in model.relationships if r.is_active)
+            ctx.notes.append(
+                f"R009: {ctx.model_key(model)}\n"
+                f"Found {total} relationships ({active} active, {total - active} inactive)"
+            )
             if not path.is_file():
                 out.append(self.violation(
                     "relationships.tmdl file not found",
@@ -406,15 +412,31 @@ class CohortCalendarReachRule(Rule):
         "facts are the many sides of those dimensions."
     )
 
+    @staticmethod
+    def _cohort_calendars(model: SemanticModel, suffix: str) -> list[str]:
+        """The cohort calendars of the model, named by their table file's stem.
+
+        A table is a cohort calendar when its file declares a plain column
+        whose name ends with the suffix; the calendar is identified by the
+        file's stem, as the anchor-calendar check does.
+        """
+        out: list[str] = []
+        for f in sorted((model.definition_path / "tables").glob("*.tmdl")):
+            table = model.tables.get(f.stem)
+            if table is None:
+                continue
+            if any(c.name.endswith(suffix) and not c.is_calculated
+                   for c in table.column_list):
+                out.append(f.stem)
+        return out
+
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         suffix = self.options["cohort_date_suffix"]
         hops = int(self.options["max_hops"])
         checked = 0
         for model in ctx.models:
-            calendars = [t.name for t in model.table_list
-                         if any(c.name.endswith(suffix) and not c.is_calculated
-                                for c in t.column_list)]
+            calendars = self._cohort_calendars(model, suffix)
             if not calendars:
                 continue
             graph = filter_graph(model)
@@ -444,6 +466,14 @@ class CohortCalendarReachRule(Rule):
                         f"[{', '.join(repr(f) for f in sorted(facts))}])",
                         file=t.file if t else None, obj=cal,
                     ))
+            if out:
+                ctx.notes.append(
+                    "Cohort calendar cannot reach a subject-bearing fact — every "
+                    "cohort measure on that pairing is inert:\n"
+                    "Fix by anchoring the calendar on the subject DIMENSION, "
+                    "mirroring its siblings, and deactivating any direct fact "
+                    "link that would create a second path."
+                )
         if self.options.get("require_cohort_calendars") and checked == 0:
             out.append(self.violation(
                 "no model with a cohort calendar and subject facts was found; the "
