@@ -287,6 +287,13 @@ until configured.
 
 ### Changed
 
+- **The measure-organisation summary reads the y-axis tables and counts the
+  helpers by kind.** The surfacing set of the summary is now the numbered
+  x-axis *and* y-axis tables (`x-Selector 1` to `x-Selector 9` and
+  `y-Selector 1` to `y-Selector 9`); the option still overrides it. The
+  summary lists the helper measures by kind, each with a line that says
+  what that kind of helper is, and the dash-helper block leaves out the
+  two description lines when there is no dash helper at all.
 - **The visibility and coverage checks print their reports.** The
   helper-visibility check reports per model how many helper measures there
   are, how many are hidden and which visible ones need hiding; the
