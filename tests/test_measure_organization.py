@@ -153,7 +153,7 @@ class TestOrganizationRulesSummary:
         model = tmp_path / "Empty.SemanticModel" / "definition"
         (model / "tables").mkdir(parents=True)
         (model / "model.tmdl").write_text("model Model\n\tculture: en-US\n", encoding="utf-8")
-        (model / "tables" / "Stores.tmdl").write_text(
+        (model / "tables" / "_Stores.tmdl").write_text(
             "table Stores\n\tlineageTag: 6a0f2f4e-1111-4c3b-9d1e-000000000001\n\n"
             "\tcolumn name\n\t\tdataType: string\n"
             "\t\tlineageTag: 6a0f2f4e-1111-4c3b-9d1e-000000000002\n\t\tsourceColumn: name\n",

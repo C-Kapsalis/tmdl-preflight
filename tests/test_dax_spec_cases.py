@@ -27,7 +27,7 @@ def _shop(tmp_path: Path, rows: list[str], measures: str = "") -> Path:
         f"\tcolumn Revenue\n\t\tdataType: double\n\t\tlineageTag: {TAG.format(3)}\n\t\tsourceColumn: Revenue\n\n"
         f"\tpartition Sales = m\n\t\tmode: import\n\t\tsource = #table({{\"Revenue\"}}, {{{{1}}}})\n",
         encoding="utf-8")
-    (d / "tables" / "Calendar.tmdl").write_text(
+    (d / "tables" / "__Calendar.tmdl").write_text(
         f"table Calendar\n\tlineageTag: {TAG.format(4)}\n\n"
         f"\tcolumn Month\n\t\tdataType: string\n\t\tlineageTag: {TAG.format(5)}\n\t\tsourceColumn: Month\n\n"
         f"\tpartition Calendar = m\n\t\tmode: import\n\t\tsource = #table({{\"Month\"}}, {{{{1}}}})\n",

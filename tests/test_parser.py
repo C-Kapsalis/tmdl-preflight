@@ -9,9 +9,9 @@ def test_tables_discovered(definition):
     model = parse_model(definition)
     assert set(model.tables) == {
         "Sales",
-        "Products",
-        "Stores",
-        "Calendar",
+        "_Products",
+        "_Stores",
+        "__Calendar",
         "Sales Measures",
         "Metric Selector",
     }
@@ -25,7 +25,7 @@ def test_columns_and_properties(definition):
     assert sales.columns["net_amount"].data_type == "double"
     assert sales.columns["order_date"].format_string == "General Date"
     assert sales.columns["order_id"].source_column == "order_id"
-    products = model.tables["Products"]
+    products = model.tables["_Products"]
     assert products.columns["product_id"].is_key
 
 
@@ -43,7 +43,7 @@ def test_measures_parsed(definition):
 
 def test_calculated_partitions(definition):
     model = parse_model(definition)
-    calendar = model.tables["Calendar"].partitions[0]
+    calendar = model.tables["__Calendar"].partitions[0]
     assert calendar.kind == "calculated"
     assert "CALENDAR(DATE(2024, 1, 1)" in calendar.source
     selector = model.tables["Metric Selector"].partitions[0]
@@ -64,7 +64,7 @@ def test_relationships_parsed(definition):
     assert len(model.relationships) == 4
     first = model.relationships[0]
     assert (first.from_table, first.from_column) == ("Sales", "product_id")
-    assert (first.to_table, first.to_column) == ("Products", "product_id")
+    assert (first.to_table, first.to_column) == ("_Products", "product_id")
     inactive = [r for r in model.relationships if not r.is_active]
     assert len(inactive) == 1
     assert inactive[0].from_column == "ship_date"
@@ -104,10 +104,10 @@ from tmdl_preflight.rules.structural import TmdlWellFormedRule  # noqa: E402
 
 
 def test_byte_order_mark_is_tolerated(definition):
-    f = definition / "tables" / "Stores.tmdl"
+    f = definition / "tables" / "_Stores.tmdl"
     f.write_bytes(b"\xef\xbb\xbf" + f.read_bytes())
     model = parse_model(definition)
-    assert "Stores" in model.tables
+    assert "_Stores" in model.tables
     assert not model.parse_errors
 
 
@@ -159,7 +159,7 @@ def test_malformed_relationship_is_kept(definition, replace_in):
     model = parse_model(definition)
     assert len(model.relationships) == 3
     assert len(model.malformed_relationships) == 1
-    assert model.malformed_relationships[0].to_table == "Stores"
+    assert model.malformed_relationships[0].to_table == "_Stores"
 
 
 def test_parser_reports_dropped_measures(definition, replace_in):

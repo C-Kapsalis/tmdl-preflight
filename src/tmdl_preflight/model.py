@@ -174,6 +174,10 @@ class Relationship:
     to_column: str = ""
     from_cardinality: str = "many"
     to_cardinality: str = "one"
+    # the values exactly as written in the file ("Many" is not "many"); the
+    # pairs above are lowercased, because most checks compare case-insensitively
+    from_cardinality_raw: str = "many"
+    to_cardinality_raw: str = "one"
     cross_filtering: str = "oneDirection"
     is_active: bool = True
 

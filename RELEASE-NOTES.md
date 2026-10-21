@@ -283,6 +283,34 @@ until configured.
 
 ### Changed
 
+- **The relationship rules speak the reference's language.** R001 names a
+  missing endpoint ("From table not found: X (in relationship abcdef12...)")
+  and prints the validation summary as a note; R002 says "Invalid from
+  cardinality: X in abcdef12..." and prints the cardinality distribution;
+  R004 prints the cross-filtering analysis; R005 prints the orphan analysis
+  and exempts the tables that are expected to stand alone by name; R006
+  reports one finding per table pair, naming every relationship in it;
+  R007 says whether the relationship is active ("ACTIVE  <-- changing
+  measure results NOW") and prints the run note; R010 says "Cycle
+  detected: a -> b -> c -> a"; R011, R012 and R013 print their coverage,
+  cardinality and completeness notes. STRICTER: R010 now reports a table
+  joined to itself, and R011/R012 are errors (the reference fails on
+  them).
+- **R009 runs by default.** A model without relationships.tmdl, or with a
+  file that parses to zero relationships, is an error. A single-table model
+  legitimately has none: switch the rule off with
+  `rules: {R009: {enabled: false}}`.
+- **R011 checks a model that has no calendar table.** Coverage is then 0%
+  and every fact is listed, instead of the model being skipped.
+- **R012 compares the cardinalities exactly as written.** "Many" is not
+  "many": a relationship that spells its cardinality with a capital letter
+  is reported, as the reference reports it.
+- **The R007 fixer keeps every other byte.** It removes the offending
+  relationship block from its header line up to the next relationship
+  declaration and leaves the rest of the file exactly as it was, blank
+  lines included. STRICTER: R007 can never be baselined (zero tolerance).
+- **A relationship declaration may be followed by any whitespace.** A tab
+  after the keyword starts the block, as a space does.
 - **`stats --measures` prints one summary per model.** A folder with two
   models prints two summaries, each with its own totals, in the layout a
   reviewer reads: the totals, the user-facing and helper split, the

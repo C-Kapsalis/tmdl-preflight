@@ -29,7 +29,7 @@ class TestDaxDelimiters:
         )
 
     def test_unbalanced_partition_source_detected(self, project, definition):
-        f = definition / "tables" / "Calendar.tmdl"
+        f = definition / "tables" / "__Calendar.tmdl"
         f.write_text(
             f.read_text(encoding="utf-8").replace(
                 "source = CALENDAR(DATE(2024, 1, 1), DATE(2026, 12, 31))",
@@ -97,7 +97,7 @@ class TestNameofResolution:
 
     def test_ambiguous_measure_is_warning(self, project, definition):
         # declare a second 'Units Sold' measure on Products
-        f = definition / "tables" / "Products.tmdl"
+        f = definition / "tables" / "_Products.tmdl"
         text = f.read_text(encoding="utf-8")
         text = text.replace(
             "\tcolumn product_id",
@@ -119,7 +119,7 @@ class TestDuplicateMeasureNames:
         assert DuplicateMeasureNamesRule().check(Context(project)) == []
 
     def test_duplicate_across_tables_detected(self, project, definition):
-        f = definition / "tables" / "Stores.tmdl"
+        f = definition / "tables" / "_Stores.tmdl"
         text = f.read_text(encoding="utf-8")
         text = text.replace(
             "\tcolumn store_id",
