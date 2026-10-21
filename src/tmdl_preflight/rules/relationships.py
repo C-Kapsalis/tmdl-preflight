@@ -3,6 +3,8 @@ bidirectional filters, orphan tables. IDs R0xx."""
 
 from __future__ import annotations
 
+from typing import Optional
+
 from .base import Context, Rule, Severity, Violation
 
 VALID_CARDINALITIES = {"one", "many"}
