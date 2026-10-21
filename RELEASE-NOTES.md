@@ -347,6 +347,29 @@ until configured.
   group are the live lines that name the group and carry an ordinal, and a
   row's label is the quoted text right after the opening parenthesis at the
   start of the line, not a quoted string further down. BUGFIX.
+- **A reference contract can check its own universe.** A contract that names
+  a template model or a minimum universe counts the models that declare its
+  anchor: fewer than the minimum, or the template missing, is reported as
+  broken discovery, the way the arm-scoped filter already does. BUGFIX.
+- **A flag predicate is recognised whatever the spacing.** Any amount of
+  whitespace (spaces or tabs) between the column name and `]`, between `]`
+  and the operator and between the operator and the literal is free, and the
+  predicate counts toward `min_predicates`. BUGFIX.
+- **A canary literal matches a model that writes the function form.** The
+  literal of a found predicate is compared with the canary after a trailing
+  `()` is dropped, so `= TRUE()` satisfies the canary `= TRUE` (the literal
+  itself stays case-sensitive). BUGFIX.
+- **A guarded ratio is recognised whatever the spacing in its brackets.**
+  `DIVIDE ( [ Cost ] , [Accounts #] )` is the same ratio as
+  `DIVIDE([Cost],[Accounts #])`, so it is wrapped like the other ones.
+  BUGFIX.
+- **A mention outside every arm says so.** The finding names the arm
+  `outside any arm` instead of `none`. BUGFIX.
+- **A commented-out expression is not live DAX.** The reference contracts
+  read the raw text of a measure, so a `-- DIVIDE([Cost], ...)` line in a
+  comment was reported as a live raw-cost ratio. The tool skips comment
+  lines: a commented-out expression is not executed, so it is not a
+  defect. BUGFIX.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the

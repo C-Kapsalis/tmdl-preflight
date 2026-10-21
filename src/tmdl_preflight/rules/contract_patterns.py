@@ -63,16 +63,42 @@ class MeasureReferenceContractRule(Rule):
         "blank on one helper's literal also consult its partner) and "
         "must_not_divide (ratios divide a masked base, never the raw "
         "measure). A table is 'named' by 'Table' or Table[ outside comment "
-        "lines. A contract applies only to models that hold its anchor."
+        "lines. A contract applies only to models that hold its anchor. A "
+        "contract that names a template model or a minimum universe is "
+        "checked against the models that declare its anchor: fewer than the "
+        "minimum, or the template missing, means discovery is broken."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for c in self.options.get("contracts") or []:
-            for model in ctx.models:
-                if ctx.model_matches(c.get("model"), model):
-                    out.extend(self._one(model, c))
+            models = [m for m in ctx.models if ctx.model_matches(c.get("model"), m)]
+            out.extend(self._universe(ctx, c, models))
+            for model in models:
+                out.extend(self._one(model, c))
         return out
+
+    def _universe(self, ctx: Context, c: dict, models: list[SemanticModel]) -> list[Violation]:
+        """A contract that names a template model and a minimum universe needs
+        that many models to declare its anchor, the template among them."""
+        template = c.get("template")
+        floor = c.get("min_universe")
+        if not template and floor is None:
+            return []
+        anchor = c.get("anchor") or c.get("measure")
+        if not anchor:
+            return []
+        universe = [m for m in models if m.find_measures(anchor)]
+        template_found = any(ctx.model_matches(template, m) for m in universe)
+        if len(universe) >= int(floor or 0) and (not template or template_found):
+            return []
+        return [self.violation(
+            f"universe check: found {len(universe)} model(s) declaring [{anchor}]"
+            + ("" if template_found else " and not the template")
+            + "; discovery is broken, so the contract would pass vacuously.",
+            file=models[0].definition_path if models else None,
+            obj=anchor,
+        )]
 
     def _one(self, model: SemanticModel, c: dict) -> list[Violation]:
         kind = c.get("kind")
@@ -193,7 +219,8 @@ class GuardedRatioWrapperRule(Rule):
         selector = o.get("selector_table") or ""
         counts = {n for n, b in bodies.items() if n.rstrip().endswith("#") and selector in b}
         nums = "|".join(re.escape(n) for n in o.get("numerators") or [])
-        ratio_re = re.compile(r"DIVIDE\s*\(\s*\[(?:" + nums + r")\]\s*,\s*\[([^\]]+)\]", re.IGNORECASE)
+        ratio_re = re.compile(r"DIVIDE\s*\(\s*\[\s*(?:" + nums + r")\s*\]\s*,\s*\[\s*([^\]]+?)\s*\]",
+                              re.IGNORECASE)
         ratios = {n for n, b in bodies.items()
                   if nums and any(x.strip() in counts for x in ratio_re.findall(b))}
         out: list[Violation] = []
@@ -294,7 +321,8 @@ class TypedFlagPredicatesRule(Rule):
         flags = {c.name: (c.data_type or "") for c in (table.column_list if table else [])
                  if c.name.startswith(prefix)}
         pattern = re.compile(
-            r"(" + re.escape(prefix) + r"[a-z_]+) ?\] ?(<>|>=|<=|=|>|<) ?([A-Za-z0-9_]+(?:\s*\(\s*\))?)"
+            r"(" + re.escape(prefix) + r"[a-z_]+)\s*\]\s*(<>|>=|<=|=|>|<)\s*"
+            r"([A-Za-z0-9_]+(?:\s*\(\s*\))?)"
         )
         found: list[tuple] = []
         for tname in o.get("measures_files") or []:
@@ -309,7 +337,8 @@ class TypedFlagPredicatesRule(Rule):
                 if ln.strip().startswith(("///", "--", "//")):
                     continue
                 for m in pattern.finditer(ln):
-                    found.append((m.group(1), m.group(2), re.sub(r"\s+", "", m.group(3)), t.file, n))
+                    literal = re.sub(r"\s+", "", m.group(3))
+                    found.append((m.group(1), m.group(2), literal, t.file, n))
         out: list[Violation] = []
         where = table.file if table else model.definition_path
 
@@ -319,6 +348,7 @@ class TypedFlagPredicatesRule(Rule):
         if len(found) < int(o.get("min_predicates") or 0):
             self_test(f"only {len(found)} flag predicate(s) found, fewer than {o.get('min_predicates')}.")
         seen = {(c, op, lit.upper()) for c, op, lit, _f, _n in found}
+        seen |= {(c, op, lit.rstrip("()").upper()) for c, op, lit, _f, _n in found}
         for canary in o.get("canaries") or []:
             col, op, lit = canary
             if (col, op, str(lit).upper()) not in seen:
@@ -429,7 +459,7 @@ class MeasureArmScopedFilterRule(Rule):
             for g in guard_re.finditer(ln):
                 guards.append((arm, g.group("lits")))
             if col_re.search(ln) and arm != target:
-                stray.append(arm or "none")
+                stray.append(arm or "outside any arm")
         out: list[Violation] = []
 
         def v(msg: str) -> None:
