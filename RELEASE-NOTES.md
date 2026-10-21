@@ -304,6 +304,16 @@ until configured.
 
 ### Bug fixes
 
+- **A fact is matched only when the reference names it.** The reference
+  counted a fact `Sales` as read whenever the text `Sales[` appeared, even
+  inside `MySales[`. The tool requires a non-word character before the
+  name, so a measure reading `MySales[amount]` does not consume `Sales`.
+  BUGFIX.
+- **The filter-coverage finding names the command that writes the missing
+  filter measure.** The repair lives in pbip-model-forge, not here, so the
+  finding names the exact `pbip-forge f-filters --model <model>` command
+  for the model at hand instead of pointing at the tool in general. The
+  split is deliberate: the check reports, the other tool writes.
 - **A qualified measure reference is an edge in the fact trace.** A
   reference of the form `'Table'[Name]` or `Table[Name]`, where `Name` is a
   measure the model declares, is followed like a bare `[Name]`. The

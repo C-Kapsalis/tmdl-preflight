@@ -406,10 +406,12 @@ class FactTableFilterCoverageRule(Rule):
             for f in uncovered:
                 names = ", ".join(sorted(set(consumers[f])))
                 table = model.get_table(f)
+                model_key = model.definition_path.parent.name
                 out.append(self.violation(
                     f"fact table {f} is read by user-facing measures ({names}) but by no {prefix} "
                     f"filter measure, so visual filters never narrow its rows. Add a filter "
-                    f"measure (pbip-forge can write int(not ISEMPTY('{f}'))).",
+                    f"measure (pbip-forge f-filters --model {model_key} writes "
+                    f"int(not ISEMPTY('{f}'))).",
                     file=table.file if table else model.definition_path, obj=f))
         return out
 
