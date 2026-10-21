@@ -15,7 +15,8 @@ container*; anything else is a *fact candidate*.
 *Structure law*: a fact candidate is a fact only if it has at least one
 column, is not a calculation group, is not a field parameter, its first
 partition is an M partition, and its file does not author rows inline
-(``Table.FromRows`` or ``#table(``).
+(``Table.FromRows`` or ``#table(``, in the case M spells them: M is
+case-sensitive, so another spelling is a different function).
 """
 
 from __future__ import annotations
@@ -29,7 +30,9 @@ from .model import SemanticModel, Table
 _SELECTOR_RE = re.compile(r"^[A-Za-z]-")
 _MEASURES_WORD_RE = re.compile(r"\bmeasures?\b", re.IGNORECASE)
 _FIELD_PARAM_SOURCE_RE = re.compile(r"sourceColumn:\s*\[Value\d+\]")
-_INLINE_ROWS_RE = re.compile(r"Table\.FromRows|#table\s*\(", re.IGNORECASE)
+#: M spells the row constructors in one case only; another spelling is a
+#: different function, so it does not author the table's rows.
+_INLINE_ROWS_RE = re.compile(r"Table\.FromRows|#table\s*\(")
 
 DISTINCT = "distinct"
 SELECTOR = "selector"

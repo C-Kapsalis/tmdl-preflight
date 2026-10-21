@@ -287,6 +287,16 @@ until configured.
 
 ### Changed
 
+- **The unused-helper check prints the reference's inventory.** It reports
+  per model how many TMDL and report files it scanned, how many helper
+  measures there are, how many are used and how many are not, the helpers
+  that five or more references point at (with the TMDL and JSON counts) and
+  the ones nothing references. A report file is matched by its extension
+  whatever its case.
+- **An inline-row table is recognised only in the case M spells it.** M is
+  case-sensitive, so a source that says `table.fromrows(` calls a
+  different function and does not author the table's rows: such a table
+  is a fact like any other, and the dead-fact gate can report it.
 - **The measure-organisation summary reads the y-axis tables and counts the
   helpers by kind.** The surfacing set of the summary is now the numbered
   x-axis *and* y-axis tables (`x-Selector 1` to `x-Selector 9` and

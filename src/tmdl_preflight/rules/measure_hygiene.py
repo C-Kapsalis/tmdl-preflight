@@ -259,6 +259,9 @@ class UnusedHelperMeasuresRule(Rule):
         "deleting one."
     )
 
+    #: the report files that can name a measure
+    REPORT_SUFFIXES = (".json", ".pbir", ".bim")
+
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for model in ctx.models:
@@ -266,23 +269,33 @@ class UnusedHelperMeasuresRule(Rule):
                              key=len, reverse=True)
             if not helpers:
                 continue
+            tmdl_files = sorted(model.definition_path.rglob("*.tmdl"))
             tmdl = "\n".join(p.read_text(encoding="utf-8-sig", errors="replace")
-                             for p in model.definition_path.rglob("*.tmdl"))
+                             for p in tmdl_files)
             report_text = ""
+            json_files = 0
             for rep in model.definition_path.parent.parent.glob("*.Report"):
                 for p in rep.rglob("*"):
-                    if p.is_file() and p.suffix in (".json", ".pbir", ".bim"):
-                        report_text += "\n" + p.read_text(encoding="utf-8", errors="replace")
-            counts: dict[str, int] = {}
+                    if not p.is_file():
+                        continue
+                    if p.suffix.lower() not in self.REPORT_SUFFIXES:
+                        continue
+                    json_files += 1
+                    report_text += "\n" + p.read_text(encoding="utf-8", errors="replace")
+            tmdl_counts: dict[str, int] = {}
+            json_counts: dict[str, int] = {}
             for name in helpers:  # longer names first so they claim their matches
                 pat = re.escape(f"[{name}]")
-                counts[name] = len(re.findall(pat, tmdl))
+                tmdl_counts[name] = len(re.findall(pat, tmdl))
                 tmdl = re.sub(pat, " ", tmdl)
                 bare = len(re.findall(re.escape(name), report_text))
                 report_text = report_text.replace(name, " ")
-                counts[name] += bare
+                json_counts[name] = bare
+            counts = {n: tmdl_counts[n] + json_counts[n] for n in helpers}
             unused = sorted(n for n, c in counts.items() if c == 0)
-            frequent = sorted(n for n, c in counts.items() if c >= self.options["frequent_threshold"])
+            frequent = sorted((n for n, c in counts.items()
+                               if c >= self.options["frequent_threshold"]),
+                              key=lambda n: (-counts[n], n))
             if unused:
                 out.append(self.violation(
                     f"unused in this model ({len(unused)}): {', '.join(unused)}",
@@ -291,7 +304,43 @@ class UnusedHelperMeasuresRule(Rule):
                 out.append(self.violation(
                     f"frequently used helpers ({len(frequent)}): {', '.join(frequent)}",
                     file=model.definition_path, obj="frequent"))
+            ctx.notes.extend(self._report(ctx, model, helpers, tmdl_counts,
+                                          json_counts, counts, unused, frequent,
+                                          len(tmdl_files), json_files))
         return out
+
+    def _report(self, ctx: Context, model, helpers: list[str],
+                tmdl_counts: dict[str, int], json_counts: dict[str, int],
+                counts: dict[str, int], unused: list[str], frequent: list[str],
+                tmdl_files: int, json_files: int) -> list[str]:
+        """The inventory of the helper measures and who uses them."""
+        home = {m.name: m.table for m in model.all_measures()
+                if m.name in set(helpers)}
+        used = [n for n in helpers if counts[n] > 0]
+        share = (100.0 * len(used) / len(helpers)) if helpers else 0.0
+        lines = [
+            f"Helper Measure Dependencies ({ctx.model_key(model)}):",
+            f"Scanned {tmdl_files} TMDL + {json_files} JSON/PBIR files in the "
+            f"active model + adjacent .Report dirs",
+            f"Total helper measures: {len(helpers)}",
+            f"Used in active model:  {len(used)} ({share:.1f}%)",
+            f"Unused in active model:{len(unused)}",
+        ]
+        if frequent:
+            lines.append("Most frequently referenced (>=5 refs):")
+            for name in frequent:
+                lines.append(f"  - {home.get(name, '')}[{name}]: {counts[name]} "
+                             f"({tmdl_counts[name]} TMDL + {json_counts[name]} JSON)")
+        if unused:
+            lines.append(f"Unused in active model ({len(unused)}) — candidates for "
+                         f"deletion FROM THIS MODEL (rerun with other models to "
+                         f"confirm they're unused there too before deleting from "
+                         f"the template):")
+            for name in sorted(unused):
+                lines.append(f"  - {home.get(name, '')}[{name}]")
+        else:
+            lines.append("Every helper in the active model is referenced somewhere.")
+        return lines
 
 
 class UserFacingMeasureVisibleRule(Rule):
