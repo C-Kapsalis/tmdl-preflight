@@ -365,6 +365,10 @@ until configured.
   BUGFIX.
 - **A mention outside every arm says so.** The finding names the arm
   `outside any arm` instead of `none`. BUGFIX.
+- **The Daily calculation item is read as a whole block.** The check looks
+  for the required tokens in the item's source, from its
+  `calculationItem Daily` line to the next calculation item or the end of
+  the file, so a property line of the item counts too. BUGFIX.
 - **A commented-out expression is not live DAX.** The reference contracts
   read the raw text of a measure, so a `-- DIVIDE([Cost], ...)` line in a
   comment was reported as a live raw-cost ratio. The tool skips comment
