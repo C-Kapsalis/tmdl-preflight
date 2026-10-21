@@ -110,3 +110,13 @@ def test_a_property_below_the_owner_is_not_flagged(tmp_path):
     body = AFTER_ANNOTATION.replace("\t\tisHidden\n", "\t\t\t\tisHidden\n")
     d = _model(tmp_path, body)
     assert violations(run_check(d, "M011")[1], "M011") == []
+
+
+def test_a_property_the_reference_did_not_know_is_flagged(tmp_path):
+    """PA8: the tool knows a few more simple properties than the reference;
+    a source column that sits after a nested section is one of them."""
+    body = AFTER_ANNOTATION.replace("\t\tisHidden\n", "\t\tsourceColumn: kg\n")
+    d = _model(tmp_path, body)
+    found = violations(run_check(d, "M011")[1], "M011")
+    assert len(found) == 1, found
+    assert "sourceColumn" in found[0]["message"], found[0]["message"]
