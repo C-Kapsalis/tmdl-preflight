@@ -283,6 +283,41 @@ until configured.
 
 ### Changed
 
+- **`report complexity` reads like a report.** The banners, the statistics,
+  the length distribution, the longest measures and the suggested
+  thresholds are printed in the layout a reviewer reads, and the expression
+  statistics follow. The report writes no file: the old version left a
+  `measure_complexity.json` in the working directory on every run.
+- **`report complexity --json` holds the reference keys.** `total_measures`,
+  `statistics`, `top_10_complex` and `all_measures`, in that order, with
+  the average lengths as plain floats. The extra blocks the tool used to
+  add (buckets, thresholds, the flat copies of the expression block) are
+  gone; the thresholds the text report prints are still there.
+- **A measure is measured without the indentation of its first line.** The
+  later lines keep theirs, so a multi-line measure is two characters
+  shorter than the file suggests. BUGFIX.
+- **`report nameof` groups the field-parameter tables in two families.**
+  The x family (the `x-Selector` and `x-Plot Specific` tables) and the y
+  family (the `y-Selector` and `y-Plot Specific` tables), each sorted by
+  name, with the references each table holds and the broken ones. The
+  validation block comes first, then the two families, then the summary.
+- **`report nameof --json` holds the two families and the summary.** The
+  keys are `x_selector`, `y_selector` and `summary`.
+- **The NAMEOF reasons read as the reference reads them.** `Measure 'X' not
+  found in any table`, `Ambiguous: measure 'X' exists in multiple tables:
+  ['A', 'B']`, `Table 'T' not found`, `Column 'C' not found in table 'T'`,
+  `'C' is a measure, not a column. Use NAMEOF([C]) instead` and `Invalid
+  reference format`. The tool-only cases (a casing mismatch, an excluded
+  table, an unparseable field-parameter row) keep their own text.
+- **`report relationships` reads like a report.** The progress lines, the
+  summary, the cardinality types, the bidirectional relationships, the
+  orphan categories and the hub tables are printed in the layout a reviewer
+  reads. The report writes no file.
+- **The orphan categories are named after what they are.** The key is
+  `report_tables`, not `parameter_tables`, and the JSON keeps the
+  cardinalities and the hubs in the order the relationships file lists
+  them. BUGFIX: a relationship block on the first line of the file is
+  counted, as the file's own structure says it should be.
 - **`comment-refs` is a gate.** With a floor file it compares the counts
   with the floors and fails when a model or a class rose above its floor:
   the risen model/class pairs, the offending lines, and the line that says

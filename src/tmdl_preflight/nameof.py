@@ -183,11 +183,12 @@ class NameofResolver:
             matches = model.find_measures_ci(member)
             if not matches:
                 return [BrokenReference(ref, Severity.ERROR,
-                                        f"measure '{member}' not found in the model")]
+                                        f"Measure '{member}' not found in any table")]
             if len({m.table.lower() for m in matches}) > 1:
-                tables = ", ".join(sorted({m.table for m in matches}))
+                tables = [m.table for m in matches]
                 return [BrokenReference(ref, Severity.WARNING,
-                                        f"measure '{member}' is ambiguous: declared in {tables}")]
+                                        f"Ambiguous: measure '{member}' exists in multiple "
+                                        f"tables: {tables}")]
             if not any(m.name == member for m in matches):
                 return [BrokenReference(ref, Severity.ERROR,
                                         f"casing mismatch: [{member}] is declared as "
@@ -200,12 +201,12 @@ class NameofResolver:
                                     f"a reference to it counts as not found")]
         table = model.find_table(tname)
         if table is None:
-            return [BrokenReference(ref, Severity.ERROR, f"table '{tname}' not found")]
+            return [BrokenReference(ref, Severity.ERROR, f"Table '{tname}' not found")]
         col = table.find_column(member)
         meas = table.find_measure(member) if col is None else None
         if col is None and meas is None:
             return [BrokenReference(ref, Severity.ERROR,
-                                    f"column or measure '{member}' not found in table '{table.name}'")]
+                                    f"Column '{member}' not found in table '{table.name}'")]
         out: list[BrokenReference] = []
         target = col or meas
         if table.name != tname or target.name != member:
@@ -217,8 +218,7 @@ class NameofResolver:
         if meas is not None and not self._in_field_parameter(ref):
             out.append(BrokenReference(
                 ref, Severity.WARNING,
-                f"'{table.name}'[{meas.name}] is a measure, not a column; use the bare "
-                f"form NAMEOF([{meas.name}])",
+                f"'{member}' is a measure, not a column. Use NAMEOF([{member}]) instead",
             ))
         return out
 
@@ -226,6 +226,12 @@ class NameofResolver:
 # ---------------------------------------------------------------------------
 # Inventory (report nameof)
 # ---------------------------------------------------------------------------
+
+#: The two families of field-parameter tables, and the prefixes that name
+#: them.
+FAMILIES = (("x", ("x-Selector", "x-Plot Specific")), ("y", ("y-Selector", "y-Plot Specific")))
+
+DEFAULT_GROUP_PREFIXES = ["x-Selector", "x-Plot Specific", "y-Selector", "y-Plot Specific"]
 
 
 def statistics(refs: list[NameofReference]) -> dict:
@@ -238,15 +244,57 @@ def statistics(refs: list[NameofReference]) -> dict:
     }
 
 
-DEFAULT_GROUP_PREFIXES = ["x-Selector", "x-Plot Specific", "y-Selector", "y-Plot Specific"]
+def _kind(ref: NameofReference) -> int:
+    """The order the references of one measure are listed in: the quoted-table
+    columns first, then the unquoted-table ones, then the bare measures."""
+    if ref.table_name is None:
+        return 2
+    return 0 if ref.raw_argument.strip().startswith("'") else 1
+
+
+def sort_references(refs: list[NameofReference]) -> list[NameofReference]:
+    """The references of one measure, by kind and then by position."""
+    return sorted(refs, key=lambda r: (_kind(r), r.line_number))
+
+
+def build_families(model: SemanticModel) -> dict:
+    """The two families of field-parameter tables, with the references each
+    table holds and the broken ones."""
+    resolver = NameofResolver(model)
+    refs = resolver.find_all_nameof_references()
+    broken = resolver.validate_references(refs)
+    families: dict[str, dict] = {}
+    for name, prefixes in FAMILIES:
+        tables = sorted(
+            (t for t in model.table_list if t.name.startswith(prefixes)),
+            key=lambda t: t.name)
+        entry: dict[str, dict] = {}
+        for t in tables:
+            own = [r for r in refs if r.source_table == t.name]
+            own_broken = [b for b in broken if b.reference.source_table == t.name]
+            entry[t.name] = {
+                "columns": len(t.column_list),
+                "measures": len(t.measure_list),
+                "nameof_refs": len(own),
+                "broken_refs": len(own_broken),
+                "errors": sum(1 for b in own_broken if b.severity == Severity.ERROR),
+                "warnings": sum(1 for b in own_broken if b.severity == Severity.WARNING),
+                "samples": [f"{r.full_reference} (in {r.source_measure})"
+                            for r in sort_references(own)[:3]],
+            }
+        families[name] = entry
+    return {"families": families, "refs": refs, "broken": broken}
 
 
 def build_report(model: SemanticModel, prefixes: Optional[list[str]] = None) -> dict:
+    """The reference inventory of one model: the statistics, the broken
+    references and the per-table counts."""
     resolver = NameofResolver(model)
     refs = resolver.find_all_nameof_references()
     broken = resolver.validate_references(refs)
     broken.sort(key=lambda b: (b.severity != Severity.ERROR, b.reference.source_table,
-                               b.reference.source_measure))
+                               b.reference.source_measure, _kind(b.reference),
+                               b.reference.line_number))
     groups: dict[str, dict] = {}
     summary: dict = {}
     total_refs = total_broken = 0
@@ -286,39 +334,128 @@ def build_report(model: SemanticModel, prefixes: Optional[list[str]] = None) -> 
     }
 
 
-def render_report(data: dict) -> str:
+def render_validation(data: dict) -> str:
+    """The validation block: the counts, then every broken reference with
+    the reason it broke."""
     s = data["statistics"]
     lines = [
-        "=" * 60,
+        "=" * 80,
         "NAMEOF REFERENCE VALIDATION REPORT",
-        "=" * 60,
+        "=" * 80,
+        "",
         f"Total References: {s['total_references']}",
-        f"  Measure references: {s['measure_references']}",
-        f"  Column references: {s['column_references']}",
-        f"  Unique tables: {s['unique_tables']}",
-        f"  Unique objects: {s['unique_objects']}",
+        f"  Measure References: {s['measure_references']}",
+        f"  Column References: {s['column_references']}",
+        f"  Unique Tables: {s['unique_tables']}",
+        f"  Unique Objects: {s['unique_objects']}",
         "",
     ]
     broken = data["broken"]
     if not broken:
-        lines.append("All references are valid")
-    else:
-        errors = sum(1 for b in broken if b["severity"] == "ERROR")
-        lines.append(f"Found {len(broken)} issues ({errors} error(s), "
-                     f"{len(broken) - errors} warning(s))")
-        for b in broken:
+        lines.append("✅ All references are valid!")
+        lines.append("")
+        lines.append("=" * 80)
+        return "\n".join(lines)
+    errors = [b for b in broken if b["severity"] == "ERROR"]
+    warnings = [b for b in broken if b["severity"] != "ERROR"]
+    lines.append(f"❌ Found {len(broken)} issues:")
+    lines.append(f"   Errors: {len(errors)}")
+    lines.append(f"   Warnings: {len(warnings)}")
+    lines.append("")
+    for label, group in (("ERRORS:", errors), ("WARNINGS:", warnings)):
+        if not group:
+            continue
+        lines.append(label)
+        lines.append("-" * 80)
+        for b in group:
             lines += [
-                f"  [{b['severity']}] {b['source_table']}[{b['source_measure']}]: {b['reference']}",
-                f"      {b['reason']}",
-                f"      {b['line_context']}",
+                f"[{b['severity']}] Broken reference in {b['source_table']}[{b['source_measure']}]:",
+                f"  Reference: {b['reference']}",
+                f"  Reason: {b['reason']}",
+                f"  Context: {b['line_context']}...",
+                "",
             ]
-    for prefix, tables in data["groups"].items():
+    lines.append("=" * 80)
+    return "\n".join(lines)
+
+
+def render_report(data: dict) -> str:
+    """The validation block, then the two families of field-parameter
+    tables and the summary."""
+    lines = render_validation(data).splitlines()
+    lines += [
+        "",
+        "=" * 80,
+        "REPORT TABLE ANALYSIS",
+        "=" * 80,
+        "",
+        "🔍 Parsing model...",
+        "✅ Model parsed successfully",
+        "",
+        "📊 REPORT TABLES FOUND",
+        "-" * 80,
+    ]
+    for name, label in (("x", "x-Selector"), ("y", "y-Selector")):
+        tables = data.get("families", {}).get(name, {})
+        lines.append(f"{label} tables: {len(tables)}")
+        lines += [f"  • {table}" for table in tables]
+        lines.append("")
+    for name, label in (("x", "X-SELECTOR"), ("y", "Y-SELECTOR")):
+        tables = data.get("families", {}).get(name, {})
         if not tables:
             continue
-        lines += ["", f"{prefix} tables:"]
-        for name, row in tables.items():
+        lines += [
+            "=" * 80,
+            f"{label} TABLE ANALYSIS",
+            "=" * 80,
+            "",
+        ]
+        for table, row in tables.items():
+            lines += [
+                f"📋 {table}",
+                "-" * 80,
+                f"  Columns: {row['columns']}",
+                f"  Measures: {row['measures']}",
+                f"  NAMEOF references: {row['nameof_refs']}",
+            ]
+            if row["samples"]:
+                lines.append("  Sample NAMEOF references:")
+                lines += [f"    • {sample}" for sample in row["samples"]]
             lines.append(
-                f"  {name}: {row['columns']} column(s), {row['measures']} measure(s), "
-                f"{row['nameof_refs']} NAMEOF ref(s), {row['broken_refs']} broken"
-            )
+                f"  Broken references: {row['broken_refs']} "
+                f"(Errors: {row['errors']}, Warnings: {row['warnings']})")
+            lines.append("")
+    lines += [
+        "=" * 80,
+        "SUMMARY",
+        "=" * 80,
+        "",
+    ]
+    for name, label in (("x", "x-Selector"), ("y", "y-Selector")):
+        tables = data.get("families", {}).get(name, {})
+        if not tables:
+            continue
+        refs = sum(row["nameof_refs"] for row in tables.values())
+        broken = sum(row["broken_refs"] for row in tables.values())
+        lines += [
+            f"{label} Tables:",
+            f"  Total NAMEOF references: {refs}",
+            f"  Total broken: {broken}",
+            "",
+        ]
+    x = data.get("families", {}).get("x", {})
+    y = data.get("families", {}).get("y", {})
+    total_refs = (sum(row["nameof_refs"] for row in x.values())
+                  + sum(row["nameof_refs"] for row in y.values()))
+    total_broken = (sum(row["broken_refs"] for row in x.values())
+                    + sum(row["broken_refs"] for row in y.values()))
+    lines += [
+        "Combined:",
+        f"  Total NAMEOF references: {total_refs}",
+        f"  Total broken: {total_broken}",
+        "",
+        "=" * 80,
+        "✅ ANALYSIS COMPLETE",
+        "=" * 80,
+    ]
     return "\n".join(lines)

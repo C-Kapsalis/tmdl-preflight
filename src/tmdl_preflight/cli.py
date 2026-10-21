@@ -583,6 +583,14 @@ def _cmd_report(args) -> int:
     if args.kind == "complexity":
         data = reports.complexity(models, top=args.top)
         text = reports.render_complexity
+        if args.json:
+            print(json.dumps({
+                "total_measures": data["total_measures"],
+                "statistics": data["statistics"],
+                "top_10_complex": data["top_10_complex"],
+                "all_measures": data["all_measures"],
+            }, indent=2))
+            return 0
     elif args.kind == "nameof":
         data = nameof.build_report(models[0], args.group_prefix)
         for extra in models[1:]:
@@ -590,10 +598,40 @@ def _cmd_report(args) -> int:
             data["broken"] += other["broken"]
             for k, v in other["statistics"].items():
                 data["statistics"][k] += v
+        families = nameof.build_families(models[0])
+        data["families"] = families["families"]
         text = nameof.render_report
+        if args.json:
+            def _tables(name):
+                return {table: {k: v for k, v in row.items() if k != "samples"}
+                        for table, row in data["families"].get(name, {}).items()}
+
+            x, y = _tables("x"), _tables("y")
+            print(json.dumps({
+                "x_selector": x,
+                "y_selector": y,
+                "summary": {
+                    "x_selector_refs": sum(r["nameof_refs"] for r in x.values()),
+                    "x_selector_broken": sum(r["broken_refs"] for r in x.values()),
+                    "y_selector_refs": sum(r["nameof_refs"] for r in y.values()),
+                    "y_selector_broken": sum(r["broken_refs"] for r in y.values()),
+                    "total_refs": sum(r["nameof_refs"] for r in x.values())
+                    + sum(r["nameof_refs"] for r in y.values()),
+                    "total_broken": sum(r["broken_refs"] for r in x.values())
+                    + sum(r["broken_refs"] for r in y.values()),
+                },
+            }, indent=2))
+            return 0
     else:
         data = reports.relationships(models[0])
+        data["relationships_file"] = str(models[0].definition_path / "relationships.tmdl")
+        data["tables_folder"] = str(models[0].definition_path / "tables")
         text = reports.render_relationships
+        if args.json:
+            print(json.dumps({k: v for k, v in data.items()
+                              if k not in ("relationships_file", "tables_folder")},
+                             indent=2, ensure_ascii=False))
+            return 0
     print(json.dumps(data, indent=2) if args.json else text(data))
     return 0
 
