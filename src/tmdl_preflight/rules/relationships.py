@@ -477,7 +477,8 @@ class FactConformedDimensionJoinRule(Rule):
         "key_column": None,
         "exempt": {},
         "baseline": None,
-        "fail_without_baseline_entry": False,
+        "fail_without_baseline_entry": None,
+        "template_facts": None,
     }
     description = (
         "Every fact table must actively join a conformed dimension (configure "
@@ -488,7 +489,10 @@ class FactConformedDimensionJoinRule(Rule):
         "data. Offenders are classified 'missing relationship' (the fact has "
         "the key column) or 'missing key column'. 'exempt' maps tables to a "
         "mandatory reason; 'baseline' ratchets existing offenders per model. "
-        "Facts follow the shared table-role law. Inert until configured."
+        "A fact whose key column is missing is called out as a template "
+        "fact (a core-model defect) or as model-specific, depending on "
+        "'template_facts'. Facts follow the shared table-role law. Inert "
+        "until configured."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -500,6 +504,7 @@ class FactConformedDimensionJoinRule(Rule):
         if not dim or not key:
             return []
         exempt = self.options.get("exempt") or {}
+        template_facts = set(self.options.get("template_facts") or [])
         out: list[Violation] = []
         floors = None
         if self.options.get("baseline"):
@@ -510,40 +515,168 @@ class FactConformedDimensionJoinRule(Rule):
         for model in ctx.models:
             mkey = ctx.model_key(model)
             accepted: set[str] = set()
+            facts = fact_tables(model)
+            in_scope = [n for n in facts if n not in exempt]
+            offenders = self._offenders(model, dim, key, exempt, template_facts)
+            no_join = [n for n in offenders if self._has_key_column(model, n, key)]
+            missing_key = [n for n in offenders if n not in no_join]
             if floors is not None:
                 found, value = entry_for(floors, mkey)
-                if not found and self.options.get("fail_without_baseline_entry"):
+                if not found and self._fail_without_entry():
                     out.append(self.violation(
-                        f"model {mkey} has no entry in the baseline; record its accepted "
-                        f"offenders deliberately (an empty list means none).",
+                        f"no account-key floor recorded for '{mkey}'. Record it "
+                        f"deliberately: {self._capture_command()}. Currently flagged "
+                        f"({len(offenders)}): {', '.join(sorted(offenders)) or 'none'}",
                         file=model.definition_path / "relationships.tmdl", obj=mkey,
                     ))
+                    continue
                 accepted = set(value or [])
-            flagged = []
-            for name in fact_tables(model):
-                if name in exempt:
-                    continue
-                joined = any(
-                    r.is_active and r.from_table == name and r.to_table == dim and r.to_column == key
-                    for r in model.relationships
-                )
-                if joined:
-                    continue
-                t = model.tables[name]
-                flagged.append(name)
-                if name in accepted:
-                    continue
-                cls = "missing relationship" if t.find_column(key) else "missing key column"
+            new = sorted(set(offenders) - accepted)
+            fixed = sorted(accepted - set(offenders))
+            if new:
                 out.append(self.violation(
-                    f"fact table {name} has no active relationship to {dim}[{key}] "
-                    f"({cls}), so filtering by {dim} returns unfiltered data. Create "
-                    f"the active relationship" + (" (adding the key column first)." if
-                                                  cls == "missing key column" else "."),
-                    file=t.file, line=t.line, obj=name,
+                    "\n".join(self._finding(mkey, new, missing_key, no_join,
+                                            template_facts, len(accepted))),
+                    file=model.definition_path / "relationships.tmdl", obj=mkey,
                 ))
-            for name in sorted(accepted - set(flagged)):
+            if fixed:
                 ctx.notes.append(
-                    f"fact-conformed-dimension-join: {mkey}: {name} is in the baseline but "
-                    f"now joins {dim}; tighten the baseline by removing it."
+                    f"FIXED since the floor was recorded ({len(fixed)}): "
+                    f"{', '.join(fixed)}\n"
+                    f"  -> tighten the floor: {self._capture_command()}"
                 )
+            if offenders and not new:
+                ctx.notes.append(
+                    f"KNOWN BACKLOG (ratcheted, not failing) - {len(offenders)} "
+                    f"table(s) awaiting an active {dim} relationship: "
+                    f"{', '.join(sorted(offenders))}"
+                )
+            summary = [
+                f"Fact-classified tables: {len(facts)}",
+            ]
+            if exempt:
+                summary.append(
+                    f"Excluded, declared exempt ({len(exempt)}): "
+                    f"{', '.join(sorted(exempt))}"
+                )
+            summary.append(f"In scope: {len(in_scope)}")
+            summary.append(
+                f"Account-filterable (active -> {dim} join): "
+                f"{len(in_scope) - len(offenders)}"
+            )
+            summary.append(
+                f"Flagged: {len(offenders)} (no join w/ {key}: {len(no_join)}; "
+                f"no join, no FK col: {len(missing_key)})"
+            )
+            ctx.notes.append(f"R008: {mkey}\n" + "\n".join(summary))
         return out
+
+    def _fail_without_entry(self) -> bool:
+        """Must a model have a recorded floor entry?
+
+        With a floor file configured, a model without an entry fails: the
+        backlog has to be recorded deliberately, never picked up silently.
+        """
+        value = self.options.get("fail_without_baseline_entry")
+        if value is None:
+            return True
+        return bool(value)
+
+    def capture_floor(self, ctx: Context) -> Optional[dict[str, list[str]]]:
+        from ..roles import fact_tables
+
+        dim = self.options.get("dimension_table")
+        key = self.options.get("key_column")
+        if not dim or not key:
+            return None
+        exempt = self.options.get("exempt") or {}
+        template_facts = set(self.options.get("template_facts") or [])
+        out: dict[str, list[str]] = {}
+        for model in ctx.models:
+            mkey = ctx.model_key(model)
+            offenders = self._offenders(model, dim, key, exempt, template_facts)
+            out[mkey] = sorted(offenders)
+        return out
+
+    def floor_indent(self) -> int:
+        return 1
+
+    def floor_captured_message(self, floors: dict[str, list[str]]) -> str:
+        return " ".join(
+            f"captured account-key floor for {key}: {len(names)} known offender(s)"
+            for key, names in sorted(floors.items())
+        )
+
+    def _joined(self, model, dim: str, key: str) -> set[str]:
+        """The facts that actively join the dimension on its key."""
+        return {
+            r.from_table
+            for r in model.relationships
+            if r.is_active and r.to_table == dim and r.to_column == key
+        }
+
+    @staticmethod
+    def _has_key_column(model, name: str, key: str) -> bool:
+        """Does the table carry the key column, spelled exactly like that?
+
+        The check is case-sensitive: a column named ``Account_X_ID`` is not
+        the key column ``account_x_id``.
+        """
+        table = model.tables.get(name)
+        return table is not None and key in table.columns
+
+    def _offenders(self, model, dim: str, key: str, exempt, template_facts) -> list[str]:
+        """The facts with no active join to the dimension, in table order."""
+        joined = self._joined(model, dim, key)
+        return [
+            name for name in model.tables
+            if name not in exempt and name not in joined and self._is_fact(model, name)
+        ]
+
+    @staticmethod
+    def _is_fact(model, name: str) -> bool:
+        from ..roles import is_fact
+
+        table = model.tables.get(name)
+        return table is not None and is_fact(table)
+
+    @staticmethod
+    def _capture_command() -> str:
+        return "tmdl-preflight check --select fact-conformed-dimension-join " \
+               "--capture-floor"
+
+    def _finding(self, mkey: str, new: list[str], missing_key: list[str],
+                 no_join: list[str], template_facts: set[str], known: int) -> list[str]:
+        key = self.options["key_column"]
+        dim = self.options["dimension_table"]
+        lines = [
+            f"NEW account-key offender(s) in '{mkey}' — {len(new)} table(s) "
+            f"not in the recorded floor ({known} known). This is a fresh "
+            f"regression, not the existing backlog:"
+        ]
+        new_missing = [n for n in new if n in missing_key]
+        new_no_join = [n for n in new if n in no_join]
+        if new_missing:
+            lines.append(
+                f"Fact tables missing '{key}' — they cannot be account-filtered:"
+            )
+            template = sorted(n for n in new_missing if n in template_facts)
+            specific = sorted(n for n in new_missing if n not in template_facts)
+            if template:
+                lines.append("  CRITICAL — template fact tables (core-model defect):")
+                lines.extend(f"    - {n}" for n in template)
+            if specific:
+                lines.append(
+                    "  model-specific fact tables — the database must supply a "
+                    f"placeholder {key}:"
+                )
+                lines.extend(f"    - {n}" for n in specific)
+        if new_no_join:
+            lines.append(
+                f"Fact tables that carry '{key}' but have NO active relationship "
+                f"to {dim}[{key}] — the account filter would resolve but return "
+                f"UNFILTERED data; create the active relationship (your "
+                f"relationship tooling):"
+            )
+            lines.extend(f"    - {n}" for n in new_no_join)
+        return lines

@@ -4,11 +4,30 @@ cohort calendars. IDs R009-R016."""
 from __future__ import annotations
 
 from collections import deque
+from pathlib import Path
 from typing import Optional
 
 from ..model import SemanticModel
 from ..roles import fact_tables
+from ..ratchet import entry_for
 from .base import Context, Rule, Severity, Violation
+
+
+def relationship_sides(model: SemanticModel) -> list[tuple[str, str]]:
+    """The (one side, many side) of every active relationship.
+
+    The one side is the to-table unless the to-cardinality is 'many'. The
+    reverse edge a bidirectional relationship adds is not a side of its own:
+    only the declared direction counts here.
+    """
+    out: list[tuple[str, str]] = []
+    for r in model.relationships:
+        if not r.is_active:
+            continue
+        one, many = ((r.to_table, r.from_table) if r.to_cardinality != "many"
+                     else (r.from_table, r.to_table))
+        out.append((one, many))
+    return out
 
 
 def filter_graph(model: SemanticModel) -> dict[str, set[str]]:
@@ -258,13 +277,12 @@ class CalendarStandardColumnsRule(Rule):
     id = "R013"
     name = "calendar-standard-columns"
     severity = Severity.INFO
-    opt_in = True
     option_defaults = {"calendar_table": "__Calendar",
                        "standard_columns": ["Date", "Year", "Quarter", "Month", "Week", "Day"]}
     description = (
         "Report authors expect a calendar with the usual levels (Date, Year, "
         "Quarter, Month, Week, Day by default). One info finding lists the "
-        "missing ones. Opt-in."
+        "missing ones. Advisory: it never fails the run."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -273,13 +291,39 @@ class CalendarStandardColumnsRule(Rule):
             t = model.get_table(self.options["calendar_table"])
             if t is None:
                 continue
-            have = {c.name.lower() for c in t.column_list}
+            have = {c.name.lower(): c.name for c in t.column_list}
+            present = [have[c.lower()] for c in self.options["standard_columns"]
+                       if c.lower() in have]
             missing = [c for c in self.options["standard_columns"] if c.lower() not in have]
             if missing:
                 out.append(self.violation(
                     f"calendar {t.name} has no {', '.join(missing)} column(s).",
                     file=t.file, obj=t.name,
                 ))
+            note = [
+                "Calendar Table Completeness:",
+                f"Total columns: {len(t.column_list)}",
+                f"Standard columns present: {len(present)}/{len(self.options['standard_columns'])}",
+            ]
+            if present:
+                note.append("")
+                note.append("Present standard columns:")
+                note.extend(f"  - {c}" for c in present)
+            if missing:
+                note.append("")
+                note.append("Advisory - Missing standard columns:")
+                note.extend(f"  - {c}" for c in missing)
+                note.append("")
+                note.append("These columns are recommended for complete date hierarchies.")
+            else:
+                note.append("")
+                note.append("All standard calendar columns present")
+            others = sorted(c.name for c in t.column_list if c.name not in present)
+            if others:
+                note.append("")
+                note.append(f"Additional columns ({len(others)}):")
+                note.extend(f"  - {c}" for c in others[:10])
+            ctx.notes.append(f"R013: {ctx.model_key(model)}\n" + "\n".join(note))
         return out
 
 
@@ -293,12 +337,11 @@ class DimensionKeyColumnsRule(Rule):
     id = "R014"
     name = "dimension-key-columns"
     severity = Severity.INFO
-    opt_in = True
     option_defaults = {"dimension_prefix": "_", "require_dimension_keys": True}
     description = (
         "A dimension table (name starts with '_') without a recognisable key "
         "column (…_id, date, …_date, …_level, .id, or a z- column) usually "
-        "cannot be the one side of a relationship. Advisory, opt-in; "
+        "cannot be the one side of a relationship. Advisory; "
         "require_dimension_keys = false skips it."
     )
 
@@ -307,15 +350,43 @@ class DimensionKeyColumnsRule(Rule):
 
     def check(self, ctx: Context) -> list[Violation]:
         prefix = self.options["dimension_prefix"]
-        return [
-            self.violation(
-                f"dimension table {t.name} has no key-like column (columns: "
-                f"{', '.join(c.name for c in t.column_list) or 'none'}).",
-                file=t.file, obj=t.name,
-            )
-            for model in ctx.models for t in model.table_list
-            if t.name.startswith(prefix) and not any(_is_key(c.name) for c in t.column_list)
-        ]
+        out: list[Violation] = []
+        for model in ctx.models:
+            dimensions = [t for t in model.table_list if t.name.startswith(prefix)]
+            with_keys = [t for t in dimensions
+                         if any(_is_key(c.name) for c in t.column_list)]
+            without = [t for t in dimensions if t not in with_keys]
+            for t in without:
+                out.append(self.violation(
+                    f"dimension table {t.name} has no key-like column (columns: "
+                    f"{', '.join(c.name for c in t.column_list) or 'none'}).",
+                    file=t.file, obj=t.name,
+                ))
+            coverage = 100.0 * len(with_keys) / len(dimensions) if dimensions else 100.0
+            note = [
+                f"Total dimension tables ({prefix}prefix): {len(dimensions)}",
+                f"With key columns: {len(with_keys)} ({coverage:.1f}%)",
+                f"Without apparent keys: {len(without)}",
+            ]
+            if without:
+                note.append("")
+                note.append(
+                    f"Dimension tables without keys matching the rigid pattern "
+                    f"list ({len(without)}):"
+                )
+                note.append("(Patterns: _x_id, _id, date, _level, z-, .id)")
+                for t in sorted(without, key=lambda x: x.name):
+                    note.append("")
+                    note.append(f"  Table: {t.name}")
+                    if t.column_list:
+                        note.extend(f"    column: {c.name}" for c in t.column_list)
+                    else:
+                        note.append("    (no columns parsed)")
+            else:
+                note.append("")
+                note.append("All dimension tables have key columns matching the canonical patterns.")
+            ctx.notes.append(f"R014: {ctx.model_key(model)}\n" + "\n".join(note))
+        return out
 
 
 class CohortCalendarReachRule(Rule):
@@ -329,7 +400,9 @@ class CohortCalendarReachRule(Rule):
         "'Cohort Date', whatever the table is called) must reach every fact "
         "that carries its cohort subject within max_hops active relationship "
         "hops; otherwise every cohort measure on that fact blanks or repeats "
-        "the total. Subjects are the dimensions the calendar filters; their "
+        "the total. The subject dimensions are the many sides of the active "
+        "relationships whose one side is a cohort calendar and that are "
+        "themselves the one side of another active relationship; the subject "
         "facts are the many sides of those dimensions."
     )
 
@@ -340,14 +413,23 @@ class CohortCalendarReachRule(Rule):
         checked = 0
         for model in ctx.models:
             calendars = [t.name for t in model.table_list
-                         if any(c.name.endswith(suffix) and not c.is_calculated for c in t.column_list)]
+                         if any(c.name.endswith(suffix) and not c.is_calculated
+                                for c in t.column_list)]
             if not calendars:
                 continue
             graph = filter_graph(model)
-            ones = set(graph)
+            sides = relationship_sides(model)
             cal_set = set(calendars)
-            subjects = {m for cal in calendars for m in graph.get(cal, ()) if m in ones}
-            facts = {m for s in subjects for m in graph.get(s, ())} - subjects - cal_set
+            one_sides = {one for one, _many in sides}
+            subjects = {
+                many
+                for one, many in sides
+                if one in cal_set and many in one_sides
+            }
+            facts = {
+                many for one, many in sides
+                if one in subjects
+            } - subjects - cal_set
             if not facts:
                 continue
             checked += 1
@@ -356,9 +438,10 @@ class CohortCalendarReachRule(Rule):
                 if missing:
                     t = model.get_table(cal)
                     out.append(self.violation(
-                        f"cohort calendar {cal} does not reach {', '.join(missing)} within "
-                        f"{hops} active hop(s), so its cohort measures blank or repeat the "
-                        f"total there. Anchor it on the subject dimension like its siblings.",
+                        f"{ctx.model_key(model)}: '{cal}' cannot filter "
+                        f"[{', '.join(repr(m) for m in missing)}] over the active "
+                        f"relationship graph (subject-bearing facts: "
+                        f"[{', '.join(repr(f) for f in sorted(facts))}])",
                         file=t.file if t else None, obj=cal,
                     ))
         if self.options.get("require_cohort_calendars") and checked == 0:
@@ -373,37 +456,123 @@ class DeadAnchorCalendarRule(Rule):
     id = "R016"
     name = "dead-anchor-calendar"
     severity = Severity.ERROR
-    option_defaults = {"template": None, "retained": [], "max_hops": 2}
+    option_defaults = {"template": None, "retained": [], "max_hops": 2, "floor": None}
     description = (
         "An anchor calendar (a table named '__…Calendar') that reaches no "
         "table through active relationships filters nothing: every cohort "
         "measure written against it renders the grand total or blanks. "
         "Calendars the template model also carries (set 'template' to its "
-        "folder) and tables listed in 'retained' are not anchors. Use the "
-        "baseline to accept known dead calendars."
+        "folder, wherever it lives) and tables listed in 'retained' are not "
+        "anchors. 'retained' is a list that applies to every model or a "
+        "mapping from a model key to the tables it keeps unwired on purpose. "
+        "The floor file (option 'floor') records the dead calendars each "
+        "model already has: those do not fail, the ones that are new do."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
-        excluded = set(self.options.get("retained") or [])
-        template = self.options.get("template")
-        template_models = [m for m in ctx.models if template and ctx.model_matches(template, m)]
-        for tm in template_models:
-            excluded |= {p.stem for p in (tm.definition_path / "tables").glob("*.tmdl")
-                         if p.stem.startswith("__") and p.stem.endswith("Calendar")}
+        floors = self._floors()
         for model in ctx.models:
-            if model in template_models:
+            key = ctx.model_key(model)
+            excluded = self._retained_for(key)
+            excluded |= self._template_calendars(ctx)
+            if self.options.get("template") and ctx.model_matches(self.options["template"], model):
                 continue
             graph = filter_graph(model)
+            dead: list[str] = []
             for f in sorted((model.definition_path / "tables").glob("*.tmdl")):
                 stem = f.stem
                 if not (stem.startswith("__") and stem.endswith("Calendar")) or stem in excluded:
                     continue
                 if not reachable(graph, stem, int(self.options["max_hops"])):
-                    out.append(self.violation(
-                        f"anchor calendar {stem} reaches no table through an active "
-                        f"relationship, so it filters nothing. Wire it to the anchor date "
-                        f"on its subject dimension, or delete it.",
-                        file=f, obj=stem,
-                    ))
+                    dead.append(stem)
+            accepted = set()
+            if floors is not None:
+                found, value = entry_for(floors, key)
+                accepted = set(value or [])
+            new = sorted(set(dead) - accepted)
+            if new:
+                out.append(self.violation(
+                    f"New anchor calendar with NO active relationship — it filters "
+                    f"nothing, so every cohort measure written against it is inert: "
+                    f"{key}: [{', '.join(new)}]. Wire it to the anchor date on the "
+                    f"subject dimension, or delete the table. Do not add it to the "
+                    f"floor to get green.",
+                    file=model.definition_path / "tables" / f"{new[0]}.tmdl",
+                    obj=key,
+                ))
+            fixed = sorted(accepted - set(dead))
+            if fixed:
+                ctx.notes.append(
+                    f"[dead-anchor-calendar floor] {{{key}: {fixed}}} now reach "
+                    f"something — tighten with {self._capture_command(ctx)}"
+                )
         return out
+
+    def _floors(self) -> Optional[dict]:
+        from ..ratchet import RatchetFileError, load_floors
+
+        path = self.options.get("floor")
+        if not path:
+            return None
+        try:
+            return load_floors(path, missing_ok=True)
+        except RatchetFileError:
+            return None
+
+    def capture_floor(self, ctx: Context) -> Optional[dict[str, list[str]]]:
+        out: dict[str, list[str]] = {}
+        for model in ctx.models:
+            key = ctx.model_key(model)
+            excluded = self._retained_for(key)
+            excluded |= self._template_calendars(ctx)
+            graph = filter_graph(model)
+            dead = [
+                f.stem
+                for f in sorted((model.definition_path / "tables").glob("*.tmdl"))
+                if f.stem.startswith("__") and f.stem.endswith("Calendar")
+                and f.stem not in excluded
+                and not reachable(graph, f.stem, int(self.options["max_hops"]))
+            ]
+            out[key] = sorted(dead)
+        return out
+
+    def floor_captured_message(self, floors: dict[str, list[str]]) -> str:
+        total = sum(len(names) for names in floors.values())
+        return (f"[dead-anchor-calendar floor] captured {total} across "
+                f"{len(floors)} models")
+
+    @staticmethod
+    def _capture_command(ctx: Context) -> str:
+        return "tmdl-preflight check --select dead-anchor-calendar --capture-floor"
+
+    def _retained_for(self, model_key: str) -> set[str]:
+        """The calendars this model keeps unwired on purpose."""
+        retained = self.options.get("retained") or []
+        if isinstance(retained, dict):
+            found, value = entry_for(retained, model_key)
+            names = value if found else []
+        else:
+            names = retained
+        return {n for n in (names or []) if isinstance(n, str) and n.startswith("__")}
+
+    def _template_calendars(self, ctx: Context) -> set[str]:
+        """The anchor calendars the template model carries.
+
+        The template may live anywhere on disk: an absolute path, or a path
+        relative to the configuration file. A folder that does not exist
+        excludes nothing.
+        """
+        template = self.options.get("template")
+        if not template:
+            return set()
+        path = Path(str(template))
+        if not path.is_absolute():
+            path = Path(self.options.get("_config_dir") or ".") / path
+        tables = path / "tables"
+        if not tables.is_dir():
+            tables = path
+            if not tables.is_dir():
+                return set()
+        return {p.stem for p in tables.glob("*.tmdl")
+                if p.stem.startswith("__") and p.stem.endswith("Calendar")}

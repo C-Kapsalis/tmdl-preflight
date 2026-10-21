@@ -141,6 +141,9 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--baseline", metavar="FILE",
                        help="only fail on violations not recorded in this "
                             "baseline file")
+        p.add_argument("--capture-floor", metavar="FILE",
+                       help="write the ratchet floor of the selected rules to "
+                            "FILE and print what was captured")
         if name == "fix":
             p.add_argument("--dry-run", action="store_true",
                            help="report what fix would change; write nothing")
@@ -433,10 +436,49 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
     return report, ruleset, cfg, ctx
 
 
+def _capture_floor(args, ruleset: RuleSet, ctx: Context) -> int:
+    """Write the ratchet floor of the selected rules to a file."""
+    from .ratchet import RatchetFileError, load_floors
+
+    target = Path(args.capture_floor)
+    floors: dict[str, list[str]] = {}
+    if target.is_file():
+        try:
+            existing = load_floors(target, missing_ok=True)
+        except RatchetFileError as exc:
+            raise UsageError(str(exc)) from exc
+        for key, value in existing.items():
+            floors[key] = list(value) if isinstance(value, list) else []
+    captured = False
+    indent = 2
+    for rule in ruleset.rules:
+        captured_now = rule.capture_floor(ctx)
+        if captured_now is None:
+            continue
+        captured = True
+        indent = rule.floor_indent()
+        for key, names in captured_now.items():
+            floors[key] = sorted(names)
+        print(rule.floor_captured_message(captured_now))
+    if not captured:
+        raise UsageError(
+            "none of the selected rules records a floor; pick a rule that "
+            "gates a backlog (for example fact-conformed-dimension-join or "
+            "dead-anchor-calendar)"
+        )
+    ordered = {key: floors[key] for key in sorted(floors)}
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(ordered, indent=indent) + "\n", encoding="utf-8")
+    print(f"tmdl-preflight: floor written to {target}")
+    return 0
+
+
 def _cmd_check(args) -> int:
     if args.json and args.format not in (None, "json"):
         raise UsageError(f"--json conflicts with --format {args.format}")
-    report, ruleset, cfg, _ctx = _run(args, args.command)
+    report, ruleset, cfg, ctx = _run(args, args.command)
+    if getattr(args, "capture_floor", None):
+        return _capture_floor(args, ruleset, ctx)
     if args.command == "fix" and getattr(args, "check", False):
         pending = {(v.rule_id, v.obj or v.path or "") for v in report.violations
                    if v.fixable and v.severity.value != "info"}
@@ -452,7 +494,8 @@ def _cmd_check(args) -> int:
             report.violations, known, ruleset, {r.id for r in ruleset.rules}
         )
     if args.command == "fix" and not getattr(args, "dry_run", False):
-        _after_fix_cache(args, report, _ctx)
+        _after_fix_cache(args, report, ctx)
+
     fmt = "json" if args.json else (args.format or "text")
     print(render(fmt, report, Path(args.path), ruleset))
     return report.exit_code(strict=args.strict or cfg.strict)

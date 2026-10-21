@@ -399,3 +399,430 @@ def test_r007_fixer_keeps_the_other_bytes(tmp_path):
     text = (d / "relationships.tmdl").read_text(encoding="utf-8")
     assert text.endswith("toColumn: Stores.id\n\n")
     assert "AutoDetected" not in text
+
+
+# ---------------------------------------------------------------------------
+# RL-1: R015 derives the subject dimensions and subject facts from the
+# relationship sides
+# ---------------------------------------------------------------------------
+
+
+def _cohort_model(tmp_path: Path, name: str = "Shop.SemanticModel") -> Path:
+    d = _model(tmp_path, name)
+    _table(d / "tables", "__Cohort Calendar", ["Date", "Registration Cohort Date"])
+    _table(d / "tables", "__Other Calendar", ["Date", "Registration Cohort Date"])
+    _table(d / "tables", "_Users", ["user_id"])
+    _table(d / "tables", "_Region", ["region_id"])
+    _table(d / "tables", "Orders", ["user_id", "order_id"])
+    _table(d / "tables", "Views", ["user_id"])
+    return d
+
+
+def test_r015_subjects_come_from_the_relationship_sides(tmp_path):
+    d = _cohort_model(tmp_path)
+    _rels(d,
+          "relationship 11111111-1111-4333-8444-555555555555\n"
+          "\tfromColumn: _Users.user_id\n\ttoColumn: __Cohort Calendar.Date\n"
+          "\n"
+          "relationship 22222222-2222-4333-8444-555555555555\n"
+          "\tfromColumn: Orders.order_id\n\ttoColumn: __Other Calendar.Date\n"
+          "\n"
+          "relationship 33333333-3333-4333-8444-555555555555\n"
+          "\tfromColumn: Orders.user_id\n\ttoColumn: _Users.user_id\n"
+          "\n"
+          "relationship 44444444-4444-4333-8444-555555555555\n"
+          "\tfromColumn: Views.user_id\n\ttoColumn: _Users.user_id\n"
+          "\n"
+          "relationship 55555555-5555-4333-8444-555555555555\n"
+          "\tcrossFilteringBehavior: bothDirections\n"
+          "\tfromColumn: _Users.user_id\n\ttoColumn: _Region.region_id\n")
+    found = CohortCalendarReachRule().check(Context(tmp_path))
+    # the reverse edge a bidirectional relationship adds does not make _Region
+    # a subject fact
+    assert len(found) == 1
+    assert found[0].obj == "__Other Calendar"
+    assert "_Region" not in found[0].message
+    assert "Views" in found[0].message
+
+
+def test_r015_a_dimension_is_never_a_subject_fact(tmp_path):
+    d = _cohort_model(tmp_path)
+    (d / "tables" / "__Other Calendar.tmdl").unlink()
+    _rels(d,
+          "relationship 11111111-1111-4333-8444-555555555555\n"
+          "\tfromColumn: _Users.user_id\n\ttoColumn: __Cohort Calendar.Date\n"
+          "\n"
+          "relationship 33333333-3333-4333-8444-555555555555\n"
+          "\tfromColumn: Orders.user_id\n\ttoColumn: _Users.user_id\n"
+          "\n"
+          "relationship 44444444-4444-4333-8444-555555555555\n"
+          "\tfromColumn: Views.user_id\n\ttoColumn: _Users.user_id\n")
+    found = CohortCalendarReachRule().check(Context(tmp_path))
+    assert found == []
+
+
+# ---------------------------------------------------------------------------
+# RL-23: R015 text
+# ---------------------------------------------------------------------------
+
+
+def test_r015_finding_text(tmp_path):
+    d = _cohort_model(tmp_path)
+    _rels(d,
+          "relationship 11111111-1111-4333-8444-555555555555\n"
+          "\tfromColumn: _Users.user_id\n\ttoColumn: __Cohort Calendar.Date\n"
+          "\n"
+          "relationship 22222222-2222-4333-8444-555555555555\n"
+          "\tfromColumn: Orders.order_id\n\ttoColumn: __Other Calendar.Date\n"
+          "\n"
+          "relationship 33333333-3333-4333-8444-555555555555\n"
+          "\tfromColumn: Orders.user_id\n\ttoColumn: _Users.user_id\n"
+          "\n"
+          "relationship 44444444-4444-4333-8444-555555555555\n"
+          "\tfromColumn: Views.user_id\n\ttoColumn: _Users.user_id\n")
+    found = CohortCalendarReachRule().check(Context(tmp_path))
+    assert len(found) == 1
+    assert found[0].message == (
+        "Shop.SemanticModel: '__Other Calendar' cannot filter ['Views'] over the "
+        "active relationship graph (subject-bearing facts: ['Orders', 'Views'])"
+    )
+
+
+# ---------------------------------------------------------------------------
+# RL-24: R015 stays opt-in
+# ---------------------------------------------------------------------------
+
+
+def test_r015_nothing_checked_is_opt_in(tmp_path):
+    d = _model(tmp_path)
+    _table(d / "tables", "Orders", ["id"])
+    _rels(d, "")
+    rule = CohortCalendarReachRule()
+    assert rule.check(Context(tmp_path)) == []
+    rule.options["require_cohort_calendars"] = True
+    assert rule.check(Context(tmp_path)) != []
+
+
+# ---------------------------------------------------------------------------
+# RL-22: R013 and R014 run by default (advisory)
+# ---------------------------------------------------------------------------
+
+
+def test_r013_runs_by_default(tmp_path):
+    d = _model(tmp_path)
+    _table(d / "tables", "__Calendar", ["Date", "Year", "Quarter", "Month", "Day"])
+    _rels(d, "")
+    code, payload = run_check(d.parent)
+    found = violations(payload, "R013")
+    assert len(found) == 1
+    assert found[0]["severity"] == "info"
+    assert "Week" in found[0]["message"]
+
+
+def test_r014_runs_by_default(tmp_path):
+    d = _model(tmp_path)
+    _table(d / "tables", "_Users", ["full_name"])
+    _rels(d, "")
+    code, payload = run_check(d.parent)
+    found = violations(payload, "R014")
+    assert len(found) == 1
+    assert found[0]["severity"] == "info"
+    assert "_Users" in found[0]["message"]
+
+
+def test_r013_note_layout(tmp_path):
+    d = _model(tmp_path)
+    _table(d / "tables", "__Calendar", ["Date", "Year", "Quarter", "Month", "Day"])
+    _rels(d, "")
+    ctx = Context(tmp_path)
+    CalendarStandardColumnsRule().check(ctx)
+    joined = "\n".join(ctx.notes)
+    assert "Calendar Table Completeness:" in joined
+    assert "Total columns: 5" in joined
+    assert "Standard columns present: 5/6" in joined
+    assert "Advisory - Missing standard columns:" in joined
+    assert "These columns are recommended for complete date hierarchies." in joined
+    assert "Additional columns (0):" not in joined
+
+
+def test_r014_note_layout(tmp_path):
+    d = _model(tmp_path)
+    _table(d / "tables", "_Users", ["full_name"])
+    _rels(d, "")
+    ctx = Context(tmp_path)
+    DimensionKeyColumnsRule().check(ctx)
+    joined = "\n".join(ctx.notes)
+    assert "Total dimension tables (_prefix): 1" in joined
+    assert "With key columns: 0 (0.0%)" in joined
+    assert "Without apparent keys: 1" in joined
+    assert "(Patterns: _x_id, _id, date, _level, z-, .id)" in joined
+    assert "  Table: _Users" in joined
+    assert "    column: full_name" in joined
+
+
+# ---------------------------------------------------------------------------
+# RL-25: R016 retained list per model
+# ---------------------------------------------------------------------------
+
+
+def test_r016_retained_is_per_model(tmp_path):
+    root = tmp_path
+    a = _model(root, "ModelA.SemanticModel")
+    _table(a / "tables", "__X Calendar", ["Date"])
+    _rels(a, "")
+    b = _model(root, "ModelB.SemanticModel")
+    _table(b / "tables", "__X Calendar", ["Date"])
+    _rels(b, "")
+    rule = DeadAnchorCalendarRule()
+    rule.options["retained"] = {"ModelA": ["__X Calendar"]}
+    found = rule.check(Context(root))
+    assert len(found) == 1
+    assert found[0].obj == "ModelB.SemanticModel"
+    assert found[0].file is not None and "ModelB" in str(found[0].file)
+
+
+# ---------------------------------------------------------------------------
+# RL-2: R016 reads the template calendars from a folder that is not scanned
+# ---------------------------------------------------------------------------
+
+
+def test_r016_template_outside_the_scan(tmp_path):
+    root = tmp_path
+    client = _model(root, "Client.SemanticModel")
+    _table(client / "tables", "__Comparison Calendar", ["Date"])
+    _rels(client, "")
+    template = root / "template" / "Template.SemanticModel" / "definition"
+    (template / "tables").mkdir(parents=True)
+    _table(template / "tables", "__Comparison Calendar", ["Date"])
+    rule = DeadAnchorCalendarRule()
+    rule.options["template"] = str(template)
+    found = rule.check(Context(root))
+    assert found == []
+
+
+def test_r016_template_folder_that_does_not_exist(tmp_path):
+    root = tmp_path
+    client = _model(root, "Client.SemanticModel")
+    _table(client / "tables", "__Comparison Calendar", ["Date"])
+    _rels(client, "")
+    rule = DeadAnchorCalendarRule()
+    rule.options["template"] = str(root / "nope")
+    found = rule.check(Context(root))
+    assert len(found) == 1
+    assert "__Comparison Calendar" in found[0].message
+
+
+# ---------------------------------------------------------------------------
+# RL-3: R016 per-model ratchet floor
+# ---------------------------------------------------------------------------
+
+
+def test_r016_floor_accepts_a_known_dead_calendar(tmp_path, tmp_path_factory):
+    root = tmp_path
+    client = _model(root, "Client.SemanticModel")
+    _table(client / "tables", "__A Calendar", ["Date"])
+    _table(client / "tables", "__B Calendar", ["Date"])
+    _rels(client, "")
+    floor = tmp_path_factory.mktemp("floor") / "dead.json"
+    floor.write_text(json.dumps({"Client": ["__A Calendar"]}), encoding="utf-8")
+    rule = DeadAnchorCalendarRule()
+    rule.options["floor"] = str(floor)
+    ctx = Context(root)
+    found = rule.check(ctx)
+    assert len(found) == 1
+    assert "__B Calendar" in found[0].message
+    assert "__A Calendar" not in found[0].message
+
+
+def test_r016_floor_note_when_a_calendar_reaches_something(tmp_path, tmp_path_factory):
+    root = tmp_path
+    client = _model(root, "Client.SemanticModel")
+    _table(client / "tables", "__A Calendar", ["Date"])
+    _table(client / "tables", "Orders", ["id"])
+    _rels(client,
+          "relationship 11111111-1111-4333-8444-555555555555\n"
+          "\tfromColumn: Orders.id\n\ttoColumn: __A Calendar.Date\n")
+    floor = tmp_path_factory.mktemp("floor") / "dead.json"
+    floor.write_text(json.dumps({"Client": ["__A Calendar"]}), encoding="utf-8")
+    rule = DeadAnchorCalendarRule()
+    rule.options["floor"] = str(floor)
+    ctx = Context(root)
+    found = rule.check(ctx)
+    assert found == []
+    assert any("now reach something" in note for note in ctx.notes)
+
+
+# ---------------------------------------------------------------------------
+# RL-4 to RL-8: R008 groups the offenders per model
+# ---------------------------------------------------------------------------
+
+
+def _account_model(tmp_path: Path, name: str = "Shop.SemanticModel") -> Path:
+    d = _model(tmp_path, name)
+    _table(d / "tables", "_Accounts", ["account_x_id"])
+    _table(d / "tables", "Bookings", ["booking_id", "account_x_id"])
+    _table(d / "tables", "Orders", ["order_id"])
+    _table(d / "tables", "Sitemap", ["page_id"])
+    _table(d / "tables", "Ledger", ["entry_id", "account_x_id"])
+    _table(d / "tables", "Reports", ["report_id", "Account_X_ID"])
+    _rels(d,
+          "relationship 11111111-1111-4333-8444-555555555555\n"
+          "\tfromColumn: Bookings.account_x_id\n\ttoColumn: _Accounts.account_x_id\n")
+    return d
+
+
+def _r008(config: dict) -> dict:
+    return {"rules": {"R008": config}}
+
+
+def test_r008_template_fact_split(tmp_path):
+    root = tmp_path
+    d = _account_model(root)
+    code, payload = run_check(d.parent, "R008", config=_r008({
+        "dimension_table": "_Accounts",
+        "key_column": "account_x_id",
+        "template_facts": ["Orders"],
+    }))
+    found = violations(payload, "R008")
+    assert len(found) == 1
+    message = found[0]["message"]
+    assert "CRITICAL — template fact tables (core-model defect)" in message
+    assert "model-specific fact tables" in message
+    assert "    - Orders" in message
+    assert "    - Sitemap" in message
+
+
+def test_r008_one_finding_per_model(tmp_path):
+    root = tmp_path
+    d = _account_model(root)
+    code, payload = run_check(d.parent, "R008", config=_r008({
+        "dimension_table": "_Accounts",
+        "key_column": "account_x_id",
+    }))
+    found = violations(payload, "R008")
+    assert len(found) == 1
+    message = found[0]["message"]
+    assert message.startswith("NEW account-key offender(s) in 'Shop.SemanticModel' — ")
+    assert "Fact tables missing 'account_x_id' — they cannot be account-filtered:" in message
+    assert "Fact tables that carry 'account_x_id' but have NO active relationship to " \
+           "_Accounts[account_x_id] — the account filter would resolve but return " \
+           "UNFILTERED data; create the active relationship (your relationship tooling):" \
+           in message
+    # the two sections come in that order
+    assert message.index("Fact tables missing") < message.index("Fact tables that carry")
+    assert "    - Ledger" in message
+    assert "    - Orders" in message
+    assert "    - Sitemap" in message
+
+
+def test_r008_key_column_is_case_sensitive(tmp_path):
+    root = tmp_path
+    d = _account_model(root)
+    code, payload = run_check(d.parent, "R008", config=_r008({
+        "dimension_table": "_Accounts",
+        "key_column": "account_x_id",
+    }))
+    found = violations(payload, "R008")
+    assert len(found) == 1
+    message = found[0]["message"]
+    # Reports carries Account_X_ID, not account_x_id: it is a missing key column
+    assert "    - Reports" in message
+    assert message.index("    - Reports") < message.index("Fact tables that carry")
+
+
+def test_r008_model_without_a_floor_entry_fails(tmp_path):
+    root = tmp_path
+    d = _account_model(root)
+    floor = root / "floor.json"
+    floor.write_text("{}", encoding="utf-8")
+    code, payload = run_check(d.parent, "R008", config=_r008({
+        "dimension_table": "_Accounts",
+        "key_column": "account_x_id",
+        "baseline": str(floor),
+    }))
+    found = violations(payload, "R008")
+    assert len(found) == 1
+    assert "no account-key floor recorded for 'Shop.SemanticModel'" in found[0]["message"]
+    assert "Record it deliberately" in found[0]["message"]
+
+
+def test_r008_known_backlog_does_not_fail(tmp_path):
+    root = tmp_path
+    d = _account_model(root)
+    floor = root / "floor.json"
+    floor.write_text(json.dumps({"Shop": ["Sitemap", "Ledger", "Orders", "Reports"]}),
+                     encoding="utf-8")
+    code, payload = run_check(d.parent, "R008", config=_r008({
+        "dimension_table": "_Accounts",
+        "key_column": "account_x_id",
+        "baseline": str(floor),
+    }))
+    assert code == 0
+    assert violations(payload, "R008") == []
+
+
+# ---------------------------------------------------------------------------
+# RL-6: R008 floor capture writer
+# ---------------------------------------------------------------------------
+
+
+def test_r008_capture_writes_the_floor(tmp_path):
+    root = tmp_path
+    d = _account_model(root)
+    floor = root / "floor.json"
+    cfg = root / "cfg.json"
+    cfg.write_text(json.dumps(_r008({
+        "dimension_table": "_Accounts",
+        "key_column": "account_x_id",
+    })), encoding="utf-8")
+    code, _out, _err = run_cli(
+        "check", str(d.parent), "--select", "R008",
+        "--capture-floor", str(floor), "--config", str(cfg),
+    )
+    assert code == 0
+    assert json.loads(floor.read_text(encoding="utf-8")) == {
+        "Shop.SemanticModel": ["Ledger", "Orders", "Reports", "Sitemap"]
+    }
+    expected = json.dumps(
+        {"Shop.SemanticModel": ["Ledger", "Orders", "Reports", "Sitemap"]}, indent=1) + "\n"
+    assert floor.read_text(encoding="utf-8") == expected
+    before = floor.read_bytes()
+    run_cli("check", str(d.parent), "--select", "R008",
+            "--capture-floor", str(floor), "--config", str(cfg))
+    assert floor.read_bytes() == before
+
+
+def test_r016_capture_writes_the_floor(tmp_path):
+    root = tmp_path
+    client = _model(root, "Client.SemanticModel")
+    _table(client / "tables", "__A Calendar", ["Date"])
+    _table(client / "tables", "__B Calendar", ["Date"])
+    _rels(client, "")
+    floor = root / "floor.json"
+    cfg = root / "cfg.json"
+    cfg.write_text(json.dumps({"rules": {"R016": {}}}), encoding="utf-8")
+    code, _out, _err = run_cli(
+        "check", str(root), "--select", "R016", "--capture-floor", str(floor),
+        "--config", str(cfg),
+    )
+    assert code == 0
+    text = floor.read_text(encoding="utf-8")
+    assert json.loads(text) == {"Client.SemanticModel": ["__A Calendar", "__B Calendar"]}
+    assert text.endswith("\n") and not text.endswith("\n\n")
+    assert '  "Client.SemanticModel"' in text
+
+
+def test_r016_capture_message(tmp_path, capsys):
+    root = tmp_path
+    client = _model(root, "Client.SemanticModel")
+    _table(client / "tables", "__A Calendar", ["Date"])
+    _rels(client, "")
+    floor = root / "floor.json"
+    cfg = root / "cfg.json"
+    cfg.write_text(json.dumps({"rules": {"R016": {}}}), encoding="utf-8")
+    code, out, _err = run_cli(
+        "check", str(root), "--select", "R016", "--capture-floor", str(floor),
+        "--config", str(cfg),
+    )
+    assert code == 0
+    assert "[dead-anchor-calendar floor] captured 1 across 1 models" in out
