@@ -108,6 +108,9 @@ def _model_measure_summary(model, field_parameter_tables, options) -> dict[str, 
     # by count, descending; a tie keeps the order the kinds were seen in
     kinds = sorted(subcats.items(), key=lambda kv: -kv[1])
     per_table = Counter(m.table for m in measures)
+    # the busiest tables, by count, descending; a tie keeps the order the
+    # tables were seen in
+    top = sorted(per_table.items(), key=lambda kv: -kv[1])[:10]
     dash = [m for m in measures if m.name.startswith("-")]
     total = len(measures)
     users = sum(1 for c in classes if not c.is_helper)
@@ -125,8 +128,7 @@ def _model_measure_summary(model, field_parameter_tables, options) -> dict[str, 
         "advisory": bool(users) and inter < users * 0.5,
         "subcategories": dict(kinds),
         "helper_kinds": dict(kinds),
-        "top_tables": [[name, n] for name, n in sorted(
-            per_table.items(), key=lambda kv: (-kv[1], kv[0]))[:10]],
+        "top_tables": [[name, n] for name, n in top],
         "dash_helpers": len(dash),
         "dash_helpers_described": sum(
             1 for m in dash if (m.description or "").strip()),

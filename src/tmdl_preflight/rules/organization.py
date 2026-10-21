@@ -211,7 +211,7 @@ class HelperMeasurePlacementRule(Rule):
                             f"{host}[{m.name}] [{sub}] is a helper in a {reason} table; move it "
                             f"to {_GUIDANCE.get(sub, 'a helper table')}.",
                             file=m.file, line=m.line, obj=m.full_name,
-                            grouped=True, subcategory=sub, table=host,
+                            grouped=True,
                         ))
                         strict.setdefault(sub, []).append((host, m.name))
                         continue
@@ -222,7 +222,7 @@ class HelperMeasurePlacementRule(Rule):
                             f"{host}[{m.name}] [{sub}] is in the wrong table; move it to "
                             f"{_GUIDANCE.get(sub, 'a helper table')}.",
                             file=m.file, line=m.line, obj=m.full_name,
-                            grouped=True, subcategory=sub, table=host,
+                            grouped=True,
                         ))
                         strict.setdefault(sub, []).append((host, m.name))
             if lenient:
