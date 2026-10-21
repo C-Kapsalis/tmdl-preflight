@@ -267,6 +267,20 @@ def test_the_minimum_helper_count_counts_the_collected_ones(tmp_path):
     assert _violations(payload, "Filter Misses helper(s) parsed") == []
 
 
+def test_a_collected_helper_is_checked_against_the_relationship_keys(tmp_path):
+    """A collected helper keys its table by a column no relationship uses."""
+    helpers = {
+        HELPER: _engine_term("_Users", "user_id"),
+        REACH: _engine_term("_Users", "user_id"),
+        "-helper Filter Misses Campaigns": _engine_term("_Users", "country_id"),
+    }
+    model = _model(tmp_path, "\t\t\tISFILTERED ( '_Countries' )", helpers, rels=RELS)
+    code, payload = run_check(model, "reach-guard-helper-consistency",
+                              config=_reach_config([HELPER, REACH]))
+    assert code == 1
+    assert _violations(payload, "-helper Filter Misses Campaigns", "to-column")
+
+
 def test_a_configured_helper_that_is_missing_is_still_reported(tmp_path):
     helpers = {HELPER: _engine_term("_Users", "user_id"),
                REACH: _engine_term("_Users", "user_id")}

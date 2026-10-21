@@ -467,15 +467,19 @@ class ReachGuardHelperConsistencyRule(Rule):
             v(f"helpers list {t}, which is not a dimension table (or is excluded): "
               f"{len(listed - dims)} listed table(s) are not dimensions.", obj=t)
         natural = o.get("natural_keys") or {}
-        for t, k in sorted(ref):
-            incoming = {r.to_column for r in model.relationships if r.is_active and r.to_table == t}
-            if incoming:
-                if k not in incoming:
-                    v(f"{t}[{k}] is not the to-column of an active relationship into {t} "
-                      f"({', '.join(sorted(incoming))}).", obj=f"{t}[{k}]")
-            elif natural.get(t) != k:
-                v(f"{t} has no incoming active relationship; its helpers must use the declared "
-                  f"natural key ({natural.get(t, 'none declared')}), not {k}.", obj=f"{t}[{k}]")
+        for name, found in pairs.items():
+            for t, k in sorted(found):
+                incoming = {r.to_column for r in model.relationships
+                            if r.is_active and r.to_table == t}
+                if incoming:
+                    if k not in incoming:
+                        v(f"helper [{name}] keys {t} by {t}[{k}], which is not the to-column "
+                          f"of an active relationship into {t} "
+                          f"({', '.join(sorted(incoming))}).", obj=f"{t}[{k}]")
+                elif natural.get(t) != k:
+                    v(f"helper [{name}] keys {t} by {t}[{k}]; {t} has no incoming active "
+                      f"relationship, so its helpers must use the declared natural key "
+                      f"({natural.get(t, 'none declared')}), not {k}.", obj=f"{t}[{k}]")
         return out
 
 
