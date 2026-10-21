@@ -173,7 +173,7 @@ def test_tighten_keeps_an_entry_whose_key_is_spelled_differently(stand_in, tmp_p
     floors = _floors(tmp_path, {"shop_a/Growth": {"description": 1, "inline": 9}})
     code, out, _err = run_cli("comment-refs", str(tree), "--floors", str(floors), "--tighten")
     assert code == 0
-    assert "shop_a/Growth inline: 9 -> 2" in out
+    assert out.splitlines() == ["shop_a/Growth inline: 9 -> 2"]
     data = json.loads(floors.read_text(encoding="utf-8"))
     assert data["shop_a/Growth"] == {"description": 1, "inline": 2}
 

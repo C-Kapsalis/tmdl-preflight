@@ -1060,8 +1060,12 @@ def _cmd_comment_refs(args) -> int:
             return 0
         lowered = []
         new: dict[str, dict[str, int]] = {}
+        done: set[str] = set()
         for key in sorted(set(floors) | set(counts)):
             floor_key = matching_key(floors, key) if key in counts else key
+            if floor_key in done:
+                continue
+            done.add(floor_key)
             entry = floors.get(floor_key) or {}
             model = _model_for_key(floors, counts, key)
             cur = counts.get(model, {c: 0 for c in CLASSES}) if model else {c: 0 for c in CLASSES}
