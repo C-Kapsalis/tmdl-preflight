@@ -181,7 +181,9 @@ class TestDaxReferenceResolution:
         violations = DaxReferenceResolutionRule().check(Context(project))
         assert len(violations) == 1
         assert violations[0].severity == Severity.ERROR
-        assert "table 'Orders'" in violations[0].message
+        assert violations[0].message.startswith(
+            "measure Sales Measures[Revenue] -> missing 'Orders'"
+        )
         assert violations[0].line == 6
 
     def test_bare_quoted_table_is_checked(self, project, definition, replace_in):

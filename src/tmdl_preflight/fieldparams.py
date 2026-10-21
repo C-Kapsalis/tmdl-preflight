@@ -186,9 +186,22 @@ def read_rows(lines: list[str]) -> list[Row]:
     span = source_span(lines)
     if span is None:
         return []
+    return _rows_in(lines[span[0]:span[1]], span[0])
+
+
+def source_rows(source: str) -> list[Row]:
+    """The field-parameter rows of a partition source text.
+
+    A row is a top-level ``( "label", NAMEOF(...), ... )`` group that
+    mentions NAMEOF and carries at least two fields; a comment line is
+    never a row.
+    """
+    return _rows_in(source.split("\n"), 0)
+
+
+def _rows_in(lines: list[str], offset: int) -> list[Row]:
     rows = []
-    for idx in range(*span):
-        line = lines[idx]
+    for idx, line in enumerate(lines):
         if line.strip().startswith(("--", "//")):
             continue
         for open_at, close_at in _groups(line):
@@ -197,7 +210,7 @@ def read_rows(lines: list[str]) -> list[Row]:
                 continue
             fields = split_fields(inner)
             if len(fields) >= 2:
-                rows.append(Row(idx, line, open_at, close_at, fields))
+                rows.append(Row(idx + offset, line, open_at, close_at, fields))
     return rows
 
 

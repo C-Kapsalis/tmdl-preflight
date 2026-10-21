@@ -178,6 +178,16 @@ until configured.
   lines that leaked into an expression (M010 reports those), and gains a
   fixer marked unsafe: selected explicitly, it deletes whole generated
   `ISFILTERED('<missing table>') || ...` lines and nothing else.
+- **D004** reports a missing table as one finding per object, with the
+  missing tables in sorted order: `measure Sales[Revenue] -> missing
+  'Alpha', 'Beta'`. The model carries the note `DANGLING TABLE REFS (1
+  object(s), 2 ref(s)): <definition folder>`, and the run ends with `1
+  model(s) with dangling DAX table references.`
+- **D004** rebuilds the generated `i-Applied Filters` measure from the
+  y-axis field-parameter tables before it removes anything else, and says
+  what it repaired and what it could not: `repaired 1 site-group(s)` and
+  `NOT auto-fixable: Sales[Revenue] -> Alpha`. Every model is processed
+  before the run ends, and the run fails when something is left to a human.
 - **NAMEOF** extraction ignores a malformed reference whose quoted table
   name contains a double quote.
 - Names declared with trailing spaces inside quotes (`'Frame Size   '`) are
@@ -341,6 +351,11 @@ until configured.
   check failed on a model without measures, whether or not the model had
   tables; the tool now says `<model>: no measures found (suspicious)` and
   fails. STRICTER.
+- **A repaired file keeps its own line endings.** The reference rewrote
+  every file it touched with LF endings, so a CRLF file became LF
+  throughout and every line of a Windows checkout showed up as a change.
+  The tool writes the file in the style it already has: a CRLF file loses
+  exactly the line that was removed and stays CRLF. BUGFIX.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the
@@ -442,6 +457,8 @@ and rule wins; DESKTOP: Power BI Desktop evidence).
   printed with the other notes, before the final count.
 - Existing test updated: `test_rules_dax::test_case_mismatch_resolves_but_is_an_error`
   (was `test_case_insensitive_resolution`) expects three casing errors.
+- Existing test updated: `test_rules_dax::test_missing_table_is_error` expects
+  the finding text `measure Sales Measures[Revenue] -> missing 'Orders'`.
 - STRICTER (project decision): `test_relationships::test_relationship_endpoints_exist[rel_casing-fail]`
   expects the casing mismatch as an error that fails without `--strict`
   (a warning was expected before).
