@@ -150,6 +150,19 @@ def test_an_ambiguous_floor_key_is_named(stand_in, tmp_path):
     assert "none of them was used" in out
 
 
+def test_the_rule_never_borrows_another_models_floor(stand_in, tmp_path):
+    """S004 reads the same floors file and matches the keys the same way."""
+    tree = _tree(stand_in)
+    floors = _floors(tmp_path, {
+        "shop_a/Growth.SemanticModel": {"description": 9, "inline": 9},
+        "shop_b/Growth.SemanticModel": {"description": 9, "inline": 9},
+    })
+    code, payload = run_check(tree / "shop_b", "comment-ticket-refs", config={
+        "rules": {"comment-ticket-refs": {"floors": str(floors)}}})
+    assert code == 1
+    assert violations(payload)
+
+
 # ---------------------------------------------------------------------------
 # RP-5 / RP-6: the tighten run
 # ---------------------------------------------------------------------------

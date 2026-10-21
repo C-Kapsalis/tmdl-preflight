@@ -179,3 +179,18 @@ def test_the_capture_writes_the_floor_file_of_the_account_keys(tmp_path):
         '  "Ledger"\n'
         ' ]\n'
         '}\n')
+
+
+def test_the_capture_keeps_the_entries_of_the_models_it_did_not_scan(tmp_path):
+    root = _model(tmp_path)
+    floors = root / "accounts.json"
+    floors.write_text(json.dumps({"Other": ["Old"]}, indent=1) + "\n", encoding="utf-8")
+    cfg = root / ".tmdl-preflight.json"
+    cfg.write_text(json.dumps({"rules": {R008: {
+        "dimension_table": "Accounts", "key_column": "account_id"}}}), encoding="utf-8")
+    code, out, err = run_cli("baseline", str(root), "--capture-floors", R008,
+                              "--output", str(floors), "--config", str(cfg))
+    assert code == 0, err
+    data = json.loads(floors.read_text(encoding="utf-8"))
+    assert data["Other"] == ["Old"]
+    assert data["Shop"] == ["Accounts", "Ledger"]

@@ -101,11 +101,14 @@ def _model_key(ctx, model, with_suffix: bool = True) -> str:
     return key[: -len(".SemanticModel")] if key.endswith(".SemanticModel") else key
 
 
-def capture_floors(rule_id: str, ctx, options: dict[str, Any]) -> tuple[dict[str, Any], int, str]:
+def capture_floors(rule_id: str, ctx, options: dict[str, Any],
+                   existing: Optional[dict[str, Any]] = None) -> tuple[dict[str, Any], int, str]:
     """``(floors, entry count, message)`` of the floor file of a rule.
 
     The floors hold what the rule finds today, so a team can start the
-    ratchet from the file the tool writes instead of writing it by hand.
+    ratchet from the file the tool writes instead of writing it by hand. A
+    capture replaces the entries of the scanned models and leaves the
+    entries of the models it did not scan alone.
     """
     from .roles import fact_tables
     from .rules.organization import table_reads
@@ -137,6 +140,8 @@ def capture_floors(rule_id: str, ctx, options: dict[str, Any]) -> tuple[dict[str
                 if not joined:
                     flagged.append(name)
             floors[_model_key(ctx, model, with_suffix=False)] = sorted(flagged)
+        for key, value in (existing or {}).items():
+            floors.setdefault(key, value)
         entries = sum(len(v) for v in floors.values())
         message = (f"[account-key floor] captured {entries} entries across "
                    f"{len(floors)} models")

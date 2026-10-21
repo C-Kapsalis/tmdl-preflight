@@ -531,11 +531,16 @@ def _cmd_capture_floors(args) -> int:
     cfg = _load_config(args, full)
     ctx = _context(args.path, cfg.exclude, cfg.exclude_configured)
     options = cfg.rule_options.get(rule_id, {})
-    floors, entries, message = capture_floors(rule_id, ctx, options)
     root = Path(args.path)
     target = Path(args.output) if args.output else (
         (root if root.is_dir() else root.parent) / f"{rule_id.lower()}_floors.json"
     )
+    existing: dict = {}
+    if rule_id == "R008" and target.exists():
+        from .ratchet import load_floors
+
+        existing = load_floors(target, missing_ok=True)
+    floors, entries, message = capture_floors(rule_id, ctx, options, existing)
     indent = 1 if rule_id == "R008" else 2
     write_floors(target, floors, indent=indent)
     print(f"{message} -> {target}")
