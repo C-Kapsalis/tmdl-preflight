@@ -376,7 +376,7 @@ class FactConformedDimensionJoinRule(Rule):
         "key_column": None,
         "exempt": {},
         "baseline": None,
-        "fail_without_baseline_entry": False,
+        "fail_without_baseline_entry": True,
     }
     description = (
         "Every fact table must actively join a conformed dimension (configure "
@@ -386,7 +386,9 @@ class FactConformedDimensionJoinRule(Rule):
         "Without it a filter on that dimension silently returns unfiltered "
         "data. Offenders are classified 'missing relationship' (the fact has "
         "the key column) or 'missing key column'. 'exempt' maps tables to a "
-        "mandatory reason; 'baseline' ratchets existing offenders per model. "
+        "mandatory reason; 'baseline' ratchets existing offenders per model, "
+        "and a model with no entry in it is a finding until the entry is "
+        "recorded deliberately ('fail_without_baseline_entry' turns that off). "
         "Facts follow the shared table-role law. Inert until configured."
     )
 
@@ -409,16 +411,7 @@ class FactConformedDimensionJoinRule(Rule):
         for model in ctx.models:
             mkey = ctx.model_key(model)
             accepted: set[str] = set()
-            if floors is not None:
-                found, value = entry_for(floors, mkey)
-                if not found and self.options.get("fail_without_baseline_entry"):
-                    out.append(self.violation(
-                        f"model {mkey} has no entry in the baseline; record its accepted "
-                        f"offenders deliberately (an empty list means none).",
-                        file=model.definition_path / "relationships.tmdl", obj=mkey,
-                    ))
-                accepted = set(value or [])
-            flagged = []
+            flagged: list[str] = []
             for name in fact_tables(model):
                 if name in exempt:
                     continue
@@ -428,11 +421,22 @@ class FactConformedDimensionJoinRule(Rule):
                 )
                 if joined:
                     continue
-                t = model.tables[name]
                 flagged.append(name)
+            if floors is not None:
+                found, value = entry_for(floors, mkey)
+                if not found and self.options.get("fail_without_baseline_entry"):
+                    out.append(self.violation(
+                        f"no account-key floor recorded for '{mkey}'. Record it "
+                        f"deliberately. Currently flagged ({len(flagged)}): "
+                        f"{', '.join(flagged) or 'none'}",
+                        file=model.definition_path / "relationships.tmdl", obj=mkey,
+                    ))
+                accepted = set(value or [])
+            for name in flagged:
                 if name in accepted:
                     continue
-                cls = "missing relationship" if t.find_column(key) else "missing key column"
+                t = model.tables[name]
+                cls = ("missing relationship" if t.find_column(key) else "missing key column")
                 out.append(self.violation(
                     f"fact table {name} has no active relationship to {dim}[{key}] "
                     f"({cls}), so filtering by {dim} returns unfiltered data. Create "
@@ -440,9 +444,17 @@ class FactConformedDimensionJoinRule(Rule):
                                                   cls == "missing key column" else "."),
                     file=t.file, line=t.line, obj=name,
                 ))
-            for name in sorted(accepted - set(flagged)):
+            fixed = sorted(accepted - set(flagged))
+            if fixed:
                 ctx.notes.append(
-                    f"fact-conformed-dimension-join: {mkey}: {name} is in the baseline but "
-                    f"now joins {dim}; tighten the baseline by removing it."
-                )
+                    f"FIXED since the floor was recorded ({len(fixed)}): "
+                    f"{', '.join(fixed)}")
+                ctx.notes.append(
+                    f"  -> tighten the floor: remove the fixed table(s) from the "
+                    f"floor file of '{mkey}'")
+            if flagged and not (set(flagged) - accepted):
+                ctx.notes.append(
+                    f"KNOWN BACKLOG (ratcheted, not failing) - {len(flagged)} "
+                    f"table(s) awaiting an active {dim} relationship: "
+                    f"{', '.join(flagged)}")
         return out

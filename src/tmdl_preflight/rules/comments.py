@@ -14,8 +14,9 @@ from .base import Context, Rule, Severity, Violation
 
 TICKET_RE = re.compile(r"#\d+(?!\w)")
 CLASSES = ("description", "inline")
-#: Folders the scanner never reads. ``tests/`` holds the stand-in models, not
-#: the client's, and a reference there is nobody's backlog.
+#: The exclusions the scanner adds to the configured ones. The ``tests/``
+#: folder holds the stand-in models, not the client's, and a reference there
+#: is nobody's backlog.
 DEFAULT_EXCLUDES = ("tests/**",)
 
 
@@ -179,10 +180,14 @@ def root_ticket_refs(root: Path, ctx: Optional[Context] = None) -> list[TicketRe
     files = _tracked_files(root)
     if files is None:
         files = _walked_files(root)
+    # A configured exclude list replaces the default one, as it does for
+    # every other scan.
+    patterns = (list(ctx.exclude) if ctx is not None and ctx.exclude_configured
+                else list(DEFAULT_EXCLUDES))
     refs: list[TicketRef] = []
     for f in sorted(files):
         rel = f.relative_to(root)
-        if any(glob_match(pattern, rel.as_posix()) for pattern in DEFAULT_EXCLUDES):
+        if any(glob_match(pattern, rel.as_posix()) for pattern in patterns):
             continue
         if ctx is not None and ctx.is_excluded(f):
             continue

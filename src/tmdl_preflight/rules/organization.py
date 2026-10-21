@@ -458,11 +458,11 @@ class DeadFactTablesRule(Rule):
                     f"baseline with a reason.",
                     file=t.file, line=t.line, obj=name,
                 ))
-            for name in sorted(accepted - dead_names):
+            alive = sorted(accepted - dead_names)
+            if alive:
                 ctx.notes.append(
-                    f"dead-fact-tables: {key}: {name} is recorded in the baseline but no "
-                    f"longer dead; tighten the baseline by removing it."
-                )
+                    "[dead-fact-table floor] entries no longer dead — tighten the floor: "
+                    + ", ".join(f"{key}: {name}" for name in alive))
         return out
 
 

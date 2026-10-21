@@ -168,10 +168,14 @@ def build_parser() -> argparse.ArgumentParser:
                         help="shrink an existing baseline to what still fails; "
                              "never adds entries")
     p_base.add_argument("--accept-new", action="store_true",
-                        help="with --update, also add today's new violations")
+                         help="with --update, also add today's new violations")
+    p_base.add_argument("--capture-floors", metavar="RULE",
+                         help="record the floor file of a ratcheted rule (O007, "
+                              "R008 or R016) from today's findings and write it out")
     p_base.add_argument("--select", help=argparse.SUPPRESS)
     p_base.add_argument("--ignore", help=argparse.SUPPRESS)
     _add_config_options(p_base)
+
 
     p_stats = sub.add_parser("stats", help="print an inventory of the project (counts only)")
     p_stats.add_argument("path", help=path_help)
@@ -193,6 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_refs.add_argument("--floors", metavar="FILE", help="the ratchet file to compare with")
     p_refs.add_argument("--tighten", action="store_true",
                         help="lower the floors in FILE to today's counts (never raises)")
+    _add_config_options(p_refs)
 
     p_report = sub.add_parser("report", help="read-only reports (complexity, nameof, relationships)")
     p_report.add_argument("kind", choices=("complexity", "nameof", "relationships"),
@@ -375,6 +380,28 @@ def _validate_ids(full: RuleSet, select: Optional[set[str]], ignore: Optional[se
             )
 
 
+#: The rule options that name a file. A relative path in one of them is
+#: resolved against the folder of the configuration file that set it, so a
+#: run from anywhere finds the same file.
+_PATH_OPTIONS = ("floors", "baseline")
+
+
+def _resolve_option_paths(options: dict, cfg: Config) -> dict:
+    """Resolve the relative file paths of a rule's options."""
+    if not cfg.source:
+        return options
+    out = dict(options)
+    for name in _PATH_OPTIONS:
+        value = out.get(name)
+        if not isinstance(value, str) or not value:
+            continue
+        path = Path(value)
+        if not path.is_absolute():
+            path = Path(cfg.source).parent / path
+        out[name] = str(path)
+    return out
+
+
 def _effective_ruleset(full: RuleSet, cfg: Config, args) -> RuleSet:
     cli_select = _parse_id_list(args.select)
     cli_ignore = _parse_id_list(args.ignore)
@@ -385,7 +412,7 @@ def _effective_ruleset(full: RuleSet, cfg: Config, args) -> RuleSet:
     ignore = (cli_ignore or set()) | {s.lower() for s in cfg.ignore}
     for rule in full.rules:
         if rule.id in cfg.rule_options:
-            rule.configure(cfg.rule_options[rule.id])
+            rule.configure(_resolve_option_paths(cfg.rule_options[rule.id], cfg))
     ruleset = full.select(select, ignore or None)
     if not ruleset.rules:
         raise UsageError(
@@ -487,7 +514,37 @@ def _after_fix_cache(args, report: PreflightReport, ctx: Context) -> None:
             )
 
 
+def _cmd_capture_floors(args) -> int:
+    """Record the floor file of a ratcheted rule from today's findings."""
+    from .ratchet import CAPTURED_RULES, capture_floors, write_floors
+
+    wanted = args.capture_floors.strip()
+    full = full_ruleset()
+    names = {r.id.lower(): r.id for r in full.rules}
+    names.update({r.name.lower(): r.id for r in full.rules})
+    rule_id = names.get(wanted.lower(), wanted.upper())
+    if rule_id not in CAPTURED_RULES:
+        raise UsageError(
+            f"--capture-floors names a rule whose floor file cannot be captured: "
+            f"{args.capture_floors!r}. The rules that can: {', '.join(CAPTURED_RULES)}."
+        )
+    cfg = _load_config(args, full)
+    ctx = _context(args.path, cfg.exclude, cfg.exclude_configured)
+    options = cfg.rule_options.get(rule_id, {})
+    floors, entries, message = capture_floors(rule_id, ctx, options)
+    root = Path(args.path)
+    target = Path(args.output) if args.output else (
+        (root if root.is_dir() else root.parent) / f"{rule_id.lower()}_floors.json"
+    )
+    indent = 1 if rule_id == "R008" else 2
+    write_floors(target, floors, indent=indent)
+    print(f"{message} -> {target}")
+    return 0
+
+
 def _cmd_baseline(args) -> int:
+    if args.capture_floors:
+        return _cmd_capture_floors(args)
     if args.select or args.ignore:
         raise UsageError(
             "a baseline must be recorded from a full run; drop --select/--ignore "
@@ -971,7 +1028,8 @@ def _cmd_comment_refs(args) -> int:
     from .ratchet import RatchetFileError, load_floors, matching_key, write_floors
     from .rules.comments import CLASSES, root_ticket_refs
 
-    ctx = _context(args.path)
+    cfg = _load_config(args, full_ruleset())
+    ctx = _context(args.path, cfg.exclude, cfg.exclude_configured)
     root = Path(args.path)
     refs = root_ticket_refs(root, ctx)
     counts: dict[str, dict[str, int]] = {}

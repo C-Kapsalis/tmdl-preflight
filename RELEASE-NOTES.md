@@ -109,6 +109,13 @@ Contract rules (C001-C008, R008, F005, S005, X001) read their contracts from the
 configuration (`contracts` section or rule options) and report nothing
 until configured.
 
+**S004 stays opt-in.** The reference ran the ticket-reference gate on every
+run against a committed floor file. The tool needs a floor file to be
+configured before it can gate, and a rule that is on by default without one
+fails every model that carries a reference, so the rule runs only when it
+is named. The `comment-refs` command is the always-available gate: it reads
+the same floor file and fails on a rise.
+
 ### Changed rules
 
 - **M002** pairs ``` fences by structure (a fence opens after `=` and closes
@@ -214,8 +221,11 @@ until configured.
 - `stats --measures` summarises how measures are organised (name classes,
   helper kinds, field-parameter surfacing, top tables, described helpers).
 - `comment-refs <path> [--list] [--json] [--floors FILE] [--tighten]`
-  counts ticket references in comments; `--tighten` only ever lowers floors
-  and drops all-zero entries.
+  counts ticket references in comments. With a floor file it gates: a rise
+  above the floor fails, a fall is reported for tightening. `--tighten`
+  only ever lowers floors and drops all-zero entries.
+- `baseline --capture-floors O007|R008|R016 [--output FILE]` writes the
+  floor file of a ratcheted rule from today's findings.
 - Ratchet files for O007, R008 and S004 keep the shape teams already use: a
   JSON object keyed by the `*.SemanticModel` folder relative to the scanned
   root (with or without the suffix). Recorded entries that no longer fail
@@ -283,6 +293,28 @@ until configured.
 
 ### Changed
 
+- **A floor file can be written by the tool.** `baseline --capture-floors
+  O007|R008|R016 [--output FILE]` records what the rule finds today in the
+  file the rule reads back, so a team does not have to write it by hand.
+  The dead fact tables and the dead anchor calendars record only the models
+  that have some; the account keys record every scanned model, an empty
+  list included.
+- **R016 reads a floor file.** The `floors` option holds the dead anchor
+  calendars that are known: one that is listed is not a finding, one that
+  now reaches something prints a tighten hint, and a configured file that
+  does not exist is an error.
+- **R008 fails a model with no floor entry.** Until the entry is recorded
+  deliberately, the model is a finding and the message names what is
+  flagged. The old option turns this off.
+- **The tighten hints read as the reference reads them.** The dead fact
+  tables print `[dead-fact-table floor] entries no longer dead — tighten
+  the floor:` and the account keys print `FIXED since the floor was
+  recorded (N): ...` and `KNOWN BACKLOG (ratcheted, not failing) - N
+  table(s) awaiting an active <dimension> relationship: ...`.
+- **A relative floor path is resolved against the configuration.** A
+  `floors` or `baseline` path that is relative is read next to the
+  configuration file that names it, not next to the working directory, so a
+  run from anywhere finds the same file. BUGFIX.
 - **`report complexity` reads like a report.** The banners, the statistics,
   the length distribution, the longest measures and the suggested
   thresholds are printed in the layout a reviewer reads, and the expression
@@ -338,9 +370,12 @@ until configured.
 - **`comment-refs` reads the whole scan root.** Every `*.tmdl` under it
   counts, not only the model definition folders; a file outside a model
   belongs to the folder it sits in. In a git work tree only tracked files
-  are read. The `tests/` folder is skipped. BUGFIX: an unclosed double
-  quote no longer hides the comment behind it, and a file that cannot be
-  decoded is read with replacement characters instead of being skipped.
+  are read. The `tests/` folder is skipped, and a configured `exclude` list
+  replaces that default as it does for every other scan. BUGFIX: an
+  unclosed double quote no longer hides the comment behind it, and a file
+  that cannot be decoded is read with replacement characters instead of
+  being skipped. BUGFIX: a file with a byte-order mark keeps its `///`
+  line a description.
 - **`format-resolve` resolves every model under the path.** It used to
   answer for the first model it found; now it answers for each model under
   the path, in model-path order, one row for the measure-name path and one

@@ -76,3 +76,80 @@ def entry_for(floors: dict[str, Any], model_key: str) -> tuple[bool, Any]:
 
 def write_floors(path: str | Path, data: dict[str, Any], indent: Optional[int] = 2) -> None:
     Path(path).write_text(json.dumps(data, indent=indent, sort_keys=True) + "\n", encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Capturing a floor file from today's findings
+# ---------------------------------------------------------------------------
+
+#: The rules whose floor file can be captured, and the file they read.
+CAPTURED_RULES = ("O007", "R008", "R016")
+
+
+def _model_key(ctx, model, with_suffix: bool = True) -> str:
+    key = ctx.model_key(model)
+    if with_suffix:
+        return key
+    return key[: -len(".SemanticModel")] if key.endswith(".SemanticModel") else key
+
+
+def capture_floors(rule_id: str, ctx, options: dict[str, Any]) -> tuple[dict[str, Any], int, str]:
+    """``(floors, entry count, message)`` of the floor file of a rule.
+
+    The floors hold what the rule finds today, so a team can start the
+    ratchet from the file the tool writes instead of writing it by hand.
+    """
+    from .roles import fact_tables
+    from .rules.organization import table_reads
+
+    if rule_id == "O007":
+        floors: dict[str, Any] = {}
+        for model in ctx.models:
+            exprs = [m.expression for m in model.all_measures() if m.expression]
+            dead = sorted(name for name in fact_tables(model)
+                          if table_reads(name, exprs)[0] == 0)
+            if dead:
+                floors[ctx.model_key(model)] = dead
+        entries = sum(len(v) for v in floors.values())
+        message = (f"[dead-fact-table floor] captured {entries} entries across "
+                   f"{len(floors)} models")
+        return floors, entries, message
+    if rule_id == "R008":
+        dim = options.get("dimension_table") or ""
+        key = options.get("key_column") or ""
+        floors = {}
+        for model in ctx.models:
+            flagged = []
+            for name in fact_tables(model):
+                joined = any(
+                    r.is_active and r.from_table == name and r.to_table == dim
+                    and r.to_column == key
+                    for r in model.relationships
+                )
+                if not joined:
+                    flagged.append(name)
+            floors[_model_key(ctx, model, with_suffix=False)] = sorted(flagged)
+        entries = sum(len(v) for v in floors.values())
+        message = (f"[account-key floor] captured {entries} entries across "
+                   f"{len(floors)} models")
+        return floors, entries, message
+    if rule_id == "R016":
+        from .rules.topology import filter_graph, reachable
+
+        floors = {}
+        for model in ctx.models:
+            graph = filter_graph(model)
+            dead = []
+            for path in sorted((model.definition_path / "tables").glob("*.tmdl")):
+                stem = path.stem
+                if not (stem.startswith("__") and stem.endswith("Calendar")):
+                    continue
+                if not reachable(graph, stem, int(options.get("max_hops") or 2)):
+                    dead.append(stem)
+            if dead:
+                floors[ctx.model_key(model)] = sorted(dead)
+        entries = sum(len(v) for v in floors.values())
+        message = (f"[dead-anchor-calendar floor] captured {entries} across "
+                   f"{len(floors)} models")
+        return floors, entries, message
+    raise ValueError(rule_id)
