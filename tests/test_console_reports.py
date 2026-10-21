@@ -181,6 +181,17 @@ def test_the_misordered_property_dry_run(tmp_path):
     assert "Would fix 1 issue(s) across 1 file(s)." in out, out
 
 
+def test_a_refused_repair_is_reported_on_stderr(tmp_path):
+    """PA7: a repair the tool cannot prove says so and exits 2."""
+    model = _model(tmp_path, body=MISORDERED)
+    f = model / "definition" / "tables" / "Beans.tmdl"
+    # a file that mixes its line endings cannot be rewritten safely
+    f.write_bytes(f.read_bytes().replace(b"\n\n\t\tannotation", b"\r\n\t\tannotation"))
+    code, out, err = run_cli("fix", model, "--select", "M011", "--no-config")
+    assert code == 2, out
+    assert "ERROR" in err and "Beans.tmdl" in err, err
+
+
 # ---------------------------------------------------------------------------
 # PA12: the file validation report
 # ---------------------------------------------------------------------------
@@ -209,3 +220,17 @@ def test_the_validation_report_of_a_clean_model(tmp_path):
     model = _model(tmp_path)
     code, out, err = run_cli("check", model, "--select", "M017", "--no-config")
     assert "✅ All 1 files passed validation" in out, out
+
+
+def test_the_validation_report_counts_the_notes(tmp_path):
+    """PA12: the notes are counted but never fail."""
+    body = (
+        "table Beans\n"
+        "\tlineageTag: 11111111-1111-4111-8111-111111111111\n\n"
+        "\tmeasure 'Kg' =\n"
+        "\t\t\tSUM(Beans[kg])\n"
+    )
+    model = _model(tmp_path, body=body)
+    code, out, err = run_cli("check", model, "--select", "M017", "--no-config")
+    assert "✅ All 1 files passed validation" in out, out
+    assert "⚠️  1 warnings found (not critical)" in out, out

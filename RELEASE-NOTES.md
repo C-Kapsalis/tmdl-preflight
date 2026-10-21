@@ -152,10 +152,12 @@ until configured.
   stays where it was, the line keeps its own indentation, and an object
   that carried the same flag twice keeps one copy, in its first property
   slot (Power BI rejects a duplicated property). BUGFIX: the file keeps
-  the final newline it had. STRICTER: the rule knows a few more simple
-  properties than the reference (`sourceColumn`, `sourceLineageTag`,
-  `isNullable`, `isAvailableInMdx`) and wants the property one level under
-  its owner, where the reference wanted any depth.
+  the final newline it had, and a file that mixes its line endings is now
+  reported as a refused repair (it was silently left alone). STRICTER: the
+  rule knows a few more simple properties than the reference
+  (`sourceColumn`, `sourceLineageTag`, `isNullable`,
+  `isAvailableInMdx`) and wants the property one level under its owner,
+  where the reference wanted any depth.
 - **M013** fix removes the run and the one blank line directly after it, at
   the end of the file too; blank lines before a run are never touched. New
   option `fix_mode = "attach"` deletes the blank lines between a
@@ -248,7 +250,9 @@ the same layout and with the same wording:
   found and the comment text it holds. In attach mode it prints the
   comment-spacing cleanup's report instead.
 - **M017** (the TMDL file validation) prints the validation header, the
-  files it checked, and the validation summary.
+  files it checked, and the validation summary. A repair the tool could
+  not prove is reported on standard error as
+  `ERROR <path>: <reason>`, and the run exits 2.
 
 The tool's own report follows, so the exit code and the JSON payload are
 unchanged.

@@ -497,8 +497,18 @@ def _cmd_check(args) -> int:
     if fmt == "text":
         for line in report.console:
             print(line)
+        _refused_lines(report)
     print(render(fmt, report, Path(args.path), ruleset))
     return report.exit_code(strict=args.strict or cfg.strict)
+
+
+def _refused_lines(report: PreflightReport) -> None:
+    """A repair the tool could not prove is reported on standard error, the
+    way the reference reported it."""
+    from . import console
+
+    for line in console.refused_report(report.refused_fixes):
+        print(line, file=sys.stderr)
 
 
 def _found(report: PreflightReport, rule_id: str) -> list[Violation]:

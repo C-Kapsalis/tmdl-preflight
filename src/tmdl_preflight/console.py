@@ -27,8 +27,7 @@ def _rule_context(lines: list[str], line_no: int) -> str:
     """The declaration that owns the tag on ``line_no`` (1-based): the kind
     and the declaration line, looked up within 20 lines above. ``unknown``
     when there is none."""
-    start = max(0, line_no - 21)
-    for idx in range(line_no - 2, start - 1, -1):
+    for idx in range(line_no - 2, max(-1, line_no - 21), -1):
         m = _DECL_RE.match(lines[idx])
         if m:
             return f"{m.group(1)}:{lines[idx].strip()}"
@@ -258,11 +257,13 @@ def validation_report(ctx: Context, violations: list[Violation]) -> list[str]:
             continue
         by_file.setdefault(v.file, []).append(v)
     errors = 0
+    notes = 0
     for file in table_files:
         found = by_file.get(file, [])
+        errors += sum(1 for v in found if v.severity != Severity.INFO)
+        notes += sum(1 for v in found if v.severity == Severity.INFO)
         if not found:
             continue
-        errors += len(found)
         out.append(f"❌ {file.name}:")
         for v in found[:5]:
             out.append(f"   - {v.message}")
@@ -274,6 +275,8 @@ def validation_report(ctx: Context, violations: list[Violation]) -> list[str]:
     out.append(RULE)
     if errors == 0:
         out.append(f"✅ All {len(table_files)} files passed validation")
+        if notes:
+            out.append(f"⚠️  {notes} warnings found (not critical)")
         return out
     failing = [f for f in table_files if by_file.get(f)]
     out.append(f"❌ Found {errors} errors in {len(failing)} files:")
@@ -295,3 +298,19 @@ def _relative(ctx: Context, file: Optional[Path]) -> str:
     if rel:
         return rel
     return file.name
+
+
+def refused_report(refused: list[str]) -> list[str]:
+    """The lines a refused repair prints on standard error.
+
+    A refused repair reads ``ERROR <path>: <reason>``; the path is the
+    file's path relative to the scan root."""
+    out = []
+    for entry in refused:
+        parts = entry.split(": ", 2)
+        if len(parts) == 3:
+            _rule, path, reason = parts
+            out.append(f"ERROR {path}: {reason}")
+        else:
+            out.append(f"ERROR {entry}")
+    return out

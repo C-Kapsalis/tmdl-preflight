@@ -10,7 +10,7 @@ from typing import Optional
 
 from .base import Context, Rule, Severity, Violation
 from ..dax import CODE, classify
-from ..edits import EditRefused, read_text_file, verified_write
+from ..edits import EditRefused, mixed_line_endings, read_text_file, verified_write
 from ..parser import indent_level, parse_object_name
 from ..recognizers import (
     attach_descriptions,
@@ -774,6 +774,13 @@ class PropertyAfterChildBlockRule(Rule):
                 original = read_text_file(f)
             except (UnicodeDecodeError, OSError):
                 continue
+            if mixed_line_endings(f):
+                # the file cannot be split on one style and joined on
+                # another: the edit computed on it would delete the model
+                ctx.refused_fixes.append(
+                    f"{self.id}: {f.name}: it mixes its line endings, so it "
+                    f"was left untouched (normalize it to one style first)")
+                continue
             lines = original.lines()
             new_lines, moved = move_properties_before_child_blocks(lines)
             if moved <= 0:
@@ -790,7 +797,8 @@ class PropertyAfterChildBlockRule(Rule):
             try:
                 if verified_write(original, original.join(new_lines), verify):
                     applied.append(f"{f.name}: moved {moved} property line(s) above child blocks")
-            except EditRefused:
+            except EditRefused as exc:
+                ctx.refused_fixes.append(f"{self.id}: {f.name}: {exc}")
                 continue
         return applied
 
