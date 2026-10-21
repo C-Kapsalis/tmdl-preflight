@@ -48,6 +48,13 @@ class Violation:
     line: Optional[int] = None
     obj: Optional[str] = None
     fixable: bool = False
+    # True for a finding the text report shows inside a block of its rule
+    # rather than as its own line.
+    grouped: bool = False
+    # the subcategory the finding belongs to, for a grouped block
+    subcategory: Optional[str] = None
+    # the table the finding names (the grouped block lists it)
+    table: Optional[str] = None
 
     @property
     def path(self) -> Optional[str]:
@@ -274,6 +281,9 @@ class Rule:
         line: Optional[int] = None,
         obj: Optional[str] = None,
         severity: Optional[Severity] = None,
+        grouped: bool = False,
+        subcategory: Optional[str] = None,
+        table: Optional[str] = None,
     ) -> Violation:
         return Violation(
             rule_id=self.id,
@@ -283,6 +293,9 @@ class Rule:
             line=line,
             obj=obj,
             fixable=self.fixable,
+            grouped=grouped,
+            subcategory=subcategory,
+            table=table,
         )
 
 

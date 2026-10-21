@@ -67,6 +67,7 @@ class UserOnlyTablePurityRule(Rule):
 # O002: helpers in the table their kind belongs to
 # ---------------------------------------------------------------------------
 
+#: The guidance the strict profile prints for each subcategory.
 _GUIDANCE = {
     "measure_helper": "the helper table",
     "visual_helper": "the helper table or a visual (w-) table",
@@ -75,6 +76,59 @@ _GUIDANCE = {
     "intermediary_helper": "a '<Domain> Measures' table next to the measures it feeds",
     "test_measure": "a helper or diagnostic table",
 }
+
+#: The guidance of the strict report, one block per subcategory.
+_STRICT_BLOCK = {
+    "measure_helper":
+        "'-helper *' / '_*' measures must live in 'Helper Measures' with a "
+        "displayFolder named after the analysis category they support (e.g. "
+        "'Helpers Time Intelligence', 'Helpers SEO Debugging'). They are a "
+        "specific kind of helper - do not scatter them across domain <X> "
+        "Measures tables.",
+    "visual_helper":
+        "'-Visual *' / 'w-*' measures live in 'Helper Measures' or in a "
+        "`w-*` table (e.g. 'w-Titles', 'w-Colors', 'w-Visuals Filters').",
+    "diagnostic_helper":
+        "'i-*' measures live in 'Helper Measures' or a table containing "
+        "'Diagnostic' in its name (e.g. 'Diagnostic Measures').",
+    "slicer_helper":
+        "'f-*' measures live in 'f-Filters' (slicer-level filters) or in a "
+        "`w-*` table (non-slicer-level visual filters, e.g. 'w-Visuals "
+        "Filters').",
+    "intermediary_helper":
+        "Other '-*' and '<letter>-*' helpers live next to the user-facing "
+        "measures they support, in a `<Domain> Measure(s)` table (e.g. 'GA "
+        "Measures', 'Time Intelligence Measures', 'Dynamic Measure'), OR in a "
+        "`w-*` table when they back a visual element (e.g. 'w-Titles' for "
+        "cluster-name title helpers).",
+    "test_measure":
+        "Test measures (any name containing whole-word 'test', "
+        "case-insensitive) belong in 'Helper Measures' or 'Diagnostic "
+        "Measures'. If it's not a real test, rename to drop 'test'.",
+}
+
+#: The four buckets the lenient profile counts, with the table each helper
+#: belongs in.
+_LENIENT_BUCKETS = (
+    ("slicer_helper", "f- measures outside f-Filters / w-*",
+     "f- measures in wrong table",
+     "'f-Filters' or any 'w-*' table"),
+    ("measure_helper", "-helper * outside 'Helper Measures'",
+     "-helper * measures in wrong table",
+     "'Helper Measures' (with displayFolder named by analysis category)"),
+    ("visual_helper", "-Visual * / w-* outside Helper Measures / w-*",
+     "-Visual * / w-* measures in wrong table",
+     "'Helper Measures' or any 'w-*' table"),
+    ("diagnostic_helper", "i- measures outside Helper / Diagnostic",
+     "i- measures in wrong table",
+     "'Helper Measures' or 'Diagnostic Measures'"),
+)
+
+#: The table each kind of helper belongs in, in the wording of a finding.
+_LENIENT_EXPECTED = {sub: expected for sub, _c, _l, expected in _LENIENT_BUCKETS}
+
+#: The width the count labels line up in.
+_LENIENT_LABEL_WIDTH = max(len(count) for _s, count, _l, _e in _LENIENT_BUCKETS)
 
 
 class HelperMeasurePlacementRule(Rule):
@@ -86,7 +140,8 @@ class HelperMeasurePlacementRule(Rule):
         "helper_table": "Helper Measures",
         "slicer_table": "f-Filters",
         "visual_table_prefix": "w-",
-        "field_parameter_prefixes": [],
+        "field_parameter_prefixes": ["x-Selector", "y-Selector",
+                                     "x-Plot Specific", "y-Plot Specific"],
         "user_facing_letters": ["z"],
         "user_only_table_prefix": "#",
         "dimension_prefix": "_",
@@ -100,9 +155,10 @@ class HelperMeasurePlacementRule(Rule):
         "diagnostics in a helper or diagnostic table, slicer helpers in the "
         "slicer table, intermediary helpers in a measures table. Profile "
         "'strict' (warnings) also bans helpers from user-only (#) and "
-        "dimension (_) tables and exempts field-parameter tables; profile "
-        "'lenient' (infos) judges only slicer, '-helper', visual and "
-        "diagnostic helpers. Opt-in; the symptom is a confusing field list."
+        "dimension (_) tables and exempts the axis field-parameter tables; "
+        "profile 'lenient' (infos) judges only slicer, '-helper', visual and "
+        "diagnostic helpers and prints a per-model summary. Opt-in; the "
+        "symptom is a confusing field list."
     )
 
     def _allowed(self, sub: str, host: str) -> bool:
@@ -126,6 +182,8 @@ class HelperMeasurePlacementRule(Rule):
         o = self.options
         lenient = o.get("profile") == "lenient"
         for model in ctx.models:
+            strict: dict[str, list[tuple[str, str]]] = {}
+            lenient_buckets: dict[str, list[tuple[str, str]]] = {}
             for t in model.table_list:
                 host = t.name
                 for m in t.measure_list:
@@ -139,9 +197,12 @@ class HelperMeasurePlacementRule(Rule):
                         )
                         if not judged or self._allowed(sub, host):
                             continue
+                        lenient_buckets.setdefault(sub, []).append((host, m.name))
                         out.append(self.violation(
-                            f"{host}[{m.name}] [{sub}] (expected: {_GUIDANCE[sub]})",
-                            file=m.file, line=m.line, obj=m.full_name, severity=Severity.INFO,
+                            f"{host}[{m.name}] [{sub}] (expected: "
+                            f"{_LENIENT_EXPECTED[sub]})",
+                            file=m.file, line=m.line, obj=m.full_name,
+                            severity=Severity.INFO,
                         ))
                         continue
                     if host.startswith(o["user_only_table_prefix"]) or host.startswith(o["dimension_prefix"]):
@@ -150,7 +211,9 @@ class HelperMeasurePlacementRule(Rule):
                             f"{host}[{m.name}] [{sub}] is a helper in a {reason} table; move it "
                             f"to {_GUIDANCE.get(sub, 'a helper table')}.",
                             file=m.file, line=m.line, obj=m.full_name,
+                            grouped=True, subcategory=sub, table=host,
                         ))
+                        strict.setdefault(sub, []).append((host, m.name))
                         continue
                     if any(host.startswith(p) for p in o["field_parameter_prefixes"]):
                         continue
@@ -159,8 +222,51 @@ class HelperMeasurePlacementRule(Rule):
                             f"{host}[{m.name}] [{sub}] is in the wrong table; move it to "
                             f"{_GUIDANCE.get(sub, 'a helper table')}.",
                             file=m.file, line=m.line, obj=m.full_name,
+                            grouped=True, subcategory=sub, table=host,
                         ))
+                        strict.setdefault(sub, []).append((host, m.name))
+            if lenient:
+                ctx.notes.append(self._lenient_report(ctx, model, lenient_buckets))
+            else:
+                ctx.notes.append(self._strict_report(strict))
         return out
+
+    def _strict_report(self, grouped: dict[str, list[tuple[str, str]]]) -> str:
+        """The strict report: one block per subcategory, in sorted order."""
+        if not grouped:
+            return ""
+        total = sum(len(v) for v in grouped.values())
+        lines = [f"Found {total} helper measure(s) in wrong table(s), "
+                 f"grouped by subcategory:"]
+        for sub in sorted(grouped):
+            items = grouped[sub]
+            lines.append("")
+            lines.append(f"  [{sub}] - {len(items)} violation(s)")
+            lines.append(f"    Rule: {_STRICT_BLOCK.get(sub, '(no per-subcategory guidance)')}")
+            for table, name in items:
+                lines.append(f"      - {table}[{name}]")
+        return "\n".join(lines)
+
+    def _lenient_report(self, ctx: Context, model,
+                        buckets: dict[str, list[tuple[str, str]]]) -> str:
+        """The lenient report: the four counts and the lists under them."""
+        key = ctx.model_key(model)
+        lines = [f"Measure Organization ({key}):"]
+        for sub, count_label, _list_label, _expected in _LENIENT_BUCKETS:
+            items = buckets.get(sub) or []
+            lines.append(f"{count_label + ':':<{_LENIENT_LABEL_WIDTH + 1}} {len(items)}")
+        for sub, _count_label, list_label, expected in _LENIENT_BUCKETS:
+            items = buckets.get(sub) or []
+            if not items:
+                continue
+            lines.append("")
+            lines.append(f"{list_label} ({len(items)}):")
+            for table, name in items:
+                lines.append(f"  - {table}[{name}]  (expected: {expected})")
+        if not any(buckets.get(sub) for sub, _c, _l, _e in _LENIENT_BUCKETS):
+            lines.append("")
+            lines.append("All helper-family measures live in expected tables.")
+        return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

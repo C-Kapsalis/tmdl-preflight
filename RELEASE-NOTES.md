@@ -283,6 +283,16 @@ until configured.
 
 ### Changed
 
+- **The helper-placement rule frees the axis field-parameter tables and
+  prints its reports.** The default `field_parameter_prefixes` are
+  `x-Selector`, `y-Selector`, `x-Plot Specific` and `y-Plot Specific`, so a
+  helper in one of them is never a finding in the strict profile (the `#`
+  and `_` host bans still come first). The strict text output groups the
+  findings by subcategory, with the guidance of each kind; the JSON output
+  keeps one record per finding. The lenient profile prints, per model, the
+  four counts (f-, `-helper`, `-Visual`/`w-`, i-), the list under each
+  non-empty one with the table the helper belongs in, and an all-clear line
+  when nothing is misplaced.
 - **The measures-on-facts check reads the reference's internal-name list and
   prints its report blocks.** A measure whose name carries one of
   `ga4traf`, `ga4users`, `ga4convs` or `related` is advisory, never a
