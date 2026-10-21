@@ -133,7 +133,8 @@ class ModelAnnotationDuplicatesRule(Rule):
             except (OSError, UnicodeDecodeError):
                 continue
             scope = "model"
-            seen: dict[tuple[str, str], int] = {}
+            seen: dict[tuple[str, str], list[int]] = {}
+            order: list[tuple[str, str]] = []
             for idx, line in enumerate(lines, start=1):
                 if not line.strip():
                     continue
@@ -147,21 +148,38 @@ class ModelAnnotationDuplicatesRule(Rule):
                     if not ann.group("indent"):
                         scope = "model"
                     key = (scope, ann.group("name"))
-                    if key in seen:
-                        where = "model scope" if scope == "model" else scope.replace(":", " ", 1)
-                        out.append(self.violation(
-                            f"annotation '{ann.group('name')}' appears twice in "
-                            f"the {where} (lines {seen[key]} and {idx}); remove "
-                            f"one of them.",
-                            file=mf, line=idx, obj=f"{scope}/{ann.group('name')}",
-                        ))
-                    else:
-                        seen[key] = idx
+                    if key not in seen:
+                        seen[key] = []
+                        order.append(key)
+                    seen[key].append(idx)
                     continue
                 if indent_level(line) == 0 and not line.startswith("ref "):
                     scope = "model"
                 elif line.startswith("ref "):
                     scope = "model"
+            for key in order:
+                where = seen[key]
+                if len(where) < 2:
+                    continue
+                scope_name, ann_name = key
+                lines_text = ", ".join(f"line {n}" for n in where)
+                if scope_name == "model":
+                    message = (
+                        f"Model-level annotation '{ann_name}' appears "
+                        f"{len(where)} times ({lines_text})")
+                elif scope_name.startswith("queryGroup:"):
+                    group = scope_name.split(":", 1)[1]
+                    message = (
+                        f"QueryGroup '{group}' has duplicate annotation "
+                        f"'{ann_name}' ({len(where)} times at {lines_text})")
+                else:
+                    message = (
+                        f"{scope_name.replace(':', ' ', 1)} has duplicate "
+                        f"annotation '{ann_name}' ({len(where)} times at "
+                        f"{lines_text})")
+                out.append(self.violation(
+                    message, file=mf, line=where[0],
+                    obj=f"{scope_name}/{ann_name}"))
         return out
 
 
