@@ -303,9 +303,10 @@ until configured.
   column but have no active join and the ones that do not carry the key
   column at all; the latter are called out as a template fact (a
   core-model defect) or as model-specific, depending on the new
-  `template_facts` option. A model with a floor file but no entry of its
-  own fails: the backlog has to be recorded deliberately. The key column is
-  matched case-sensitively.
+  `template_facts` option (a list) or the new `template` option (a model
+  folder whose facts are read with the shared table-role law). A model with
+  a floor file but no entry of its own fails: the backlog has to be
+  recorded deliberately. The key column is matched case-sensitively.
 - **`check --capture-floor FILE` writes the ratchet floor** of the
   selected rules and prints what it captured; the file keeps the entries
   of the models it did not see.

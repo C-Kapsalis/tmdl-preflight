@@ -932,3 +932,24 @@ def test_r016_retained_only_counts_double_underscore_names(tmp_path):
     assert len(found) == 1
     assert "__Y Calendar" in found[0].message
     assert "__X Calendar" not in found[0].message
+
+
+def test_r008_template_facts_from_a_template_folder(tmp_path):
+    root = tmp_path
+    d = _account_model(root)
+    template = root / "template" / "Template.SemanticModel" / "definition"
+    (template / "tables").mkdir(parents=True)
+    _table(template / "tables", "Orders", ["order_id"])
+    _table(template / "tables", "Bookings", ["booking_id", "account_x_id"])
+    code, payload = run_check(d.parent, "R008", config=_r008({
+        "dimension_table": "_Accounts",
+        "key_column": "account_x_id",
+        "template": str(template),
+    }))
+    found = violations(payload, "R008")
+    assert len(found) == 1
+    message = found[0]["message"]
+    assert "CRITICAL — template fact tables (core-model defect)" in message
+    assert "    - Orders" in message
+    assert "model-specific fact tables" in message
+    assert "    - Sitemap" in message

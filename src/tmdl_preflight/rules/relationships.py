@@ -3,6 +3,7 @@ bidirectional filters, orphan tables. IDs R0xx."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 from .base import Context, Rule, Severity, Violation
@@ -517,6 +518,7 @@ class FactConformedDimensionJoinRule(Rule):
         "baseline": None,
         "fail_without_baseline_entry": None,
         "template_facts": None,
+        "template": None,
     }
     description = (
         "Every fact table must actively join a conformed dimension (configure "
@@ -529,9 +531,38 @@ class FactConformedDimensionJoinRule(Rule):
         "mandatory reason; 'baseline' ratchets existing offenders per model. "
         "A fact whose key column is missing is called out as a template "
         "fact (a core-model defect) or as model-specific, depending on "
-        "'template_facts'. Facts follow the shared table-role law. Inert "
-        "until configured."
+        "'template_facts' (a list) or 'template' (a model folder whose facts "
+        "are read with the shared table-role law). Facts follow the shared "
+        "table-role law. Inert until configured."
     )
+
+    def _template_facts(self) -> set[str]:
+        """The facts the template model carries.
+
+        The template may be named as a list ('template_facts') or as a model
+        folder ('template'), whose facts are read with the shared table-role
+        law.
+        """
+        names = set(self.options.get("template_facts") or [])
+        template = self.options.get("template")
+        if template and not names:
+            names = set(self._template_folder_facts(str(template)))
+        return names
+
+    @staticmethod
+    def _template_folder_facts(template: str) -> list[str]:
+        from ..roles import fact_tables
+        from ..parser import parse_model
+
+        path = Path(template)
+        definition = path / "definition" if (path / "definition").is_dir() else path
+        if not (definition / "model.tmdl").is_file() and not (definition / "tables").is_dir():
+            return []
+        try:
+            model = parse_model(definition)
+        except (OSError, UnicodeDecodeError):
+            return []
+        return fact_tables(model)
 
     def check(self, ctx: Context) -> list[Violation]:
         from ..ratchet import RatchetFileError, entry_for, load_floors
@@ -542,7 +573,7 @@ class FactConformedDimensionJoinRule(Rule):
         if not dim or not key:
             return []
         exempt = self.options.get("exempt") or {}
-        template_facts = set(self.options.get("template_facts") or [])
+        template_facts = self._template_facts()
         out: list[Violation] = []
         floors = None
         if self.options.get("baseline"):
@@ -626,7 +657,7 @@ class FactConformedDimensionJoinRule(Rule):
         if not dim or not key:
             return None
         exempt = self.options.get("exempt") or {}
-        template_facts = set(self.options.get("template_facts") or [])
+        template_facts = self._template_facts()
         out: dict[str, list[str]] = {}
         for model in ctx.models:
             mkey = ctx.model_key(model)
