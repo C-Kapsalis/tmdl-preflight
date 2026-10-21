@@ -250,9 +250,11 @@ the same layout and with the same wording:
   found and the comment text it holds. In attach mode it prints the
   comment-spacing cleanup's report instead.
 - **M017** (the TMDL file validation) prints the validation header, the
-  files it checked, and the validation summary. A repair the tool could
-  not prove is reported on standard error as
-  `ERROR <path>: <reason>`, and the run exits 2.
+  files it checked, the validation summary and the model's own counts
+  (files, valid files, invalid files, measures, tables, lineage tags,
+  duplicate tags, success rate). A repair the tool could not prove is
+  reported on standard error as `ERROR <path>: <reason>`, and the run
+  exits 2.
 
 The tool's own report follows, so the exit code and the JSON payload are
 unchanged.

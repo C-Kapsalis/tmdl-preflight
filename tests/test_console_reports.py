@@ -234,3 +234,35 @@ def test_the_validation_report_counts_the_notes(tmp_path):
     code, out, err = run_cli("check", model, "--select", "M017", "--no-config")
     assert "✅ All 1 files passed validation" in out, out
     assert "⚠️  1 warnings found (not critical)" in out, out
+
+
+def test_the_validation_report_lists_ten_files(tmp_path):
+    """PA12: the file list stops at ten and says how many are left."""
+    model = _model(tmp_path)
+    for i in range(12):
+        (model / "definition" / "tables" / f"T{i}.tmdl").write_text(
+            f"table T{i}\n\n    column c{i}\n", encoding="utf-8")
+    code, out, err = run_cli("check", model, "--select", "M017", "--no-config")
+    assert "❌ Found 12 errors in 12 files:" in out, out
+    assert out.count("   - T") == 10, out
+    assert "   ... and 2 more" in out, out
+
+
+def test_the_validation_report_counts_the_model(tmp_path):
+    """PA12: the model's own counts, as the reference's summary printed them."""
+    model = _model(tmp_path, body=(
+        "table Beans\n"
+        "\tlineageTag: 11111111-1111-4111-8111-111111111111\n\n"
+        "\tmeasure Kg = SUM(Beans[kg])\n"
+        "\t\tlineageTag: 22222222-2222-4222-8222-222222222222\n"
+    ))
+    code, out, err = run_cli("check", model, "--select", "M017", "--no-config")
+    assert "📊 Model Validation Summary:" in out, out
+    assert "   📁 Total files: 1" in out, out
+    assert "   ✅ Valid files: 1" in out, out
+    assert "   ❌ Invalid files: 0" in out, out
+    assert "   📊 Total measures: 1" in out, out
+    assert "   📋 Total tables: 1" in out, out
+    assert "   🏷️  Total lineageTags: 2" in out, out
+    assert "   🔄 Duplicate lineageTags: 0" in out, out
+    assert "   📈 Success rate: 100.0%" in out, out

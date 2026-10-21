@@ -277,17 +277,46 @@ def validation_report(ctx: Context, violations: list[Violation]) -> list[str]:
         out.append(f"✅ All {len(table_files)} files passed validation")
         if notes:
             out.append(f"⚠️  {notes} warnings found (not critical)")
-        return out
-    failing = [f for f in table_files if by_file.get(f)]
-    out.append(f"❌ Found {errors} errors in {len(failing)} files:")
-    for file in failing[:10]:
-        out.append(f"   - {file.name}")
-    if len(failing) > 10:
-        out.append(f"   ... and {len(failing) - 10} more")
-    out.append("")
-    out.append("These errors will cause Power BI Desktop to fail opening the file.")
-    out.append("Please fix the errors before opening in Power BI.")
+    else:
+        failing = [f for f in table_files if by_file.get(f)]
+        out.append(f"❌ Found {errors} errors in {len(failing)} files:")
+        for file in failing[:10]:
+            out.append(f"   - {file.name}")
+        if len(failing) > 10:
+            out.append(f"   ... and {len(failing) - 10} more")
+        out.append("")
+        out.append("These errors will cause Power BI Desktop to fail opening the file.")
+        out.append("Please fix the errors before opening in Power BI.")
+    out.extend(_model_summary(model, len(table_files), len(failing) if errors else 0))
     return out
+
+
+def _model_summary(model, total_files: int, invalid_files: int) -> list[str]:
+    """The model's own counts, as the reference's validation summary printed
+    them."""
+    if model is None:
+        return []
+    measures = sum(len(t.measure_list) for t in model.table_list)
+    tables = len(model.table_list)
+    tags = len(model.lineage_tags)
+    seen: dict[str, int] = {}
+    for occ in model.lineage_tags:
+        seen[occ.tag] = seen.get(occ.tag, 0) + 1
+    duplicates = sum(1 for n in seen.values() if n > 1)
+    valid = max(total_files - invalid_files, 0)
+    rate = round((valid / max(total_files, 1)) * 100, 1)
+    return [
+        "",
+        "📊 Model Validation Summary:",
+        f"   📁 Total files: {total_files}",
+        f"   ✅ Valid files: {valid}",
+        f"   ❌ Invalid files: {invalid_files}",
+        f"   📊 Total measures: {measures}",
+        f"   📋 Total tables: {tables}",
+        f"   🏷️  Total lineageTags: {tags}",
+        f"   🔄 Duplicate lineageTags: {duplicates}",
+        f"   📈 Success rate: {rate}%",
+    ]
 
 
 def _relative(ctx: Context, file: Optional[Path]) -> str:
