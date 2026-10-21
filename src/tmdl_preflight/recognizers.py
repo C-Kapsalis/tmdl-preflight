@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass
 from typing import Iterator, Optional
 
-from .parser import indent_level
+from .parser import indent_level, parse_object_name
 
 # ---------------------------------------------------------------------------
 # Fences
@@ -81,6 +81,7 @@ class DanglingDescription:
     start: int  # 0-based index of the first /// line of the run
     end: int  # 0-based index of the last /// line of the run
     at_eof: bool  # nothing but blank lines follows the run
+    text: str = ""  # the stripped text of the run's last /// line
 
 
 def find_dangling_descriptions(lines: list[str]) -> list[DanglingDescription]:
@@ -98,7 +99,7 @@ def find_dangling_descriptions(lines: list[str]) -> list[DanglingDescription]:
         nxt = lines[j + 1] if j + 1 < n else None
         if nxt is None or not nxt.strip():
             at_eof = all(not ln.strip() for ln in lines[j + 1 :])
-            out.append(DanglingDescription(i, j, at_eof))
+            out.append(DanglingDescription(i, j, at_eof, lines[j].strip()))
         i = j + 1
     return out
 
@@ -199,6 +200,7 @@ class MisorderedProperty:
     target: int  # 0-based index the line belongs in front of
     owner: str  # the declaration line it belongs to, stripped
     token: str
+    name: str = ""  # the object's own name
 
 
 def _expression_end(lines: list[str], decl: int) -> int:
@@ -233,7 +235,7 @@ def find_properties_after_child_blocks(lines: list[str]) -> list[MisorderedPrope
     expression (or after the declaration when the expression is inline).
     """
     out: list[MisorderedProperty] = []
-    # level -> [decl text, section started?, decl index]
+    # level -> [decl text, section started?, decl index, object name]
     owners: dict[int, list] = {}
     for idx, line in iter_unfenced(lines):
         if not line.strip() or line.lstrip().startswith("///"):
@@ -243,7 +245,7 @@ def find_properties_after_child_blocks(lines: list[str]) -> list[MisorderedPrope
         if _OBJECT_DECL_RE.match(line):
             for lvl in [k for k in owners if k >= level]:
                 del owners[lvl]
-            owners[level] = [line.strip(), False, idx]
+            owners[level] = [line.strip(), False, idx, _object_name(line)]
             continue
         if tok in CHILD_BLOCKS:
             above = [k for k in owners if k < level]
@@ -255,8 +257,18 @@ def find_properties_after_child_blocks(lines: list[str]) -> list[MisorderedPrope
             continue
         if tok in SIMPLE_PROPERTIES and parent[1]:
             target = _expression_end(lines, parent[2]) + 1
-            out.append(MisorderedProperty(idx, target, parent[0], tok))
+            out.append(MisorderedProperty(idx, target, parent[0], tok, parent[3]))
     return out
+
+
+def _object_name(declaration: str) -> str:
+    """The name a declaration carries: ``measure 'Kg' = ...`` -> ``Kg``."""
+    rest = declaration.strip()
+    m = re.match(r"^[A-Za-z]+\s+(.*)$", rest)
+    if not m:
+        return rest
+    name, _ = parse_object_name(m.group(1))
+    return name or rest
 
 
 def move_properties_before_child_blocks(

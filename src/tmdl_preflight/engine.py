@@ -83,6 +83,13 @@ class PreflightReport:
     notes: list[str] = field(default_factory=list)
     # repairs a fixer refused because it could not prove them (exit 2)
     refused_fixes: list[str] = field(default_factory=list)
+    # the violations the first pass found, before any fixer ran; the console
+    # reports of the rules that repair files describe those, not the clean
+    # re-check
+    found: list[Violation] = field(default_factory=list)
+    # the console report of a rule that came from a script with a report of
+    # its own, rendered before the repair so it can describe what was there
+    console: list[str] = field(default_factory=list)
 
     def by_severity(self, severity: Severity) -> list[Violation]:
         return [v for v in self.violations if v.severity == severity]
@@ -167,6 +174,7 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
     """
     first = check(ctx, ruleset)
     report = PreflightReport()
+    report.found = list(first.violations)
     ctx.refused_fixes = []
 
     dirty_rule_ids = {v.rule_id for v in first.violations}

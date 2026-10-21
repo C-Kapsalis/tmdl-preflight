@@ -140,7 +140,9 @@ until configured.
 - **M013** fix removes the run and the one blank line directly after it, at
   the end of the file too; blank lines before a run are never touched. New
   option `fix_mode = "attach"` deletes the blank lines between a
-  description and its object instead, keeping the documentation.
+  description and its object instead, keeping the documentation. The attach
+  mode works on the table files only, and its report counts the occurrences
+  in a dry run and the blank lines it removed in a live run.
 - **R001** messages say "not found"; an endpoint spelled with different
   casing is an error; new option `min_endpoint_success_rate` (default 0.95)
   notes a low share of valid relationships (each broken endpoint is an
@@ -184,6 +186,28 @@ until configured.
   left unchanged and listed under `refused_fixes`); other files are still
   repaired.
 
+### Console reports
+
+Four rules came from scripts that printed a report of their own instead of
+a list of findings. When such a rule is the one rule the run selected
+(`--select`), the tool prints that report in front of its own summary, in
+the same layout and with the same wording:
+
+- **M003** (the lineage repair) prints the model it works on, whether the
+  run is live or a dry run, every duplicated tag with its locations, the
+  fresh tag every occurrence gets, and the footer. A run over more than one
+  model also prints the repository scan and its summary.
+- **M011** (the misordered-property repair) prints, per file, the
+  properties it moved and the object they belong to, and the footer.
+- **M013** (the dangling-description sweep) prints, per file, the run it
+  found and the comment text it holds. In attach mode it prints the
+  comment-spacing cleanup's report instead.
+- **M017** (the TMDL file validation) prints the validation header, the
+  files it checked, and the validation summary.
+
+The tool's own report follows, so the exit code and the JSON payload are
+unchanged.
+
 ### Commands and options
 
 - `exclude` globs match the path relative to the scan root (the folder you
@@ -197,6 +221,8 @@ until configured.
 - A bare `definition/` folder is accepted as a model when it holds
   `tables/`, `model.tmdl` or `expressions.tmdl`.
 - `fix --dry-run` reports what would be repaired and writes nothing.
+- `fix --verbose` lists every file a dry run would change (the attach mode
+  of M013 lists its files only with this flag).
 - `fix --clear-cache` deletes `<Model>.SemanticModel/.pbi/cache.abf` after
   lineage tags changed; without it the tool prints a hint when the cache
   exists.

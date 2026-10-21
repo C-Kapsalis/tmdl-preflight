@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from .base import Context, Rule, Severity, Violation
 from ..dax import CODE, classify
@@ -176,7 +177,7 @@ class _LineageRuleBase(Rule):
     rewriting that regenerates a tag without touching anything else."""
 
     @staticmethod
-    def _rewrite_tag(file: Path, line_no: int) -> str | None:
+    def _rewrite_tag(file: Path, line_no: int, new_tag: Optional[str] = None) -> str | None:
         """Replace the lineageTag value on ``line_no`` (1-based) with a fresh
         UUID. Returns the new tag, or None if the line no longer matches."""
         original = read_text_file(file)
@@ -186,7 +187,7 @@ class _LineageRuleBase(Rule):
         m = _LINEAGE_LINE_RE.match(lines[line_no - 1])
         if not m:
             return None
-        new_tag = str(uuid.uuid4())
+        new_tag = new_tag or str(uuid.uuid4())
         lines[line_no - 1] = f"{m.group(1)}{new_tag}{m.group(3)}"
 
         def verify(old: str, new: str) -> None:
@@ -247,6 +248,30 @@ class LineageTagUniquenessRule(_LineageRuleBase):
             if len(occs) > 1
         }
 
+    def duplicates(self, model) -> dict[str, list]:
+        """The duplicated tags of a model and their occurrences, the first
+        occurrence of each tag being the one that keeps it."""
+        return self._duplicates(model)
+
+    def __init__(self) -> None:
+        super().__init__()
+        #: the plan the last repair computed, kept so the console report can
+        #: describe the duplicates that were there before the repair
+        self.last_plan: Optional[list] = None
+
+    def plan(self, ctx: Context) -> list[tuple[object, dict[str, list[tuple[object, str]]]]]:
+        """What the repair would do, per model: the duplicated tags with
+        their occurrences, and the fresh tag every regenerated occurrence
+        gets. The plan is computed before anything is written, so a dry run
+        can print the same report as a live one."""
+        out = []
+        for model in ctx.models:
+            plan_for_model = {}
+            for tag, occs in self._duplicates(model).items():
+                plan_for_model[tag] = [(occ, str(uuid.uuid4())) for occ in occs]
+            out.append((model, plan_for_model))
+        self.last_plan = out
+        return out
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for model in ctx.models:
@@ -266,15 +291,16 @@ class LineageTagUniquenessRule(_LineageRuleBase):
 
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
-        for model in ctx.models:
-            for tag, occs in self._duplicates(model).items():
+        self.last_plan = self.plan(ctx)
+        for _model, plan_for_model in self.last_plan:
+            for tag, entries in plan_for_model.items():
                 # Keep the first (usually the original object); regenerate
                 # each later occurrence.
-                for dup in occs[1:]:
-                    new_tag = self._rewrite_tag(dup.file, dup.line)
-                    if new_tag:
+                for occ, new_tag in entries[1:]:
+                    written = self._rewrite_tag(occ.file, occ.line, new_tag)
+                    if written:
                         applied.append(
-                            f"{dup.file.name}:{dup.line} ({dup.context}): "
+                            f"{occ.file.name}:{occ.line} ({occ.context}): "
                             f"'{tag}' -> '{new_tag}'"
                         )
         return applied
@@ -711,7 +737,7 @@ class PropertyAfterChildBlockRule(Rule):
                         f"line up (the auto-fix does this).",
                         file=f,
                         line=finding.line + 1,
-                        obj=finding.owner,
+                        obj=finding.name or finding.owner,
                     )
                 )
         return out
@@ -836,6 +862,11 @@ class DanglingDescriptionRule(Rule):
         "directly after it."
     )
 
+    def __init__(self) -> None:
+        super().__init__()
+        #: the files the attach mode repaired: (file name, occurrences, blanks)
+        self.last_attach: list[tuple[str, int, int]] = []
+
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for model in ctx.models:
@@ -856,6 +887,7 @@ class DanglingDescriptionRule(Rule):
                                 "it (the auto-fix does).",
                                 file=f,
                                 line=d.end + 1,
+                                obj=d.text,
                             )
                         )
                     else:
@@ -868,20 +900,32 @@ class DanglingDescriptionRule(Rule):
                                 "attach it, or delete the description.",
                                 file=f,
                                 line=d.end + 1,
+                                obj=d.text,
                             )
                         )
         return out
 
+    def _files_to_fix(self, model, attach: bool) -> list[Path]:
+        """The files the repair touches.
+
+        The attach mode works on the table files only: that is the scope
+        the comment-spacing cleanup had, and a shared expression's blank
+        lines are not what it was written for.
+        """
+        if attach:
+            return sorted((model.definition_path / "tables").glob("*.tmdl"))
+        return list(model.tmdl_files)
+
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
+        attach = self.options.get("fix_mode") == "attach"
         for model in ctx.models:
-            for f in model.tmdl_files:
+            for f in self._files_to_fix(model, attach):
                 try:
                     original = read_text_file(f)
                 except (UnicodeDecodeError, OSError):
                     continue
                 lines = original.lines()
-                attach = self.options.get("fix_mode") == "attach"
                 if attach:
                     new_lines, occurrences, blanks = attach_descriptions(lines)
                     if not blanks:
@@ -899,6 +943,8 @@ class DanglingDescriptionRule(Rule):
                                 f"{f.name}: attached {occurrences} description(s), "
                                 f"removed {blanks} blank line(s)"
                             )
+                            self.last_attach.append(
+                                (f.name, occurrences, blanks))
                     except EditRefused:
                         pass
                     continue
