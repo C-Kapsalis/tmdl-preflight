@@ -106,10 +106,15 @@ def find_dangling_descriptions(lines: list[str]) -> list[DanglingDescription]:
 def remove_dangling_descriptions(lines: list[str]) -> tuple[list[str], int]:
     """Delete each dangling run plus the one blank line directly after it.
 
-    The same rule holds at the end of the file: blank lines *before* a run
-    are never touched. ``lines`` is the file split on its newline, so a file
-    that ends with a newline has an empty last element; that element is the
-    file's final newline, not a blank line, and is kept.
+    The same rule holds at the end of the file: when the run is the last
+    content, the run AND the line break after it go, and a blank line
+    directly before the run becomes the file's last line break. So
+    ``a``, ``b``, blank, ``/// x``, final newline becomes ``a``, ``b``,
+    final newline — no trailing empty line. Blank lines *before* a run
+    that is not at the end are never touched. ``lines`` is the file split
+    on its newline, so a file that ends with a newline has an empty last
+    element; that element is the file's final newline, not a blank line,
+    and it is kept.
     """
     found = find_dangling_descriptions(lines)
     if not found:
@@ -119,9 +124,14 @@ def remove_dangling_descriptions(lines: list[str]) -> tuple[list[str], int]:
     for d in found:
         drop.update(range(d.start, d.end + 1))
         after = d.end + 1
+        at_end = after >= last or not lines[after].strip()
         if after <= last and not lines[after].strip():
             if after < last or lines[after] != "":
                 drop.add(after)  # the single blank line that orphaned the run
+        if at_end and d.start > 0 and not lines[d.start - 1].strip():
+            # the run was the last content: the blank line before it
+            # becomes the file's last line break
+            drop.add(d.start - 1)
     return [ln for k, ln in enumerate(lines) if k not in drop], len(found)
 
 

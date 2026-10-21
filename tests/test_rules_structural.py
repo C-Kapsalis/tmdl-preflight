@@ -440,9 +440,9 @@ class TestDanglingDescription:
         original = f.read_text(encoding="utf-8")
         f.write_text(original.rstrip("\n") + "\n\n/// orphan\n", encoding="utf-8")
         DanglingDescriptionRule().fix(Context(project))
-        # the run goes with the blank line after it (none here); blank lines
-        # before it are left alone, and the final newline stays
-        assert f.read_text(encoding="utf-8") == original.rstrip("\n") + "\n\n"
+        # the run goes with the line break after it; the blank line before it
+        # becomes the file's last line break
+        assert f.read_text(encoding="utf-8") == original.rstrip("\n") + "\n"
 
 
 class TestCalcGroupImplicitMeasures:

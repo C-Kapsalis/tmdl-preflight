@@ -70,8 +70,9 @@ def test_dangling_description_repair_is_opt_in(stand_in):
     assert code == 0, payload
     text = (definition / "expressions.tmdl").read_text(encoding="utf-8")
     assert "US Format" not in text
-    # the run and the single blank line after it are removed (earlier bytes)
-    assert text.endswith('IsParameterQueryRequired=true]\n\n')
+    # the run goes, and the blank line before it becomes the file's last
+    # line break: no trailing empty line
+    assert text.endswith('IsParameterQueryRequired=true]\n')
     code, payload = run_check(definition, "M013")
     assert code == 0 and violations(payload, "M013") == []
 
@@ -95,7 +96,9 @@ def test_end_of_file_run_between_blank_lines(tmp_path):
     assert code == 1 and len(violations(payload, "M013")) == 1
     assert violations(payload, "M013")[0]["severity"] == "error"   # STRICTER
     run_fix(d, "M013")
-    assert (d / "expressions.tmdl").read_bytes() == b"expression A = 1\n\n\n"
+    # the run goes, and the blank line before it becomes the file's last
+    # line break: no trailing empty line
+    assert (d / "expressions.tmdl").read_bytes() == b"expression A = 1\n\n"
 
 
 def test_mid_file_run_is_removed_with_its_blank(tmp_path):
