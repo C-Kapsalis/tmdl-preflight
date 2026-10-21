@@ -322,7 +322,8 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _context(raw_path: str, exclude: Optional[list[str]] = None) -> Context:
+def _context(raw_path: str, exclude: Optional[list[str]] = None,
+             exclude_configured: bool = False) -> Context:
     root = Path(raw_path)
     if not root.exists():
         raise UsageError(
@@ -330,7 +331,8 @@ def _context(raw_path: str, exclude: Optional[list[str]] = None) -> Context:
             f"PBIP project root, a *.SemanticModel folder, a definition "
             f"folder, or a *.Report folder."
         )
-    ctx = Context(root, exclude=exclude)
+    ctx = Context(root, exclude=exclude,
+                  exclude_configured=exclude_configured)
     if ctx.is_empty() and ctx.excluded_files:
         return ctx  # everything was excluded on purpose: a clean, empty run
     if ctx.is_empty():
@@ -396,7 +398,7 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
     if not Path(args.path).exists():
         _context(args.path)  # raises the path error before any config error
     cfg = _load_config(args, full)
-    ctx = _context(args.path, cfg.exclude)
+    ctx = _context(args.path, cfg.exclude, cfg.exclude_configured)
     ctx.options = dict(cfg.sections)
     if getattr(args, "only", None):
         ctx.options["_fix_only"] = args.only

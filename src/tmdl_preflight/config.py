@@ -100,6 +100,10 @@ class Config:
     strict: bool = False
     severity_overrides: dict[str, Severity] = field(default_factory=dict)
     exclude: list[str] = field(default_factory=list)
+    #: whether the configuration named an ``exclude`` list at all. An empty
+    #: list that WAS configured turns the default exclusions off; a list
+    #: that was never configured leaves them on.
+    exclude_configured: bool = False
     rule_options: dict[str, dict[str, Any]] = field(default_factory=dict)
     exemptions: list[Exemption] = field(default_factory=list)
     sections: dict[str, Any] = field(default_factory=dict)
@@ -349,6 +353,7 @@ def build_config(raw: dict, ruleset: RuleSet, source: Optional[Path] = None,
             ) from None
     if "exclude" in data:
         cfg.exclude = _string_list(data["exclude"], f"{label}: exclude")
+        cfg.exclude_configured = True
         for pattern in cfg.exclude:
             if pattern.startswith("/") or re.match(r"^[A-Za-z]:[\\/]", pattern) or ".." in pattern.split("/"):
                 raise ConfigError(

@@ -89,9 +89,14 @@ class Context:
     the re-check always runs against what is actually on disk.
     """
 
-    def __init__(self, root: Path, exclude: Optional[list[str]] = None):
+    def __init__(self, root: Path, exclude: Optional[list[str]] = None,
+                 exclude_configured: bool = False):
         self.root = Path(root)
         self.exclude: list[str] = list(exclude or [])
+        #: whether an ``exclude`` list was configured at all. An empty list
+        #: that WAS configured turns the default exclusions off; a list that
+        #: was never configured leaves them on.
+        self.exclude_configured = exclude_configured or bool(self.exclude)
         # files under models/reports that were skipped entirely because every
         # file they hold matches an ``exclude`` glob
         self.excluded_files: int = 0
@@ -138,17 +143,25 @@ class Context:
     def is_excluded(self, file: Path) -> bool:
         """True when an ``exclude`` glob matches the file's path relative to
         the scan root or to its PBIP item. Folders above the scan root never
-        take part, so a checkout under ``~/legacy/`` is still scanned."""
-        if not self.exclude:
-            return False
+        take part, so a checkout under ``~/legacy/`` is still scanned.
+
+        With no ``exclude`` configured, the DEFAULT exclusions apply: every
+        file whose path relative to the scan root has a folder segment that
+        holds ``legacy``, ``_backup`` or ``_b2`` (a substring match, so
+        ``spinout-05_db_backup/`` and ``old_legacy_x/`` are skipped). A
+        configured ``exclude`` list replaces the default; an empty list
+        (``exclude = []``) turns it off.
+        """
         from ..config import glob_match  # local import: config imports rules
 
         candidates = [c for c in (self.scan_relative(file), item_relative_path(file)) if c]
-        return any(glob_match(p, c) for p in self.exclude for c in candidates)
+        if self.exclude_configured:
+            if not self.exclude:
+                return False
+            return any(glob_match(p, c) for p in self.exclude for c in candidates)
+        return any(_archived_folder(c) for c in candidates)
 
     def _keep(self, folders: list[Path]) -> list[Path]:
-        if not self.exclude:
-            return folders
         kept = []
         for folder in folders:
             files = [f for f in folder.rglob("*") if f.is_file()]
@@ -182,6 +195,18 @@ class Context:
 
     def is_empty(self) -> bool:
         return not self.definition_dirs and not self.report_dirs
+
+
+def _archived_folder(relative: str) -> bool:
+    """Is this relative path under an archived folder?
+
+    A folder segment that holds ``legacy``, ``_backup`` or ``_b2`` marks an
+    archived copy: a folder SEGMENT, not the whole path, so a model whose
+    NAME contains one of them is still scanned.
+    """
+    parts = relative.replace("\\", "/").split("/")[:-1]
+    return any("legacy" in part or "_backup" in part or "_b2" in part
+               for part in parts)
 
 
 class Rule:
