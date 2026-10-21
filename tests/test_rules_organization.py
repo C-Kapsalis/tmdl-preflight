@@ -55,6 +55,20 @@ def test_lenient_profile_judges_four_kinds_as_info(tmp_path):
 
 
 def test_surfaced_hidden_measure_on_a_fact_is_blocking(tmp_path):
+    """A measure surfaced by a NUMBERED x-axis table is user-facing."""
+    sales = _table("Sales", ["Total Revenue"], 1, partition="m").replace(
+        "\tmeasure 'Total Revenue' = 1\n", "\tmeasure 'Total Revenue' = 1\n\t\tisHidden\n")
+    picker = ("table 'x-Selector 1'\n\tlineageTag: " + TAG.format(9) + "\n\n"
+              "\tpartition 'x-Selector 1' = calculated\n\t\tmode: import\n\t\tsource =\n"
+              "\t\t\t\t{ (\"Revenue\", NAMEOF([Total Revenue]), 0) }\n")
+    model = _model(tmp_path, {"Sales": sales, "x-Selector 1": picker})
+    code, payload = run_check(model, "measures-in-fact-tables", strict=True)
+    blocking = [v for v in violations(payload) if v["severity"] != "info"]
+    assert code == 1 and len(blocking) == 1 and "field parameter" in blocking[0]["message"]
+
+
+def test_a_measure_surfaced_only_by_a_plot_specific_table_is_advisory(tmp_path):
+    """PA21: the default surfacing set is the numbered x-axis tables only."""
     sales = _table("Sales", ["Total Revenue"], 1, partition="m").replace(
         "\tmeasure 'Total Revenue' = 1\n", "\tmeasure 'Total Revenue' = 1\n\t\tisHidden\n")
     picker = ("table 'x-Plot Specific 1'\n\tlineageTag: " + TAG.format(9) + "\n\n"
@@ -62,8 +76,25 @@ def test_surfaced_hidden_measure_on_a_fact_is_blocking(tmp_path):
               "\t\t\t\t{ (\"Revenue\", NAMEOF([Total Revenue]), 0) }\n")
     model = _model(tmp_path, {"Sales": sales, "x-Plot Specific 1": picker})
     code, payload = run_check(model, "measures-in-fact-tables", strict=True)
+    found = violations(payload)
+    assert code == 0, found
+    assert found and all(v["severity"] == "info" for v in found), found
+
+
+def test_the_surfacing_tables_option_is_an_override(tmp_path):
+    """PA21: the option keeps working as an override."""
+    sales = _table("Sales", ["Total Revenue"], 1, partition="m").replace(
+        "\tmeasure 'Total Revenue' = 1\n", "\tmeasure 'Total Revenue' = 1\n\t\tisHidden\n")
+    picker = ("table 'x-Plot Specific 1'\n\tlineageTag: " + TAG.format(9) + "\n\n"
+              "\tpartition 'x-Plot Specific 1' = calculated\n\t\tmode: import\n\t\tsource =\n"
+              "\t\t\t\t{ (\"Revenue\", NAMEOF([Total Revenue]), 0) }\n")
+    model = _model(tmp_path, {"Sales": sales, "x-Plot Specific 1": picker})
+    cfg = {"rules": {"measures-in-fact-tables": {
+        "surfacing_tables": ["x-Plot Specific *"]}}}
+    code, payload = run_check(model, "measures-in-fact-tables", config=cfg,
+                               strict=True)
     blocking = [v for v in violations(payload) if v["severity"] != "info"]
-    assert code == 1 and len(blocking) == 1 and "field parameter" in blocking[0]["message"]
+    assert code == 1 and len(blocking) == 1, blocking
 
 
 def test_category_column_needs_fenced_source_and_twin(tmp_path):

@@ -115,9 +115,17 @@ def field_parameter_tables(model: SemanticModel, patterns: Optional[Iterable[str
 
 def surfaced_measures(model: SemanticModel, patterns: Optional[Iterable[str]] = None) -> set[str]:
     """Distinct measure names referenced as bare ``NAMEOF([Name])`` in the
-    text of the field-parameter tables (comments excluded)."""
+    text of the field-parameter tables (comments excluded).
+
+    With no ``patterns`` the set comes from the NUMBERED x-axis tables
+    (``x-Selector 1`` to ``x-Selector 9``) only: those are the tables that
+    surface a fact measure to the report. A y-axis or a plot-specific
+    table does not make a fact measure user-facing by default.
+    """
     out: set[str] = set()
     for t in field_parameter_tables(model, patterns):
+        if patterns is None and not _numbered_x_axis(t.name):
+            continue
         text = _file_text(t)
         if text is None:
             continue
@@ -125,3 +133,9 @@ def surfaced_measures(model: SemanticModel, patterns: Optional[Iterable[str]] = 
             if table is None:
                 out.add(member)
     return out
+
+
+def _numbered_x_axis(name: str) -> bool:
+    """Is this table one of ``x-Selector 1`` … ``x-Selector 9``?"""
+    m = re.fullmatch(r"x-Selector ([1-9])", name.strip())
+    return m is not None
