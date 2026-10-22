@@ -291,19 +291,67 @@ def retag_rows(files: list[Path], names: list[str], old: str, new: str,
 # F011 category value required
 # ---------------------------------------------------------------------------
 
+# The report each axis family prints when one of its rows carries no
+# category: the count, the rows, and the categories a row may use.
+_FAMILY_REPORT = {
+    "x": {
+        "categories": "Valid categories: Performance_x, analytics_api_x, kplanner_x, etc.",
+        "example": 'Example: ("Cost", NAMEOF([!Cost]), -10, "Performance_x")',
+    },
+    "y": {
+        "categories": "Valid categories: Campaign_y, Ad_Group_y, Keyword_y, Landing_Page_y, etc.",
+        "example": ('Example: ("Campaign Name", NAMEOF(\'_Campaigns\'[Campaign Actual]), '
+                    '-10, "campaign_universal_y", "Other")'),
+    },
+}
+
+_ORDER_RE = re.compile(r"^\s*-?\d+\s*$")
+
+
+def _family_label(glob: str) -> str:
+    """The family a glob names: its text before the first number or bracket."""
+    head = re.split(r"[\[0-9]", glob, maxsplit=1)[0]
+    return head.strip() or glob.strip()
+
+
+def _table_number(name: str) -> int:
+    tail = name.rsplit(" ", 1)[-1]
+    return int(tail) if tail.isdigit() else 0
+
+
+def _family_report(family: str, kind: str, rows: list[tuple[str, str]],
+                   n_tables: int) -> str:
+    """The report block of one axis family."""
+    text = _FAMILY_REPORT[kind]
+    lines: list[str] = []
+    if kind == "y":
+        lines.append(f"{family} Field Parameter Validation:")
+        lines.append(f"Tables analyzed: {n_tables}")
+    lines.append(f"Found {len(rows)} {family} entries without category (4th parameter)")
+    if kind == "x":
+        lines.append(f"All {family} field parameters must have 4th parameter "
+                     f"(category_x_id)")
+    lines.append("")
+    for table, label in rows:
+        lines.append(f'  - {table}: "{label}"')
+    lines.append("")
+    lines.append(text["categories"])
+    lines.append(text["example"])
+    return "\n".join(lines)
+
 
 class FieldParameterCategoryRequiredRule(Rule):
     id = "F011"
     name = "fieldparam-category-required"
     severity = Severity.ERROR
-    opt_in = True
     option_defaults = {"category_tables": ["x-Selector [1-9]", "y-Selector [1-9]"],
                        "require_category": True}
     description = (
         "In the numbered axis tables (x-Selector N, y-Selector N) value 4 of "
         "each row is its analysis category. A 3-value row (label, NAMEOF, "
         "order) belongs to no category and never appears under any analysis "
-        "(unless the same label also has a categorised row). "
+        "(unless the same label also has a categorised row). The report "
+        "lists the rows without a category, family by family. "
         "require_category = false skips the rule."
     )
 
@@ -313,19 +361,37 @@ class FieldParameterCategoryRequiredRule(Rule):
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for model in ctx.models:
-            for table in _matching(model, self.options["category_tables"]):
-                rows = live_rows(table)
-                full = {_label(r.fields[0]) for r in rows if len(r.fields) >= 4}
-                for r in rows:
-                    label = _label(r.fields[0])
-                    if len(r.fields) != 3 or label is None or label in full:
-                        continue
-                    out.append(self.violation(
-                        f"row \"{label}\" of '{table.name}' has no category (value 4), so it "
-                        f"appears under no analysis category; add the category.",
-                        file=table.file, line=r.index + 1, obj=f"{table.name}[{label}]",
-                    ))
+            for glob in self.options["category_tables"]:
+                out.extend(self._family(model, str(glob)))
         return out
+
+    def _family(self, model: SemanticModel, glob: str) -> list[Violation]:
+        family = _family_label(glob)
+        kind = "y" if family[:1].lower() == "y" else "x"
+        tables = sorted(_matching(model, [glob]), key=lambda t: (_table_number(t.name), t.name))
+        rows: list[tuple[str, str]] = []
+        first: Optional[tuple[Table, Row]] = None
+        for table in tables:
+            live = live_rows(table)
+            categorised = {_label(r.fields[0]) for r in live if len(r.fields) >= 4}
+            for row in live:
+                if len(row.fields) != 3:
+                    continue
+                label = _label(row.fields[0])
+                if label is None or label in categorised:
+                    continue
+                if not _ORDER_RE.match(row.fields[2]):
+                    continue
+                rows.append((table.name, label))
+                if first is None:
+                    first = (table, row)
+        if not rows:
+            return []
+        table, row = first
+        return [self.violation(
+            _family_report(family, kind, rows, len(tables)),
+            file=table.file, line=row.index + 1,
+        )]
 
 
 # ---------------------------------------------------------------------------

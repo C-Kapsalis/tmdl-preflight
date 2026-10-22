@@ -24,6 +24,31 @@ def _model(stand_in, client="universal"):
 
 def _in_table(found, table):
     return [v for v in found if table in (v.get("path") or "") or table in v["message"]]
+
+
+X_REPORT = (
+    "Found 1 x-Selector entries without category (4th parameter)\n"
+    "All x-Selector field parameters must have 4th parameter (category_x_id)\n"
+    "\n"
+    '  - x-Selector 1: "Pace"\n'
+    "\n"
+    "Valid categories: Performance_x, analytics_api_x, kplanner_x, etc.\n"
+    'Example: ("Cost", NAMEOF([!Cost]), -10, "Performance_x")'
+)
+
+Y_REPORT = (
+    "y-Selector Field Parameter Validation:\n"
+    "Tables analyzed: 2\n"
+    "Found 1 y-Selector entries without category (4th parameter)\n"
+    "\n"
+    '  - y-Selector 1: "Region"\n'
+    "\n"
+    "Valid categories: Campaign_y, Ad_Group_y, Keyword_y, Landing_Page_y, etc.\n"
+    'Example: ("Campaign Name", NAMEOF(\'_Campaigns\'[Campaign Actual]), -10, '
+    '"campaign_universal_y", "Other")'
+)
+
+
 class TestCategoryRequired:
     def test_x_plot_specific_field_parameters_have_categories(self, stand_in):
         code, payload = run_check(_model(stand_in), RULE)
@@ -52,6 +77,47 @@ class TestCategoryRequired:
                                   config={"rules": {RULE: {"require_category": False}}})
         assert code == 0 and violations(payload) == []
         assert RULE in payload.get("skipped", [])
+
+    def test_runs_without_being_selected(self, stand_in):
+        """The rule is part of the default suite: a plain check reports it."""
+        code, payload = run_check(_model(stand_in, "failing_db"))
+        assert code == 1
+        assert len(violations(payload, "F011")) == 2
+
+    def test_x_family_report(self, stand_in):
+        code, payload = run_check(_model(stand_in, "failing_db"), RULE)
+        found = [v for v in violations(payload) if "x-Selector" in v["message"]]
+        assert len(found) == 1
+        assert found[0]["message"] == X_REPORT
+
+    def test_y_family_report(self, stand_in):
+        code, payload = run_check(_model(stand_in, "failing_db"), RULE)
+        found = [v for v in violations(payload) if "y-Selector" in v["message"]]
+        assert len(found) == 1
+        assert found[0]["message"] == Y_REPORT
+
+    def test_a_parked_row_is_not_a_finding(self, tmp_path):
+        """A row behind a comment marker is parked, not live: it is not judged."""
+        tables = tmp_path / "Shop.SemanticModel" / "definition" / "tables"
+        tables.mkdir(parents=True)
+        (tables / "y-Selector 1.tmdl").write_text(
+            "table 'y-Selector 1'\n"
+            "\tcolumn 'y-Selector 1'\n"
+            "\t\tsourceColumn: [Value1]\n"
+            "\n"
+            "\tpartition 'p' = calculated\n"
+            "\t\tmode: import\n"
+            "\t\tsource = ```\n"
+            "\t\t\t\t{\n"
+            "\t\t\t\t\t-- (\"Old\", NAMEOF('_Stores'[Old]), 2),\n"
+            "\t\t\t\t\t(\"New\", NAMEOF('_Stores'[New]), 3, \"g_y\")\n"
+            "\t\t\t\t}\n"
+            "\t\t\t\t```\n", encoding="utf-8")
+        code, payload = run_check(tmp_path / "Shop.SemanticModel", RULE)
+        assert code == 0, payload
+        assert violations(payload, "F011") == []
+
+
 class TestFieldParameterCoverage:
     RULE = "fieldparam-coverage"
 

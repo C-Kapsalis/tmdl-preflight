@@ -80,7 +80,7 @@ the example model with one defect each. Where that evidence and the
 | F008 | fieldparam-arity | error | no |
 | F009 | fieldparam-level-consistency | error | no |
 | F010 | fieldparam-retag (opt-in) | error | no (`fieldparam retag` command) |
-| F011 | fieldparam-category-required (opt-in) | error | no |
+| F011 | fieldparam-category-required | error | no |
 | F012 | fieldparam-coverage (opt-in) | info | no |
 | F013 | field-parameter-table-no-measures | error | no |
 | F014 | selector-branch-resolution | error | yes |
@@ -191,6 +191,22 @@ until configured.
   `y-Selector *` together with `y-Plot Specific *`. BUGFIX: before, only
   the first file that held a name was compared, so a half-finished retag
   went unnoticed.
+- **F011** runs in the default suite (it only looks at the tables named
+  `x-Selector 1` to `x-Selector 9` and `y-Selector 1` to `y-Selector 9`, so
+  it cannot fire on a model without them) and reports one finding per axis
+  family, with the rows that carry no category:
+  ```
+  Found 1 x-Selector entries without category (4th parameter)
+  All x-Selector field parameters must have 4th parameter (category_x_id)
+
+    - x-Selector 1: "Pace"
+
+  Valid categories: Performance_x, analytics_api_x, kplanner_x, etc.
+  Example: ("Cost", NAMEOF([!Cost]), -10, "Performance_x")
+  ```
+  A row behind a `--` or `//` marker is parked, not live, and is never
+  judged. BUGFIX: before, a parked row was reported as a row without a
+  category.
 
 ### Commands and options
 
