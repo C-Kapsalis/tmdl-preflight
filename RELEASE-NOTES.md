@@ -240,9 +240,12 @@ until configured.
   and writes nothing. Config section `manifest` (`sources`, `target`,
   `domains`, ...). Python API: `tmdl_preflight.manifest`.
 - `schema-check --manifest M --schema SNAPSHOT [--ignore-columns FILE]
-  [--strict]` reconciles a manifest with an exported schema snapshot
-  (`missing_in_source` fails, `needs_review` for programmatically renamed
-  tables, `not_imported` and suspicious type pairs are informational);
+  [--strict] [--project P] [--dataset D]` reconciles a manifest with an
+  exported schema snapshot (`missing_in_bq` fails, `needs_review` for
+  programmatically renamed tables, `not_surfaced_in_pbi` and suspicious
+  type pairs are informational); the result is written next to the
+  manifest as `<name>.bq.json` and says what was checked against, what
+  the warehouse has and how the model's columns differ from it;
   `schema-check --sql-dir DIR --entries FILE [--write-holdbacks]` proves
   view-column exposure from SQL files (exit 3 when an entry is held).
   Python API: `tmdl_preflight.reconcile`.
@@ -332,8 +335,36 @@ until configured.
   and an unused fact never fail; they are reported so that a reader can
   see why nothing was said about them.
 
+- **The schema check names its drift the way the contract names it.** The
+  keys are `missing_in_bq` (the failure), `needs_review`,
+  `not_surfaced_in_pbi` (the information), `ignored_bookkeeping` and
+  `type_mismatch`, in that order. A column the warehouse does not import
+  is listed with the snapshot's own spelling, and a type difference says
+  whether an M Changed Type confirms it.
+- **The schema check writes its result into the manifest.** Each table's
+  source object carries `checked_against`, the snapshot's `bq_columns` and
+  its `drift`; a table the snapshot does not hold carries a `check_error`
+  instead. The run summary is the `bq_schema_check` block: the project,
+  the dataset, the warehouse, the authentication, the unresolved and the
+  skipped tables, the time of the check and the table counts.
+- **The schema check prints the report the contract describes.** The
+  authentication, the tables checked, the failing, needs-review,
+  informational and type-mismatch counts, the ignored bookkeeping
+  columns, the unreachable and the unresolved tables, the tables that were
+  skipped, and — when anything failed — the read-only routing block.
+- **`schema-check` can be pointed at another project or dataset.**
+  `--project` and `--dataset` replace the target the manifest declares,
+  in the recorded `checked_against` and in the summary.
+
 ### Bug fixes
 
+- **The schema check never talks to a warehouse.** The live schema
+  lookup, the credential setup message, `--env-file` and `--key-file`
+  stay out: the tool reads a snapshot the user exported. BUGFIX.
+- **The read-only routing block names the issue to open.** It said which
+  private repository and which person owned the warehouse side; it now
+  says to open an issue with the warehouse owners, which is the part a
+  reader can act on. BUGFIX.
 - **The manifest names the tool that wrote it.** `generated_by` says
   `tmdl-preflight manifest`; naming a script the tool does not ship is
   meaningless to whoever reads the file. BUGFIX.

@@ -272,6 +272,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_sc.add_argument("--strict", action="store_true",
                       help="exit 1 on missing columns, needs-review, unreachable tables or a "
                            "coverage gap")
+    p_sc.add_argument("--project", help="the warehouse project to check against "
+                                        "(default: the manifest's own target)")
+    p_sc.add_argument("--dataset", help="the warehouse dataset to check against "
+                                        "(default: the manifest's own target)")
     p_sc.add_argument("--sql-dir", help="SQL project root (view-column exposure mode)")
     p_sc.add_argument("--entries", help="with --sql-dir: JSON list of {client, table, view, "
                                         "shared_view, columns}")
@@ -826,7 +830,7 @@ def _cmd_schema_check(args) -> int:
             hb = Path(args.holdbacks) if args.holdbacks else Path(args.entries).parent / "deploy_holdbacks.yml"
             hb.write_text(holdbacks_yaml(verdicts, entries, previous_since(hb)), encoding="utf-8")
         return 3 if held else 0
-    from .reconcile import failing, load_ignore_columns, reconcile
+    from .reconcile import coverage_gap, failing, load_ignore_columns, reconcile
 
     if not args.manifest or not args.schema:
         raise UsageError("schema-check needs --manifest and --schema (or --sql-dir and --entries)")
@@ -841,20 +845,53 @@ def _cmd_schema_check(args) -> int:
                 f"the {label} is a {type(doc).__name__}, not an object; it "
                 f"cannot be read")
     ignore, exceptions = load_ignore_columns(Path(args.ignore_columns) if args.ignore_columns else None)
-    doc = reconcile(manifest, snapshot, ignore, exceptions, Path(args.schema).name)
+    doc = reconcile(manifest, snapshot, ignore, exceptions, Path(args.schema).name,
+                    args.project, args.dataset)
     mpath = Path(args.manifest)
     if args.out:
         out = Path(args.out)
-    elif mpath.name.endswith(".schema.json"):
+    elif mpath.name.endswith(".bq.json"):
         out = mpath
     else:
-        out = mpath.with_name(mpath.stem + ".schema.json")
-    out.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    c = doc["schema_check"]["counts"]
-    print(f"wrote {out}: checked {c['checked']}, failing {c['failing']}, needs review "
-          f"{c['needs_review']}, unreachable {c['unreachable']}, informational "
-          f"{c['informational']}, type mismatch {c['type_mismatch']}"
-          + (", coverage gap" if doc["schema_check"]["coverage_gap"] else ""))
+        out = mpath.with_name(mpath.stem + ".bq.json")
+    out.write_bytes((json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+    block = doc["bq_schema_check"]
+    project, dataset = block["project"], block["dataset"]
+    print(f"Auth: {block['auth']} [{block['warehouse']} warehouse]")
+    print(f"Checked {block['tables_checked']} tables against {project}.{dataset} -> {out}")
+    print(f"  FAILING       (PBI column missing in BigQuery): {block['tables_failing']} table(s)")
+    print(f"  needs review  (programmatic renames — adjudicate via the M, e.g. /model-bq-drift): "
+          f"{block['tables_needs_review']} table(s)")
+    print(f"  informational (BQ column not imported in PBI):  {block['tables_informational']} table(s)")
+    print(f"  type mismatch (suspicious PBI<->BQ type pairs, informational -- each entry notes "
+          f"whether an M Changed Type confirms it): {block['tables_type_mismatch']} table(s)")
+    if block["ignored_bookkeeping_columns"]:
+        print("  ignored bookkeeping columns (TRASH_COLUMNS):    "
+              + ", ".join(block["ignored_bookkeeping_columns"]))
+    if block["tables_unreachable"]:
+        print(f"  {block['tables_unreachable']} table(s) unreachable — check SA access to "
+              f"{project}.{dataset} or pass an accessible --project/--dataset.", file=sys.stderr)
+    if block["unresolved_sources"]:
+        print("  UNRESOLVED partition sources (extractor gap, fails --strict): "
+              + ", ".join(block["unresolved_sources"]), file=sys.stderr)
+    if not block["tables_checked"]:
+        if coverage_gap(doc):
+            print("  COVERAGE: warehouse-backed tables exist but none was checked — refusing to "
+                  "call that a pass.", file=sys.stderr)
+        else:
+            print("  note: this model reads no BigQuery — nothing to check (pass).")
+    if block["skipped_no_source"]:
+        print("  skipped (no BQ source — DAX/static tables): "
+              + ", ".join(block["skipped_no_source"]))
+    if (block["tables_failing"] or block["tables_needs_review"] or block["tables_unreachable"]
+            or block["unresolved_sources"]):
+        print()
+        print("  READ-ONLY ROUTING: this sweep never changes BigQuery objects.")
+        print("  Inspect the complete M query before classifying any apparent missing column:")
+        print("    - deliberate PBI/model change -> open a PBI issue and use the dependency graph "
+              "for cleanup")
+        print("    - unexpected production table/view regression -> open an issue with the "
+              "warehouse owners")
     return 1 if args.strict and failing(doc) else 0
 
 

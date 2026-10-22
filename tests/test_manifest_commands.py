@@ -70,16 +70,16 @@ def test_schema_check_against_a_snapshot(stand_in, tmp_path):
         if src:
             snapshot[src] = [{"name": c["bqColumn"], "type": "STRING"}
                              for c in t.get("columns", []) if c.get("bqColumn")]
-            snapshot[src].append({"name": "extra_col", "type": "STRING"})
+            snapshot[src].append({"name": "Extra Col", "type": "STRING"})
     schema = tmp_path / "schema.json"
     schema.write_text(json.dumps(snapshot), encoding="utf-8")
     code, out, _ = run_cli("schema-check", "--manifest", _manifest(model), "--schema", schema,
                            "--strict")
     assert code == 0, out
-    result = json.loads(_manifest(model).with_name("performance-manifest.schema.json")
+    result = json.loads(_manifest(model).with_name("performance-manifest.bq.json")
                         .read_text(encoding="utf-8"))
     ads = next(t for t in result["tables"] if t["name"] == "Ads")
-    assert ads["drift"]["not_imported"] == ["extra_col"]
+    assert ads["bq_source"]["drift"]["not_surfaced_in_pbi"] == ["Extra Col"]
     # drop a column from the warehouse: strict fails
     first = next(iter(snapshot))
     snapshot[first] = snapshot[first][1:]
