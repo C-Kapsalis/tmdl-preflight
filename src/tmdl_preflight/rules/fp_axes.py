@@ -613,22 +613,38 @@ class SelectorBranchResolutionRule(Rule):
             if calls:
                 yield table, tf, calls
 
+    @staticmethod
+    def _per_line(calls: list[tuple[int, str]]) -> "OrderedDict[int, list[str]]":
+        """The unresolved calls of each branch line, in the order they occur."""
+        out: "OrderedDict[int, list[str]]" = OrderedDict()
+        for idx, name in calls:
+            out.setdefault(idx, []).append(name)
+        return out
+
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for model in ctx.models:
+            branches: list[tuple[Table, int, list[str]]] = []
             for table, _tf, calls in self._findings(model):
-                for idx, name in calls:
-                    out.append(self.violation(
-                        f"selector branch calls [{name}], which is no measure in the model; "
-                        f"the measure holding the branch fails when the model is processed. "
-                        f"Delete the branch (the auto-fix does) or restore the measure.",
-                        file=table.file, line=idx + 1, obj=f"{table.name}:[{name}]",
-                    ))
+                for idx, names in self._per_line(calls).items():
+                    branches.append((table, idx, names))
+            summary = (
+                f"{len(branches)} field-parameter selector branch(es) call a measure "
+                f"that does not exist — the containing helper/projected measure "
+                f"fails at processing time and PBI rejects the model on "
+                f"refresh/deploy.")
+            for table, idx, names in branches:
+                out.append(self.violation(
+                    f"{summary}: {table.file.name}:{idx + 1}  "
+                    + " ".join(f"[{n}]" for n in names),
+                    file=table.file, line=idx + 1, obj=f"{table.name}:[{names[0]}]",
+                ))
         return out
 
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
         for model in ctx.models:
+            killed = 0
             for table, tf, calls in list(self._findings(model)):
                 dead = sorted({idx for idx, _n in calls})
                 lines = tf.lines()
@@ -655,8 +671,9 @@ class SelectorBranchResolutionRule(Rule):
                     verified_write(tf, tf.join(keep), verify)
                 except EditRefused:
                     continue
-                applied.append(f"{table.file.name}: removed {len(dead)} dangling selector "
-                               f"branch(es)")
+                killed += len(dead)
+            if killed:
+                applied.append(f"killed {killed} dangling selector branch(es)")
         return applied
 
 

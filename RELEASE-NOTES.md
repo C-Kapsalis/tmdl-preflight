@@ -238,6 +238,11 @@ until configured.
   `x-Selector 2[Calc] has empty expression`. STRICTER: the check covers
   every table of the model, not only the axis tables; a calculated column
   with no expression is broken wherever it sits.
+- **F014** reports one finding per branch line, not per call, and the
+  finding carries the count of the model and the line it is about:
+  `2 field-parameter selector branch(es) call a measure that does not exist — the containing helper/projected measure fails at processing time and PBI rejects the model on refresh/deploy.: Fixture Measures.tmdl:11  [Gone Measure] [Also Gone]`.
+  The auto-fix says how many branches it killed, once per model:
+  `killed 2 dangling selector branch(es)`.
 
 ### Commands and options
 
