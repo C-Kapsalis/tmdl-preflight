@@ -11,7 +11,6 @@ from __future__ import annotations
 import re
 import shutil
 from fnmatch import fnmatchcase
-from pathlib import Path
 from typing import Optional
 
 from ..edits import EditRefused, read_text_file, verified_write

@@ -237,7 +237,7 @@ class RaggedRowWidthRule(Rule):
                 if tf is None:
                     continue
                 lines = tf.lines()
-                rows = read_rows(tf.lines())
+                rows = read_rows(lines)
                 want = expected_width(rows)
                 if want is None:
                     continue
