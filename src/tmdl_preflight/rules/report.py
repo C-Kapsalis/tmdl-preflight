@@ -405,6 +405,8 @@ class BookmarkOptionsSchemaRule(Rule):
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         files = bookmark_files(ctx)
+        if not files:
+            return out
         offenders = 0
         for bf in files:
             try:
@@ -450,7 +452,7 @@ class BookmarkOptionsSchemaRule(Rule):
                 fixed += len(removed)
         if refused:
             ctx.notes.append(f"REFUSED {refused} unsafe repair(s):")
-        if fixed:
+        elif fixed:
             ctx.notes.append(f"fixed {fixed} illegal options key(s):")
         else:
             ctx.notes.append(
@@ -524,7 +526,9 @@ class ReportDefinitionIntegrityRule(Rule):
                     )
                     meta = None
                 if isinstance(meta, dict):
-                    names = [n for n in meta.get("pageOrder") or [] if isinstance(n, str)]
+                    order = meta.get("pageOrder")
+                    names = [n for n in order if isinstance(n, str)] \
+                        if isinstance(order, list) else []
                     active = meta.get("activePageName")
                     if isinstance(active, str) and active not in names:
                         names.append(active)
@@ -572,11 +576,10 @@ class PagesMetadataSchemaRule(Rule):
     id = "B005"
     name = "pages-metadata-schema"
     severity = Severity.ERROR
-    opt_in = True
     option_defaults = {"accepted_schemas": [PAGES_METADATA_SCHEMA]}
     description = (
-        "Opt-in pin of the PBIR pages metadata: definition/pages/pages.json "
-        "must exist, declare an accepted $schema (default: the 1.1.0 URL; "
+        "Pin of the PBIR pages metadata: definition/pages/pages.json must "
+        "exist, declare an accepted $schema (default: the 1.1.0 URL; "
         "accepted_schemas lists the versions your tooling expects) and a "
         "pageOrder array. A missing file or a pageOrder that is not a list "
         "breaks page navigation; an unexpected schema version means the file "
@@ -618,7 +621,7 @@ class PagesMetadataSchemaRule(Rule):
 def _hierarchy_problems(node: Any, path: str = "") -> Iterator[tuple[str, str]]:
     if isinstance(node, dict):
         for key, value in node.items():
-            here = f"{path}.{key}" if path else key
+            here = f"{path}.{key}"
             if key == "HierarchyLevel" and isinstance(value, dict):
                 expr = value.get("Expression")
                 problems = []
@@ -643,9 +646,10 @@ class HierarchyLevelBindingShapeRule(Rule):
     description = (
         "A visual field bound to a hierarchy level must be written as "
         "HierarchyLevel: {Expression: {Hierarchy: ...}, Level: <name>}: the "
-        "Level sits next to the Expression, never inside it. Any other shape "
-        "does not match the report definition schema, so the report can fail "
-        "to load. Unparseable visual.json files are reported too."
+        "Level sits next to the Expression, never inside it, and both parts "
+        "must be there. Any other shape does not match the report definition "
+        "schema, so the report can fail to load. Unparseable visual.json "
+        "files are reported too."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -658,12 +662,9 @@ class HierarchyLevelBindingShapeRule(Rule):
                 try:
                     data = json.loads(vf.read_text(encoding="utf-8-sig"))
                 except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
-                    out.append(self.violation(f"visual.json cannot be parsed ({exc}).",
+                    out.append(self.violation(f"{vf}: invalid JSON ({exc})",
                                               file=vf, obj=vf.parent.name))
                     continue
-                for where, problem in _hierarchy_problems(data):
-                    out.append(self.violation(
-                        f"HierarchyLevel at {where} {problem}; write it as "
-                        f"{{Expression: {{Hierarchy: ...}}, Level: ...}}.",
-                        file=vf, obj=f"{vf.parent.name}:{where}"))
+                for where, _problem in _hierarchy_problems(data):
+                    out.append(self.violation(f"{vf}:{where}", file=vf, obj=where))
         return out

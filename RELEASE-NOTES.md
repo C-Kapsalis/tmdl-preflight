@@ -88,7 +88,7 @@ the example model with one defect each. Where that evidence and the
 | P001 | refresh-policy-repair | error | yes (unsafe; also adds P002's missing policies) |
 | M021 | culture-orphan-bindings | error | yes |
 | M022 | diagram-layout-blank (opt-in) | warning | yes |
-| B005 | pages-metadata-schema (opt-in) | error | no |
+| B005 | pages-metadata-schema | error | no |
 | B006 | hierarchy-level-binding-shape | error | no |
 | B007 | report-format-schema | error | yes |
 | B008 | report-scaffold-integrity | error | no |
@@ -157,6 +157,17 @@ until configured.
 - BUGFIX: B003 removes an illegal key whatever its value is (an object, an
   array, a number in exponent form); the original refused those repairs and
   left the file unchanged.
+- **B005** (pages-metadata-schema) is no longer opt-in: the pages metadata is
+  checked in every run, because a report whose `pages.json` declares another
+  schema or whose `pageOrder` is not a list breaks the page navigation. The
+  option `accepted_schemas` still says which versions are expected.
+- **B004** reads `pageOrder` as a list of page names; a `pageOrder` that is
+  a string is no longer read as a list of one-letter page names (B005 reports
+  it).
+- **B006** names the offender the way the gate that grew out of the same
+  script named it: `<visual.json>:<json path>.HierarchyLevel` (the path
+  starts with a dot), and `<visual.json>: invalid JSON (<error>)` for a file
+  it cannot read.
 - `check --select B003` on a path with no bookmark file says `error: no
   bookmark files under <path> — the glob is broken, not the repo` and exits
   2.

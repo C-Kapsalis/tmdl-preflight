@@ -12,8 +12,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from conftest import run_check, run_fix, violations
 
 PBIR_SCHEMA = ("https://developer.microsoft.com/json-schemas/fabric/item/report/"

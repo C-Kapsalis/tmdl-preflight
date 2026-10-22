@@ -195,3 +195,15 @@ class TestReportDefinitionIntegrity:
         vf.write_text(vf.read_text(encoding="utf-8")[:-3], encoding="utf-8")
         violations = ReportDefinitionIntegrityRule().check(Context(project))
         assert len(violations) == 1 and "visual.json is not valid JSON" in violations[0].message
+
+
+class TestPageOrderShape:
+    """B004 reads a pageOrder list; a pageOrder that is not a list is B005's."""
+
+    def test_a_page_order_that_is_a_string_is_not_a_missing_page(self, project, report_dir):
+        (report_dir / "definition" / "pages" / "pages.json").write_text(
+            json.dumps({"pageOrder": "overview", "activePageName": "overview"}),
+            encoding="utf-8",
+        )
+        violations = ReportDefinitionIntegrityRule().check(Context(project))
+        assert violations == []

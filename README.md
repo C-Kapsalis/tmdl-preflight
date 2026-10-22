@@ -193,7 +193,7 @@ commit.
 | B002 | bookmarks referencing renamed or deleted visuals | error | no |
 | B003 | bookmark `options` keys outside the report schema | error | yes |
 | B004 | `definition.pbir` pointing at a missing model, `pages.json` naming missing pages, unparseable `visual.json` | error | no |
-| B005 | `pages.json` missing, with an unexpected `$schema`, or without a `pageOrder` list (opt-in) | error | no |
+| B005 | `pages.json` missing, with an unexpected `$schema`, or without a `pageOrder` list | error | no |
 | B006 | a `HierarchyLevel` binding with its `Level` inside the `Expression`, or missing either part | error | no |
 | B007 | a report folder whose `definition.pbir`, `version.json`, `report.json` or content files do not declare the published schemas | error | yes |
 | B008 | a report folder that misses a scaffold file, or whose files do not parse or lack the properties the loader reads | error | no |

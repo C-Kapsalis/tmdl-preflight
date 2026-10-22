@@ -91,3 +91,57 @@ class TestHierarchyLevelBindingShape:
         vis.write_text("{ not json", encoding="utf-8")
         code, payload = run_check(report, "hierarchy-level-binding-shape")
         assert code == 1 and len(violations(payload)) >= 1
+
+
+class TestPagesMetadataIsMandatory:
+    """B005 runs in a default check: the pages metadata is not optional."""
+
+    def test_a_default_check_finds_the_wrong_schema(self, stand_in):
+        code, payload = run_check(_report(stand_in, "failing_db"))
+        assert code == 1
+        found = violations(payload, "B005")
+        assert len(found) == 1
+        assert "pages.json" in (found[0]["path"] or "")
+
+
+class TestHierarchyLevelOffender:
+    """The offender text of the hierarchy-level rule."""
+
+    def _visual(self, report):
+        return report / "definition" / "pages" / "p1" / "visuals" / "v1" / "visual.json"
+
+    def test_the_offender_names_the_json_path(self, stand_in):
+        report = _report(stand_in)
+        vis = self._visual(report)
+        vis.write_text(json.dumps({
+            "q": {"x": [{"HierarchyLevel": {"Expression": {"Hierarchy": {"h": 1},
+                                                           "Level": "L"}}}]},
+        }), encoding="utf-8")
+        code, payload = run_check(report, "hierarchy-level-binding-shape")
+        assert code == 1
+        found = violations(payload)
+        assert len(found) == 1
+        assert found[0]["message"] == f"{vis}:.q.x[0].HierarchyLevel"
+
+    def test_a_level_inside_the_expression_is_named(self, stand_in):
+        report = _report(stand_in)
+        vis = self._visual(report)
+        vis.write_text(json.dumps({
+            "q": {"HierarchyLevel": {"Expression": {"Hierarchy": {"h": 1},
+                                                    "Level": "L"}}},
+        }), encoding="utf-8")
+        code, payload = run_check(report, "hierarchy-level-binding-shape")
+        assert code == 1
+        found = violations(payload)
+        assert len(found) == 1
+        assert found[0]["message"] == f"{vis}:.q.HierarchyLevel"
+
+    def test_an_unparseable_visual_says_so(self, stand_in):
+        report = _report(stand_in)
+        vis = self._visual(report)
+        vis.write_text("{ not json", encoding="utf-8")
+        code, payload = run_check(report, "hierarchy-level-binding-shape")
+        assert code == 1
+        found = violations(payload)
+        assert len(found) == 1
+        assert found[0]["message"].startswith(f"{vis}: invalid JSON (")
