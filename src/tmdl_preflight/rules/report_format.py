@@ -398,3 +398,104 @@ class ReportFormatSchemaRule(Rule):
                 if error is None and isinstance(data, dict) and repair(data):
                     return True
         return False
+
+
+# The files every report folder must carry, and the properties the loader
+# reads out of them.
+DEFAULT_REQUIRED_FILES = (
+    ".platform",
+    "definition.pbir",
+    "definition/version.json",
+    "definition/report.json",
+)
+# The blank-report form (only .platform and definition.pbir) opens in
+# Desktop as an empty canvas; it needs no version.json and no report.json.
+BLANK_FORM_FILES = (".platform", "definition.pbir")
+BLANK_FORM_EXEMPT = ("definition/version.json", "definition/report.json")
+
+SCAFFOLD_PROPERTIES = {
+    "definition/version.json": [
+        (("$schema",), "the report's definition version cannot be read"),
+    ],
+    ".platform": [
+        (("config", "logicalId"),
+         "the report item has no identity for the Fabric Git sync"),
+    ],
+    "definition.pbir": [
+        (("version",), "the report's format version is unknown"),
+    ],
+}
+
+
+class ReportScaffoldIntegrityRule(Rule):
+    id = "B008"
+    name = "report-scaffold-integrity"
+    severity = Severity.ERROR
+    option_defaults = {"required_files": list(DEFAULT_REQUIRED_FILES)}
+    description = (
+        "A report folder that was cloned or scaffolded by a script often "
+        "misses a file or carries a broken JSON file; Power BI Desktop then "
+        "refuses to open the project. Every *.Report folder must carry "
+        ".platform, definition.pbir, definition/version.json and "
+        "definition/report.json (and pages.json when the report has pages), "
+        "each of them must parse, and the three properties the loader reads "
+        "must be there. A folder that holds only .platform and definition.pbir "
+        "is the blank-report form and needs no version.json or report.json."
+    )
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        for report_dir in ctx.report_dirs:
+            out.extend(self._check_report(report_dir))
+        return out
+
+    def _check_report(self, report_dir: Path) -> list[Violation]:
+        out: list[Violation] = []
+        name = report_dir.name
+        required = list(self.options.get("required_files") or DEFAULT_REQUIRED_FILES)
+        if self._is_blank_form(report_dir):
+            required = [r for r in required if r not in BLANK_FORM_EXEMPT]
+        if (report_dir / "definition" / "pages").is_dir():
+            required.append("definition/pages/pages.json")
+        for rel in required:
+            path = report_dir / rel
+            if not path.is_file():
+                out.append(self.violation(
+                    f"{name}: {rel} is missing; Power BI Desktop cannot open a "
+                    "report folder without it.", file=path))
+                continue
+            data, error = load_json(path)
+            if error is not None:
+                if rel == "definition/pages/pages.json":
+                    continue  # B004 reports the pages metadata
+                out.append(self.violation(
+                    f"{name}: {rel} is not valid JSON ({error}); Power BI Desktop "
+                    "cannot open a report folder whose files do not parse.",
+                    file=path))
+                continue
+            if not isinstance(data, dict):
+                continue
+            out.extend(self._check_properties(rel, data, name, path))
+        return out
+
+    def _check_properties(self, rel: str, data: dict, name: str, path: Path) -> list[Violation]:
+        out: list[Violation] = []
+        for prop, why in SCAFFOLD_PROPERTIES.get(rel, ()):
+            value: Any = data
+            for key in prop:
+                if not isinstance(value, dict) or key not in value:
+                    value = None
+                    break
+                value = value[key]
+            if not isinstance(value, str) or not value.strip():
+                out.append(self.violation(
+                    f"{name}: {rel} has no {'.'.join(prop)} property; {why}.",
+                    file=path))
+        return out
+
+    @staticmethod
+    def _is_blank_form(report_dir: Path) -> bool:
+        """Does the folder hold nothing but .platform and definition.pbir?"""
+        files = {p.relative_to(report_dir).as_posix()
+                 for p in report_dir.rglob("*") if p.is_file()}
+        return files <= set(BLANK_FORM_FILES)

@@ -91,6 +91,7 @@ the example model with one defect each. Where that evidence and the
 | B005 | pages-metadata-schema (opt-in) | error | no |
 | B006 | hierarchy-level-binding-shape | error | no |
 | B007 | report-format-schema | error | yes |
+| B008 | report-scaffold-integrity | error | no |
 | L001 | rls-role-grammar | error | no |
 | L002 | rls-username-function | error | no |
 | L003 | rls-in-values-bypass | error | no |
@@ -115,6 +116,16 @@ until configured.
 - **B007** is the report-format validator folded into `check`: one finding per
   defect, each carrying the validator's own message, and the banner the script
   printed is not reproduced.
+- **B008** checks the report scaffold: `.platform`, `definition.pbir`,
+  `definition/version.json` and `definition/report.json` (and
+  `definition/pages/pages.json` when the report has pages) must be there, must
+  parse, and must carry the three properties the loader reads. A folder that
+  holds only `.platform` and `definition.pbir` (the blank-report form) needs
+  no version.json and no report.json. The option `required_files` adds the
+  files a team's own template requires.
+- `.pbi/localSettings.json` is not a required file: one script wanted it, the
+  report-format validator warns when it is there (B007), and the rule follows
+  the validator.
 - BUGFIX: a "MISSING $schema" finding of B007 names the path relative to the
   `.Report` folder (`definition/pages/p1/visuals/v1/visual.json`, `.platform`);
   the original computed the path three folders up, which was wrong for every
