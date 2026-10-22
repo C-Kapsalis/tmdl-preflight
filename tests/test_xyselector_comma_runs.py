@@ -41,7 +41,8 @@ def _cases(fails=(), skips=(), overrides=None):
 @pytest.mark.parametrize(
     "sid, verdict",
     _cases(
-        fails={"fp_comma_blank_line", "fp_comma_doubled", "fp_comma_in_calc_column"},
+        fails={"fp_comma_blank_line", "fp_comma_doubled", "fp_comma_in_calc_column",
+               "fp_comma_two_runs"},
         # BUGFIX: fp_comma_in_label - a ", ," inside a display label was reported
         # by the earlier check (and its fixer rewrote the label); strings are masked now.
         overrides={"fp_comma_in_label": "pass"},

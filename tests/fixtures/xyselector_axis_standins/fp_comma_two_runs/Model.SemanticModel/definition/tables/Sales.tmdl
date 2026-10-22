@@ -1,0 +1,22 @@
+table Sales
+	lineageTag: 777faf55-eaa1-5116-833f-6a1d7e2e8421
+
+	column Revenue
+		dataType: decimal
+		lineageTag: 13f3b9a4-f97b-5176-9751-74aeef1017a4
+		summarizeBy: none
+		sourceColumn: Revenue
+
+	column store_id
+		dataType: int64
+		lineageTag: df68d422-340b-5c1b-b78b-c9fd78e2ae50
+		summarizeBy: none
+		sourceColumn: store_id
+
+	measure Units = COUNTROWS(Sales)
+		lineageTag: cf0145d8-be11-56ce-9468-736f9edc4d69
+
+	partition Sales = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

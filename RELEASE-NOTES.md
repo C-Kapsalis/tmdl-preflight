@@ -173,6 +173,32 @@ until configured.
   name contains a double quote.
 - Names declared with trailing spaces inside quotes (`'Frame Size   '`) are
   read trimmed.
+- **F001** says how many orphan commas it found, before anything else
+  (`2 orphan comma(s).`), and names the place it found them: a whole
+  field-parameter file is `(field-parameter file)`, a calculated table's
+  partition is `(partition source)`. The Desktop sentence is unchanged.
+- **F002** and **F003** say what the defect is, in the words the original
+  scripts used: `tuple closes with no ',' before the next tuple` and
+  `last row before '}' has a trailing ',' -> DAX: "Table constructor cannot
+  have optional argument"`, followed by the note that the Desktop symptom
+  is expected but was not observed for these defects alone.
+- **F004** says `<row> has <n> fields, norm is <m>`.
+- **F006** says `'<row>' -> <NAMEOF call> (order=<n>, id='<id>') appears <n>x`,
+  with the whole NAMEOF call compared whitespace run by whitespace run: two
+  spellings of the same call (`NAMEOF([Units])` and `NAMEOF ( [Units] )`)
+  are two rows, not one row twice. Findings are ordered by the row, not by
+  where the first copy sits.
+- **F001, F002, F003, F004 and F006** now say, per file and per row,
+  what they changed (`x-Selector 1.tmdl: removed 2 orphan comma(s)`, `x-
+  Selector 1.tmdl:12: "CPM" padded 5 -> 6 (field 6 set to "Other") —
+  ANNOTATED IN PLACE, needs BI review.`), and print the original's closing
+  advice once per run, after the summary: `Removed 3 orphan comma(s) across
+  1 file(s). ...`, `Repaired 1 separator defect(s) across 1 file(s). ...`,
+  `removed 1 duplicate axis row(s) under <folder>`, and the three ragged-row
+  blocks (auto-realigned, auto-padded, over-long rows left untouched).
+- **F006**'s fixer leaves a commented-out row alone: a copy of the row
+  that sits behind a `--` or `//` marker is a parked row, and removing it
+  would destroy a row the author kept on purpose.
 
 - **B002** reports a bookmark file that is not valid JSON.
 - **B001-B003** skip bookmarks of archived report copies: paths containing
@@ -358,6 +384,10 @@ until configured.
   exit 2, a message on standard error, and never a Python traceback.
 - A lineage tag followed by a tab or several spaces after `lineageTag:` is
   rewritten like any other (before, only one space was handled).
+- **A duplicate row that sits behind a comment marker is never removed.** The
+  original searched for the survivor's text and found the commented-out copy
+  first, so it emptied the parked row and reported the live copy again. The
+  tool skips a copy that sits after a `--` or `//` on its line. BUGFIX.
 - Three or more copies of a tag in one file: the later copies are
   rewritten, the first is kept.
 - The `fact-table-filter-coverage` rule now exempts a fact the way the

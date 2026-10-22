@@ -35,6 +35,17 @@ def field_parameter_files(model: SemanticModel, globs: Optional[Iterable[str]] =
     return [t for t in model.table_list if t.name in named or is_field_parameter_table(t)]
 
 
+def no_axis_files_note(model: SemanticModel) -> Optional[str]:
+    """The line a run prints when the model holds no field-parameter table.
+
+    The original scripts stop with that sentence and exit 0: nothing scanned
+    is not a clean result, but it is not a defect either.
+    """
+    if field_parameter_files(model):
+        return None
+    return f"No x-/y-Selector field-parameter files found under {model.definition_path}"
+
+
 # ---------------------------------------------------------------------------
 # Masking: comments and string contents become spaces
 # ---------------------------------------------------------------------------
