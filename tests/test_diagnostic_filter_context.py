@@ -49,7 +49,7 @@ def test_compare_countrows_vs_actual_evaluate(scenario):
     rows = {r["table"]: r for r in result["details"]["tables"]}
     assert rows["_Accounts"]["countrows"] == 1
     assert rows["_Accounts"]["countrows_all"] == 40
-    assert rows["_Accounts"]["topn_rows"] == 1
+    assert rows["_Accounts"]["topn_actual"] == 1
     assert set(rows) == {"_Accounts", "_Campaigns", "_Conversions", "__Calendar", "Ads"}
 
 

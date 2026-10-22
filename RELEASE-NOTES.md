@@ -709,7 +709,10 @@ unchanged.
   `--strict`). The dataset name must match the local model folder unless
   `--expect-name` or `--no-coupling-check` is given. Recordings are keyed
   on the whitespace-normalised query text. Settings: config section `live`.
-  Python API: `tmdl_preflight.live` (`ReplayClient`, `LiveBPA`, ...).
+  The command signs in with a service principal, and with an interactive
+  sign-in when the optional `msal` package is installed; the interactive
+  sign-in is an addition the original did not have. Python API:
+  `tmdl_preflight.live` (`ReplayClient`, `LiveBPA`, ...).
 - The pytest plugin demotes test-body failures on the models listed in the
   configuration's `advisory` list to expected failures; passes stay passes
   and setup failures stay failures.
@@ -1018,6 +1021,56 @@ unchanged.
 - **The manifest command prints the summary the pipelines read.** `Wrote
   <path>`, the model and the warehouse target it resolved to, the table
   and relationship counts, the classification map and the domains.
+- **The best-practice analysis uses the original's catalogue and prints its
+  reports.** The five rules carry their name, category, severity, scope and
+  description, and a finding carries the original's message: `Measure
+  '!Revenue' uses / operator instead of DIVIDE() function`, `Calculated
+  column 'Band' in table 'Sales' may impact performance`, `User-facing
+  measure '!Revenue' in table 'Coffee Measures' lacks description`. The
+  command prints the analysis report, the results summary and the audit
+  report, and the times are local and carry no offset. A column whose
+  table name the service does not return is `Unknown`, not a table id.
+  BUGFIX.
+- **The best-practice analysis needs a healthy connection.** The client's
+  health check now reports its three steps - sign in, read the dataset and
+  run `EVALUATE { 1 }` - with the time each took, and the analysis fails
+  when the check is not healthy: `health check unhealthy: <reason>`. The
+  number of objects analysed is all or nothing: when a count query fails
+  the number is zero and the gate fails. BUGFIX.
+- **The live diagnostics print the original's blocks.** The calendar scan
+  prints the full-scan block, the sample dates and the assessment (a
+  calendar that holds one row is a critical finding); the identity check
+  prints the RLS detection block; the filter comparison prints every table,
+  the summary table with its columns and the closing lines; the metadata
+  check prints the connection investigation; the filter diagnostic prints
+  its four checks, the summary groups and the recommendations. A calendar
+  count of zero is an error instead of a crash, and a finding that is an
+  error alone no longer asks for action. BUGFIX.
+- **The live row, measure, refresh and smoke checks print the original's
+  lines.** A probed table prints `✅ PASS Table 'Sales' has data: Table
+  'Sales' has 5,000 rows (12.34ms)` and a failed one `❌ FAIL ...`; the
+  dimension check warns `⚠️  Warning: 1 dimension tables are empty:
+  ['_Days']`; the refresh check prints the warning and the details and says
+  `Refresh status check failed (non-blocking): ...`; the freshness check
+  says `Data is 48.0 hours old (exceeds 24h threshold)`; the smoke suite
+  prints its summary, the failed items and the total execution time, and
+  fails with `Smoke test suite failed. Pass rate: 50.0% (expected >= 80%).
+  5 tests failed.` The parameter audit prints the whole report, and only
+  `LIMIT 1` itself is critical. BUGFIX.
+- **Every live check prints its report block.** In text mode a check prints
+  the block the original printed — the row-count pattern, the calendar
+  validation, the dimension validation, the date range — before its result
+  line, and the checks run in the original's order. The result line now
+  carries the original's wording: `🔴 CRITICAL: All 5 tables have exactly 1
+  row. ...`, `⚠️  WARNING: Calendar has only 50 rows (expected 365+). ...`,
+  `⚠️  WARNING: 4/5 dimension tables have only 1 row. ...`. A query that
+  answers with no rows reads as unknown, not as zero rows. BUGFIX.
+- **The live coupling guard compares the dataset with the local model.** The
+  original paired a client id with a workspace name and failed with two
+  different texts; this tool has no client id, so it compares the dataset
+  name with the model folder and says what does not match. The check is
+  stricter: a dataset that is not the local model is refused, which the
+  original's pairing could not see. STRICTER.
 - **`stats --measures` prints one summary per model.** A folder with two
   models prints two summaries, each with its own totals, in the layout a
   reviewer reads: the totals, the user-facing and helper split, the
@@ -1363,6 +1416,27 @@ unchanged.
   section was listed in the documentation, but the configuration
   validator rejected it as an unknown key, so `sources`, `target` and
   `domains` never reached the command. BUGFIX.
+- **The live client sends the query and nothing else.** The executeQueries
+  body carried a `serializerSettings` block that the service does not need;
+  it is gone, so a null column no longer arrives as a key. A failed query is
+  retried three times with two waits of two seconds and no wait after the
+  last attempt (before: two, four and eight seconds, the last one after the
+  third attempt had already failed). A token that comes back without
+  `expires_in` lasts 3599 seconds, and a sign-in that comes back without a
+  token says `Authentication failed: <reason>`. BUGFIX.
+- **The live usage error names the credentials that are missing.** It said
+  only that no credentials were set; it now starts with `Missing required
+  environment variables: <names>.` The names `FABRIC_TENANT_ID`,
+  `FABRIC_CLIENT_ID`, `FABRIC_CLIENT_SECRET`, `FABRIC_WORKSPACE_ID` and
+  `FABRIC_MODEL_ID` are read as fallbacks for the `PBI_*` variables and for
+  `--workspace` and `--dataset`; no `.env` file is loaded. BUGFIX.
+- **The live command finds a table's columns and measures at any
+  indentation.** A column line indented with two tabs was not seen, so the
+  table was never probed; a measure line is now only a measure when it
+  carries the `=`. A name that holds a doubled quote is still decoded
+  (`It''s` is `It's`) and a `]` inside a measure reference is still
+  doubled. A parameter is read at any indentation too, and its value ends
+  at the first `meta` or at the end of the line. BUGFIX.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the
@@ -1512,6 +1586,10 @@ and rule wins; DESKTOP: Power BI Desktop evidence).
   with an empty expression (M020).
 - BUGFIX: `test_connection_parameters::test_generate_connection_parameter_audit_report[limit-100]`:
   only `LIMIT 1` itself is CRITICAL; `LIMIT 10` and `LIMIT 100` are warnings.
+- BUGFIX: `test_fabric_bpa_validation::TestBPACatalogue` expects the rule
+  catalogue in the original's order and the findings with the original's
+  messages; `test_data_quality_smoke_tests::test_refresh_status` expects
+  the detail keys `end_time` and `request_id` (the original's names).
 - BUGFIX: `test_fabric_bpa_validation::TestBPAPerformanceRules::test_calculated_columns_detected`:
   calculated columns are found by the integer column type (the text
   comparison found none).

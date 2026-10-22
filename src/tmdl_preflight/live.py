@@ -30,6 +30,18 @@ from typing import Any, Callable, Optional
 
 API = "https://api.powerbi.com/v1.0/myorg"
 SCOPE = "https://analysis.windows.net/powerbi/api/.default"
+NO_ROWS = "no rows returned"
+
+CREDENTIAL_NAMES = (("PBI_TENANT_ID", "FABRIC_TENANT_ID"),
+                    ("PBI_CLIENT_ID", "FABRIC_CLIENT_ID"),
+                    ("PBI_CLIENT_SECRET", "FABRIC_CLIENT_SECRET"))
+
+
+def missing_credentials() -> str:
+    """The names of the credentials that are not set, as one sentence."""
+    missing = [pbi for pbi, fabric in CREDENTIAL_NAMES
+               if not (os.environ.get(pbi) or os.environ.get(fabric))]
+    return f"Missing required environment variables: {', '.join(missing)}."
 
 
 class LiveError(RuntimeError):
@@ -105,15 +117,42 @@ class _Client:
     def now(self) -> _dt.datetime:
         return _dt.datetime.now(_dt.timezone.utc)
 
+    def today(self) -> _dt.date:
+        """The local date (a replay answers with its own clock)."""
+        return _dt.date.today()
+
+    def token_remaining_seconds(self) -> float:
+        return 0.0
+
     def health_check(self) -> dict:
+        """Sign in, read the dataset and run a query; each step is reported."""
+        start = time.perf_counter()
+        checks: dict[str, dict] = {}
+        status, error = "healthy", None
         try:
-            self.dataset()
+            auth_start = time.perf_counter()
+            checks["authentication"] = {
+                "status": "ok", "time_ms": (time.perf_counter() - auth_start) * 1000,
+                "token_remaining_seconds": self.token_remaining_seconds()}
+            ds_start = time.perf_counter()
+            props = self.dataset()
+            checks["dataset_access"] = {
+                "status": "ok", "time_ms": (time.perf_counter() - ds_start) * 1000,
+                "dataset_name": props.get("name")}
+            q_start = time.perf_counter()
             result = self.execute("EVALUATE { 1 }")
             if result.error:
                 raise LiveError(result.error)
-            return {"status": "healthy"}
+            checks["query_execution"] = {
+                "status": "ok", "time_ms": (time.perf_counter() - q_start) * 1000,
+                "rows_returned": len(result.rows)}
         except Exception as exc:  # noqa: BLE001 - reported, not raised
-            return {"status": "unhealthy", "error": str(exc)}
+            status, error = "unhealthy", str(exc)
+        out = {"status": status, "checks": checks,
+               "total_time_ms": (time.perf_counter() - start) * 1000}
+        if error is not None:
+            out["error"] = error
+        return out
 
 
 class ReplayClient(_Client):
@@ -160,6 +199,9 @@ class ReplayClient(_Client):
             return _parse_time(clock["now"])
         return super().now()
 
+    def today(self) -> _dt.date:
+        return self.now().date()
+
 
 class RestClient(_Client):
     """Power BI REST client (group-scoped dataset)."""
@@ -201,8 +243,7 @@ class RestClient(_Client):
         for attempt in range(3):
             try:
                 body = self._request("POST", self._url("/executeQueries"),
-                                     {"queries": [{"query": query}],
-                                      "serializerSettings": {"includeNulls": True}})
+                                     {"queries": [{"query": query}]})
                 return QueryResult(rows_of(body), (time.perf_counter() - start) * 1000, stamp)
             except urllib.error.HTTPError as exc:
                 detail = exc.read().decode("utf-8", "replace")[:500]
@@ -210,7 +251,8 @@ class RestClient(_Client):
                                    f"HTTP {exc.code}: {detail}")
             except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
                 last = exc
-                time.sleep(min(2 ** (attempt + 1), 10))
+                if attempt < 2:
+                    time.sleep(2)
         return QueryResult([], (time.perf_counter() - start) * 1000, stamp, f"request failed: {last}")
 
     def refreshes(self, top: int = 10) -> list[dict]:
@@ -240,6 +282,10 @@ class RestClient(_Client):
             out.update({"workspaceId": self.workspace, "workspaceName": ws.get("name")})
             return out
         return self._cached("dataset", load)
+
+    def token_remaining_seconds(self) -> float:
+        remaining = getattr(self._token, "remaining_seconds", None)
+        return float(remaining()) if callable(remaining) else 0.0
 
 
 class RecordingClient(_Client):
@@ -281,13 +327,19 @@ class RecordingClient(_Client):
         self._write("clock.json", {"now": now.isoformat().replace("+00:00", "Z")})
         return now
 
+    def today(self) -> _dt.date:
+        return self.inner.today()
+
 
 def token_provider(interactive: bool = True) -> Callable[[], str]:
     """Bearer tokens: service principal from the environment, else an
     interactive sign-in (needs the optional ``msal`` package). Tokens are
-    kept in memory only and renewed when less than 5 minutes remain."""
-    tenant, client, secret = (os.environ.get(k) for k in
-                              ("PBI_TENANT_ID", "PBI_CLIENT_ID", "PBI_CLIENT_SECRET"))
+    kept in memory only and renewed when less than 5 minutes remain.
+
+    The returned callable carries ``remaining_seconds()``: the life left on
+    the token it last fetched."""
+    tenant, client, secret = (os.environ.get(pbi) or os.environ.get(fabric)
+                              for pbi, fabric in CREDENTIAL_NAMES)
     state: dict[str, Any] = {"token": None, "expires": 0.0}
     if tenant and client and secret:
         def fetch() -> tuple[str, float]:
@@ -302,36 +354,47 @@ def token_provider(interactive: bool = True) -> Callable[[], str]:
                 try:
                     with urllib.request.urlopen(url, data=body, timeout=60) as resp:  # noqa: S310
                         data = json.loads(resp.read().decode("utf-8"))
-                    return data["access_token"], time.time() + float(data.get("expires_in", 3600))
                 except Exception as exc:  # noqa: BLE001
                     last = exc
-                    time.sleep(min(2 * 2 ** attempt, 10))
+                    if attempt < 2:
+                        time.sleep(2)
+                    continue
+                if "access_token" not in data:
+                    raise LiveError(f"Authentication failed: "
+                                    f"{data.get('error_description', 'Unknown error')}")
+                return data["access_token"], time.time() + float(data.get("expires_in", 3599))
             raise LiveError(f"could not obtain a token: {last}")
     elif interactive:
         try:
             import msal  # type: ignore[import-not-found]
         except ImportError:
             raise LiveUsageError(
-                "no credentials: set PBI_TENANT_ID, PBI_CLIENT_ID and PBI_CLIENT_SECRET for a "
-                "service principal, or install msal for an interactive sign-in") from None
+                f"{missing_credentials()}. no credentials: set PBI_TENANT_ID, PBI_CLIENT_ID and "
+                "PBI_CLIENT_SECRET for a service principal, or install msal for an interactive "
+                "sign-in") from None
         app = msal.PublicClientApplication("04b07795-8ddb-461a-bbee-02f9e1bf7b46",
                                            authority="https://login.microsoftonline.com/organizations")
 
         def fetch() -> tuple[str, float]:
             result = app.acquire_token_interactive(scopes=[SCOPE])
             if "access_token" not in result:
-                raise LiveError(f"sign-in failed: {result.get('error_description')}")
-            return result["access_token"], time.time() + float(result.get("expires_in", 3600))
+                raise LiveError(f"Authentication failed: "
+                                f"{result.get('error_description', 'Unknown error')}")
+            return result["access_token"], time.time() + float(result.get("expires_in", 3599))
     else:
         raise LiveUsageError(
-            "no credentials: set PBI_TENANT_ID, PBI_CLIENT_ID and PBI_CLIENT_SECRET "
-            "(--non-interactive allows no sign-in prompt)")
+            f"{missing_credentials()}. no credentials: set PBI_TENANT_ID, PBI_CLIENT_ID and "
+            "PBI_CLIENT_SECRET (--non-interactive allows no sign-in prompt)")
 
     def token() -> str:
         if state["token"] is None or state["expires"] - time.time() < 300:
             state["token"], state["expires"] = fetch()
         return state["token"]
 
+    def remaining_seconds() -> float:
+        return max(0.0, state["expires"] - time.time())
+
+    token.remaining_seconds = remaining_seconds  # type: ignore[attr-defined]
     return token
 
 
@@ -349,27 +412,28 @@ class LocalModel:
     parameters: Optional[dict[str, str]]  # None: no expressions.tmdl
 
 
+COLUMN_PATTERN = re.compile(r"^\s*column\s+['\"]?([^'\";\s\[=]+)['\"]?", re.MULTILINE)
+MEASURE_PATTERN = re.compile(r"^\s*measure\s+(?:'((?:[^']|'')+)'|([^'\"\n=]+?))\s*=", re.MULTILINE)
+EXPRESSION_PATTERN = re.compile(r"expression (v-[^\s=]+)\s*=\s*([^\n]+?)(?:\s+meta|\n)")
+
+
 def read_local_model(model_dir: Path) -> LocalModel:
     tables_dir = Path(model_dir) / "definition" / "tables"
     with_cols, names, measures = [], [], []
     for f in sorted(tables_dir.glob("*.tmdl")) if tables_dir.is_dir() else []:
         text = f.read_text(encoding="utf-8-sig")
         names.append(f.stem)
-        if re.search(r"(?m)^\tcolumn ", text):
+        if COLUMN_PATTERN.search(text):
             with_cols.append(f.stem)
-        for m in re.finditer(r"(?m)^\tmeasure\s+('(?:[^']|'')+'|[^\s=]+)", text):
-            name = m.group(1)
-            if name.startswith("'"):
-                name = name[1:-1].replace("''", "'")
+        for m in MEASURE_PATTERN.finditer(text):
+            quoted, plain = m.group(1), m.group(2)
+            name = quoted.replace("''", "'") if quoted is not None else plain.strip()
             measures.append((f.stem, name))
     expr = Path(model_dir) / "definition" / "expressions.tmdl"
     params = None
     if expr.is_file():
-        params = {}
-        for line in expr.read_text(encoding="utf-8-sig").splitlines():
-            m = re.match(r"^expression\s+(v-[^\s=]+)\s*=\s*(.*?)(?:\s+meta\b.*)?$", line)
-            if m:
-                params[m.group(1)] = m.group(2).strip()
+        params = {m.group(1): m.group(2).strip()
+                  for m in EXPRESSION_PATTERN.finditer(expr.read_text(encoding="utf-8-sig"))}
     return LocalModel(Path(model_dir), sorted(with_cols), sorted(names),
                       sorted(measures), params)
 
@@ -409,6 +473,7 @@ class CheckResult:
     outcome: str  # pass | warn | fail | skip | error
     message: str
     details: dict = field(default_factory=dict)
+    report: list[str] = field(default_factory=list)
 
 
 class LiveContext:
@@ -425,6 +490,8 @@ class LiveContext:
         r = self.client.execute(f'EVALUATE ROW("{label}", COUNTROWS({quote_table(table)}))')
         if r.error:
             return None, r.error
+        if not r.rows:
+            return None, NO_ROWS
         return count(r.first, label), None
 
 
@@ -432,23 +499,39 @@ def _rate(passed: int, probed: int) -> float:
     return passed / probed if probed else 0.0
 
 
+def _probe(icon: str, name: str, message: str, ms: float) -> str:
+    return f"{icon} {name}: {message} ({ms:.2f}ms)"
+
+
 def check_uniform_row_limit(c: LiveContext) -> CheckResult:
-    counts = {t: c.table_count(t)[0] for t in c.cfg["probe_tables"]}
+    cid = "live-uniform-row-limit"
+    counts: dict[str, Optional[int]] = {}
+    report = ["", "=== Row Count Pattern Detection ===", ""]
+    for t in c.cfg["probe_tables"]:
+        n, err = c.table_count(t)
+        counts[t] = n
+        report.append(f"  {t}: ERROR - {err[:50]}" if err else f"  {t}: {n:,} rows")
     known = [v for v in counts.values() if v is not None]
-    details = {"counts": counts}
+    details: dict = {"counts": counts}
     if not known:
-        return CheckResult("live-uniform-row-limit", "warn",
-                           "could not retrieve any row counts", details)
+        return CheckResult(cid, "warn", "Could not retrieve any row counts", details, report)
+    details["min"], details["max"] = min(known), max(known)
+    report += ["", "📊 Analysis:", f"  Unique row counts: {sorted(set(known))}"]
     if set(known) == {1}:
-        return CheckResult("live-uniform-row-limit", "fail",
-                           "every table has exactly one row; a LIMIT 1 parameter is set", details)
+        return CheckResult(cid, "fail",
+                           f"🔴 CRITICAL: All {len(known)} tables have exactly 1 row. This "
+                           "indicates v-rows_limit='LIMIT 1' is set. Change parameter to ' ' "
+                           "(blank) for full data.", details, report)
     if len(set(known)) == 1 and known[0] in c.cfg["uniform_limits"]:
-        return CheckResult("live-uniform-row-limit", "warn",
-                           f"uniform limit {known[0]}; acceptable for testing, not production",
-                           details)
-    details.update({"min": min(known), "max": max(known)})
-    return CheckResult("live-uniform-row-limit", "pass",
-                       f"row counts vary ({min(known)} to {max(known)})", details)
+        limit = known[0]
+        return CheckResult(cid, "warn",
+                           f"⚠️  WARNING: All tables have exactly {limit} rows. This suggests "
+                           f"v-rows_limit='LIMIT {limit}' is set. This is acceptable for testing "
+                           "but not production.", details, report)
+    report.append(f"  ✅ Row counts vary ({details['min']} to {details['max']}) - "
+                  "no uniform limit detected")
+    return CheckResult(cid, "pass",
+                       f"row counts vary ({details['min']} to {details['max']})", details, report)
 
 
 def _calendar_query(c: LiveContext, order: str) -> str:
@@ -461,220 +544,405 @@ def _calendar_query(c: LiveContext, order: str) -> str:
 
 
 def check_calendar_rows(c: LiveContext) -> CheckResult:
-    r = c.client.execute(_calendar_query(c, "count-first"))
     cid = "live-calendar-rows"
+    r = c.client.execute(_calendar_query(c, "count-first"))
     if r.error:
         return CheckResult(cid, "error", f"calendar query failed: {r.error}")
+    if not r.rows:
+        return CheckResult(cid, "error", "the calendar query returned no rows")
     n = count(r.first, "RowCount")
     details = {"row_count": n, "min_date": scalar(r.first, "MinDate"),
                "max_date": scalar(r.first, "MaxDate")}
+    report = ["", "=== Calendar Table Validation ===", "",
+              f"  Row count: {n:,}",
+              f"  Min date: {details['min_date']}",
+              f"  Max date: {details['max_date']}"]
     if n == 1:
-        return CheckResult(cid, "fail", "the calendar holds one row; a row limit or filter is "
-                                        "applied", details)
+        return CheckResult(cid, "fail",
+                           "🔴 CRITICAL: Calendar has only 1 row (expected 365+). This indicates "
+                           "v-rows_limit='LIMIT 1' is set. Change to ' ' (blank) for full data.",
+                           details, report)
     if n < 100:
-        return CheckResult(cid, "warn", f"the calendar holds only {n} rows", details)
+        return CheckResult(cid, "warn",
+                           f"⚠️  WARNING: Calendar has only {n} rows (expected 365+). Check "
+                           "v-rows_limit and v-fromdate parameters.", details, report)
     if n < 365:
-        return CheckResult(cid, "pass", f"{n} calendar rows: less than one year", details)
-    return CheckResult(cid, "pass", f"{n} calendar rows", details)
+        report.append(f"  ⚠️  Calendar has {n} rows (less than 1 year)")
+        report.append("     This may indicate date filtering or limited data range")
+    else:
+        report.append("  ✅ Calendar has realistic row count")
+    return CheckResult(cid, "pass", f"{n} calendar rows", details, report)
 
 
 def check_dimension_multirow(c: LiveContext) -> CheckResult:
-    tables = list(c.cfg["dimension_probe_tables"])
-    counts = {t: c.table_count(t)[0] for t in tables}
-    single = [t for t, v in counts.items() if v == 1]
-    details = {"counts": counts, "single_row_tables": single}
     cid = "live-dimension-multirow"
+    tables = list(c.cfg["dimension_probe_tables"])
+    counts: dict[str, Optional[int]] = {}
+    report = ["", "=== Dimension Table Validation ===", ""]
+    for t in tables:
+        n, err = c.table_count(t)
+        counts[t] = n
+        if err:
+            report.append(f"  ❌ {t}: ERROR - {err[:50]}")
+        else:
+            report.append(f"  {'✅' if n > 1 else '🔴'} {t}: {n:,} rows")
+    details: dict = {"counts": counts}
     if not any(v is not None and v > 1 for v in counts.values()):
-        return CheckResult(cid, "fail", "no dimension table holds more than one row", details)
+        return CheckResult(cid, "fail",
+                           "🔴 CRITICAL: All dimension tables have ≤1 row. This indicates "
+                           f"v-rows_limit='LIMIT 1' or empty source data. Results: {counts}",
+                           details, report)
+    single = [t for t, v in counts.items() if v == 1]
+    details["single_row_tables"] = single
     if len(single) > len(tables) // 2:
-        return CheckResult(cid, "warn", f"{len(single)} of {len(tables)} dimension tables hold "
-                                        f"one row: {', '.join(single)}", details)
-    return CheckResult(cid, "pass", "dimension tables hold several rows", details)
+        return CheckResult(cid, "warn",
+                           f"⚠️  WARNING: {len(single)}/{len(tables)} dimension tables have only "
+                           f"1 row. Check v-rows_limit parameter. Single-row tables: {single}",
+                           details, report)
+    report += ["", "  ✅ Dimension tables have realistic row counts"]
+    return CheckResult(cid, "pass", "dimension tables hold several rows", details, report)
+
+
+def _sample_value(row: dict) -> Any:
+    for key, value in row.items():
+        if "date" in key.lower() and value not in (None, ""):
+            return value
+    if row:
+        return next(iter(row.values()))
+    return "N/A"
 
 
 def check_calendar_scan(c: LiveContext) -> CheckResult:
     cid, cal = "live-calendar-scan", c.cfg["calendar_table"]
-    r = c.client.execute(f'EVALUATE ROW("RowCount", COUNTROWS({quote_table(cal)}))')
+    quoted = quote_table(cal)
+    r = c.client.execute(f'EVALUATE ROW("RowCount", COUNTROWS({quoted}))')
     if r.error:
         return CheckResult(cid, "error", f"calendar count failed: {r.error}")
     raw = scalar(r.first, "RowCount")
-    if raw is None:
-        return CheckResult(cid, "error", "the calendar count came back BLANK")
+    report = ["", "=== Large Table Full Scan Test ===", "",
+              f"Testing {cal} table (should have 365+ rows)...",
+              f"COUNTROWS({quoted}): {raw}"]
+    if raw is None or int(raw) == 0:
+        return CheckResult(cid, "error", "the calendar count came back BLANK or 0", {}, report)
     n = int(raw)
-    top = c.client.execute(f"EVALUATE TOPN(50, {quote_table(cal)})")
-    rows = top.rows if not top.error else []
-    date_key = next((k for k in (rows[0] if rows else {}) if "date" in k.lower()), None)
-    samples = [row.get(date_key) for row in rows[:5]] if date_key else []
-    details = {"row_count": n, "returned_rows": len(rows), "sample_values": samples}
+    top = c.client.execute(f"EVALUATE TOPN(50, {quoted})")
     if top.error:
-        details["topn_error"] = top.error
+        report.append(f"❌ Error querying {cal}: {top.error[:100]}")
+        return CheckResult(cid, "error", f"calendar sample failed: {top.error}",
+                           {"topn_error": top.error}, report)
+    rows = top.rows
+    report.append(f"TOPN(50, {quoted}): {len(rows)} rows returned")
+    samples = []
+    if rows:
+        report.append("")
+        report.append(f"Sample dates from {cal}:")
+        for i, row in enumerate(rows[:5], 1):
+            value = _sample_value(row)
+            samples.append(value)
+            report.append(f"  Row {i}: {value}")
+    report += ["", "=" * 80, "ASSESSMENT", "=" * 80]
+    details = {"row_count": n, "returned_rows": len(rows), "sample_values": samples}
     if n == 1:
-        return CheckResult(cid, "fail", "the calendar should hold 365+ rows but holds one; "
-                                        "row-level security, a filter or a row limit is "
-                                        "restricting data", details)
+        report += [f"🔴 CRITICAL: {cal} has only 1 row!",
+                   "   This is HIGHLY SUSPICIOUS for a calendar table.",
+                   "   Likely causes:",
+                   "   1. Row-Level Security (RLS) is filtering to 1 row",
+                   "   2. Global filter context is applied",
+                   "   3. Service principal has restricted data access",
+                   "",
+                   "   ACTION REQUIRED:",
+                   "   - Check RLS roles in Fabric workspace",
+                   "   - Verify service principal permissions",
+                   "   - Review any filter context in model"]
+        return CheckResult(cid, "fail",
+                           f"{cal} should have 365+ rows but has only 1. This indicates RLS or "
+                           "filter context is limiting data access.", details, report)
     if n < 100:
-        return CheckResult(cid, "pass", f"warning: the calendar holds only {n} rows", details)
-    return CheckResult(cid, "pass", f"{n} calendar rows", details)
+        report += [f"⚠️  WARNING: {cal} has only {n} rows",
+                   "   This seems low for a calendar table.",
+                   "   May indicate limited date range or filter applied."]
+        return CheckResult(cid, "pass", f"{n} calendar rows", details, report)
+    report += [f"✅ {cal} has {n} rows (healthy)",
+               "   No obvious filter context limiting data."]
+    return CheckResult(cid, "pass", f"{n} calendar rows", details, report)
 
 
 def _date_param(value: Optional[str]) -> Optional[str]:
-    m = re.search(r"#date\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", value or "")
+    m = re.search(r"#date\((\d+),\s*(\d+),\s*(\d+)\)", value or "")
     return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}" if m else None
 
 
 def check_calendar_vs_parameters(c: LiveContext) -> CheckResult:
     cid, params = "live-calendar-vs-parameters", c.model.parameters
     if params is None:
-        return CheckResult(cid, "skip", "no expressions.tmdl: the model declares no parameters")
+        return CheckResult(cid, "skip",
+                           f"expressions.tmdl not found under {c.model.path / 'definition'}")
     r = c.client.execute(_calendar_query(c, "dates-first"))
     if r.error:
         return CheckResult(cid, "error", f"calendar query failed: {r.error}")
+    if not r.rows:
+        return CheckResult(cid, "error", "the calendar query returned no rows")
     n = count(r.first, "RowCount")
+    from_date = _date_param(params.get(c.cfg["from_date_parameter"]))
+    is_rolling = params.get("v-isRolling", "0").strip()
+    days_ago = params.get("v-daysAgo", "90").strip()
     details = {
-        "v-fromdate": _date_param(params.get(c.cfg["from_date_parameter"])),
-        "v-isRolling": params.get("v-isRolling", "0"),
-        "v-daysAgo": params.get("v-daysAgo", "90"),
+        "v-fromdate": from_date,
+        "v-isRolling": is_rolling,
+        "v-daysAgo": days_ago,
         "min_date": scalar(r.first, "MinDate"), "max_date": scalar(r.first, "MaxDate"),
         "row_count": n,
     }
+    report = ["", "=== Date Range Validation ===", "",
+              "  Parameter Configuration:",
+              f"    v-fromdate: {from_date}",
+              f"    v-isRolling: {is_rolling}",
+              f"    v-daysAgo: {days_ago}",
+              "",
+              "  Actual Data:",
+              f"    Min date: {details['min_date']}",
+              f"    Max date: {details['max_date']}",
+              f"    Row count: {n:,}"]
     if n == 1:
-        return CheckResult(cid, "warn", "the calendar holds one row: cannot validate the range; "
-                                        "a row limit is applied", details)
-    return CheckResult(cid, "pass", f"calendar {details['min_date']} to {details['max_date']} "
-                                    f"({n} rows)", details)
+        return CheckResult(cid, "warn",
+                           "Only 1 row in calendar - cannot validate date range "
+                           "(LIMIT 1 applied)", details, report)
+    report += ["", "  ✅ Date range retrieved (validation informational)"]
+    return CheckResult(cid, "pass",
+                       f"calendar {details['min_date']} to {details['max_date']} ({n} rows)",
+                       details, report)
 
 
 def check_parameter_audit(c: LiveContext) -> CheckResult:
     cid, params = "live-parameter-audit", c.model.parameters
     if params is None:
-        return CheckResult(cid, "skip", "no expressions.tmdl: the model declares no parameters")
+        return CheckResult(cid, "skip",
+                           f"expressions.tmdl not found under {c.model.path / 'definition'}")
     time_params = sorted(n for n in params if any(k in n for k in
                                                   ("date", "Rolling", "rows_limit", "daysAgo")))
-    issues, recs = [], []
-    limit = params.get(c.cfg["row_limit_parameter"], "")
-    if re.search(r"\bLIMIT\s+1\b", limit):
-        issues.append({"severity": "CRITICAL", "parameter": c.cfg["row_limit_parameter"],
-                       "issue": "only one row per table is imported"})
-        recs.append(f"set {c.cfg['row_limit_parameter']} to a blank string and refresh")
+    issues: list[dict] = []
+    limit_name = c.cfg["row_limit_parameter"]
+    limit = params.get(limit_name, "")
+    if re.search(r"LIMIT 1(?!\d)", limit):
+        issues.append({"severity": "CRITICAL", "parameter": limit_name, "value": limit,
+                       "message": "LIMIT 1 applied - only 1 row per table imported",
+                       "recommendation": "Change to ' ' (blank) for production"})
     elif "LIMIT" in limit:
-        issues.append({"severity": "WARNING", "parameter": c.cfg["row_limit_parameter"],
-                       "issue": f"a row limit is set ({limit})"})
-    start = _date_param(params.get(c.cfg["from_date_parameter"]))
-    today = c.client.now().date()
-    if start and _dt.date.fromisoformat(start) > today:
-        ahead = (_dt.date.fromisoformat(start) - today).days
-        issues.append({"severity": "CRITICAL", "parameter": c.cfg["from_date_parameter"],
-                       "issue": f"the start date is {ahead} days in the future"})
-        recs.append(f"set {c.cfg['from_date_parameter']} to a date in the past")
+        issues.append({"severity": "WARNING", "parameter": limit_name, "value": limit,
+                       "message": "Row limit applied - data incomplete",
+                       "recommendation": "Review limit value for environment"})
+    date_name = c.cfg["from_date_parameter"]
+    from_date = _date_param(params.get(date_name))
+    today = c.client.today()
+    if from_date and _dt.date.fromisoformat(from_date) > today:
+        ahead = (_dt.date.fromisoformat(from_date) - today).days
+        issues.append({"severity": "CRITICAL", "parameter": date_name,
+                       "value": params.get(date_name, ""),
+                       "message": f"Future date ({ahead} days ahead) - no historical data",
+                       "recommendation": "Change to past date (e.g., 2023-01-01)"})
     cal = c.cfg["calendar_table"]
     r = c.client.execute(f'EVALUATE ROW( "CalendarRows", COUNTROWS({quote_table(cal)}), '
                          f'"AccountsRows", COUNTROWS({quote_table("_Accounts")}) )')
-    sample, notes = {}, []
-    if r.error:
-        notes.append(f"live sample failed: {r.error}")
+    sample: dict[str, int] = {}
+    report = ["", "=" * 80, "CONNECTION PARAMETER AUDIT REPORT", "=" * 80, "",
+              "1. PARAMETER CONFIGURATION", "-" * 80, "", "  Time/Data Filters:"]
+    report += [f"    {name}: {params[name]}" for name in time_params]
+    report += ["", "2. RISK ASSESSMENT", "-" * 80]
+    if issues:
+        report += ["", "  Issues Found:"]
+        for issue in issues:
+            icon = "🔴" if issue["severity"] == "CRITICAL" else "⚠️ "
+            report += ["", f"    {icon} {issue['severity']}: {issue['parameter']}",
+                       f"       Value: {issue['value']}",
+                       f"       Issue: {issue['message']}",
+                       f"       Recommendation: {issue['recommendation']}"]
     else:
-        sample = {cal: count(r.first, "CalendarRows"), "_Accounts": count(r.first, "AccountsRows")}
-        if sample[cal] == 1 and sample["_Accounts"] == 1:
-            notes.append("both sampled tables hold one row: a row limit is applied")
-        elif sample[cal] < 100:
-            notes.append("the calendar holds fewer than 100 rows")
+        report += ["", "  ✅ No critical issues detected"]
+    report += ["", "3. LIVE DATA VALIDATION", "-" * 80]
+    if r.error:
+        report += ["", f"  ❌ Error validating live data: {r.error[:100]}"]
+    else:
+        calendar_rows = count(r.first, "CalendarRows")
+        accounts_rows = count(r.first, "AccountsRows")
+        sample = {cal: calendar_rows, "_Accounts": accounts_rows}
+        report += ["", "  Sample Row Counts:",
+                   f"    {cal}: {calendar_rows:,} rows",
+                   f"    _Accounts: {accounts_rows:,} rows"]
+        if calendar_rows == 1 and accounts_rows == 1:
+            report += ["", "  🔴 Pattern: All tables have 1 row (confirms LIMIT 1 parameter)"]
+        elif calendar_rows < 100:
+            report += ["", "  ⚠️  Calendar has limited rows - check date filtering"]
+    report += ["", "4. RECOMMENDATIONS", "-" * 80]
+    if issues:
+        report += ["", "  Immediate Actions Required:"]
+        report += [f"    {i}. {issue['recommendation']}"
+                   for i, issue in enumerate(issues, 1) if issue["severity"] == "CRITICAL"]
+    report += ["", "=" * 80, f"Report generated: {_dt.datetime.now()}", "=" * 80, "",
+               "✅ Audit report generated successfully"]
     details = {"time_parameters": time_params, "parameters": params, "issues": issues,
-               "live_sample": sample, "notes": notes, "recommendations": recs}
-    return CheckResult(cid, "pass", f"{len(issues)} parameter issue(s)", details)
+               "live_sample": sample,
+               "recommendations": [i["recommendation"] for i in issues
+                                   if i["severity"] == "CRITICAL"]}
+    return CheckResult(cid, "pass", f"{len(issues)} parameter issue(s)", details, report)
 
 
-def _row_probe(c: LiveContext, table: str) -> tuple[bool, str]:
-    n, err = c.table_count(table, "RowCount")
-    if err:
-        return False, err
-    return (n or 0) > 0, f"{n} rows"
+def _table_probe(c: LiveContext, table: str) -> tuple[bool, str, float]:
+    r = c.client.execute(f'EVALUATE ROW("RowCount", COUNTROWS({quote_table(table)}))')
+    if r.error:
+        return False, f"Error checking table: {r.error}", r.elapsed_ms
+    if not r.rows:
+        return False, f"Error checking table: {NO_ROWS}", r.elapsed_ms
+    n = count(r.first, "RowCount")
+    if n > 0:
+        return True, f"Table '{table}' has {n:,} rows", r.elapsed_ms
+    return False, f"Table '{table}' is empty (0 rows)", r.elapsed_ms
 
 
 def check_table_sample(c: LiveContext) -> CheckResult:
+    cid = "live-table-sample"
     tables = c.model.tables_with_columns[: c.cfg["sample_tables"]]
-    results = {t: _row_probe(c, t) for t in tables}
-    passed = sum(1 for ok, _ in results.values() if ok)
+    report: list[str] = []
+    passed = 0
+    empty: list[str] = []
+    for t in tables:
+        ok, message, ms = _table_probe(c, t)
+        if ok:
+            passed += 1
+        else:
+            empty.append(t)
+        name = "Table '%s' has data" % t
+        report.append("  " + _probe("✅ PASS" if ok else "❌ FAIL", name, message, ms))
+    rate = _rate(passed, len(tables))
     details = {"tables": tables, "probed": len(tables), "passed": passed,
-               "empty_tables": [t for t, (ok, _) in results.items() if not ok]}
-    ok = _rate(passed, len(tables)) >= c.cfg["sample_pass_rate"]
-    return CheckResult("live-table-sample", "pass" if ok else "fail",
-                       f"{passed} of {len(tables)} sampled tables hold rows", details)
+               "empty_tables": empty}
+    if rate >= c.cfg["sample_pass_rate"]:
+        return CheckResult(cid, "pass",
+                           f"{passed} of {len(tables)} sampled tables hold rows", details, report)
+    return CheckResult(cid, "fail",
+                       f"Only {passed}/{len(tables)} tables have data ({rate:.1%}). Expected at "
+                       f"least {c.cfg['sample_pass_rate']:.0%}.", details, report)
 
 
 def check_dimension_rows(c: LiveContext) -> CheckResult:
+    cid = "live-dimension-rows"
     prefix = c.cfg["dimension_prefix"]
     tables = [t for t in c.model.tables_with_columns if t.startswith(prefix)]
     if not tables:
-        return CheckResult("live-dimension-rows", "fail", "no dimension tables found")
-    results = {t: _row_probe(c, t) for t in tables}
-    passed = sum(1 for ok, _ in results.values() if ok)
+        return CheckResult(cid, "fail", f"No dimension tables found starting with '{prefix}'")
+    report: list[str] = []
+    passed = 0
+    failed: list[str] = []
+    for t in tables:
+        ok, message, ms = _table_probe(c, t)
+        if ok:
+            passed += 1
+        else:
+            failed.append(t)
+            name = "Table '%s' has data" % t
+            report.append("  " + _probe("❌ FAIL", name, message, ms))
+    if failed:
+        report += ["", f"⚠️  Warning: {len(failed)} dimension tables are empty: {failed}"]
     details = {"tables": tables, "probed": len(tables), "passed": passed,
-               "empty_tables": [t for t, (ok, _) in results.items() if not ok]}
-    ok = _rate(passed, len(tables)) >= c.cfg["dimension_pass_rate"]
-    return CheckResult("live-dimension-rows", "pass" if ok else "fail",
-                       f"{passed} of {len(tables)} dimension tables hold rows", details)
+               "empty_tables": failed}
+    rate = _rate(passed, len(tables))
+    if rate >= c.cfg["dimension_pass_rate"]:
+        return CheckResult(cid, "pass",
+                           f"{passed} of {len(tables)} dimension tables hold rows", details, report)
+    return CheckResult(cid, "fail",
+                       f"Only {passed}/{len(tables)} dimension tables have data ({rate:.1%}). "
+                       f"Failed tables: {failed}", details, report)
 
 
-def _measure_probe(c: LiveContext, measure: str) -> tuple[bool, str]:
+def _measure_probe(c: LiveContext, measure: str) -> tuple[bool, str, float, Any]:
     ref = "[" + measure.replace("]", "]]") + "]"
     r = c.client.execute(f'EVALUATE ROW( "Value", {ref}, "IsBlank", ISBLANK({ref}) )')
     if r.error:
-        return False, r.error
+        return False, f"Error checking measure: {r.error}", r.elapsed_ms, None
     if not r.rows:
-        return False, "empty result"
-    blank = scalar(r.first, "IsBlank")
-    return (blank is False), "value" if blank is False else "BLANK"
+        return False, f"Error checking measure: {NO_ROWS}", r.elapsed_ms, None
+    value = scalar(r.first, "Value")
+    raw = r.first.get("[IsBlank]", r.first.get("IsBlank"))
+    blank = True if raw is None else bool(raw)
+    if blank:
+        return False, f"Measure '{ref}' returned BLANK", r.elapsed_ms, value
+    return True, f"Measure '{ref}' returned value: {value}", r.elapsed_ms, value
 
 
-def _measure_sample(c: LiveContext, cid: str, measures: list[str], none_message: str) -> CheckResult:
-    if not measures:
-        return CheckResult(cid, "fail", none_message, {"probed": 0, "passed": 0})
-    results = {m: _measure_probe(c, m) for m in measures}
-    passed = sum(1 for ok, _ in results.values() if ok)
-    rate = _rate(passed, len(measures))
-    details: dict = {"probed": len(measures), "passed": passed,
-                     "blank_or_failed": [m for m, (ok, _) in results.items() if not ok]}
+def _measure_sample(c: LiveContext, cid: str, items: list[tuple[str, str]],
+                    noun: str = "measures") -> CheckResult:
+    report: list[str] = []
+    values: dict[str, Any] = {}
+    passed = 0
+    for table, m in items:
+        ok, message, ms, value = _measure_probe(c, m)
+        values[m] = value
+        if ok:
+            passed += 1
+        else:
+            probe = _probe("❌ FAIL", f"Measure '[{m}]' not blank", message, ms)
+            report.append(f"  ❌ [{table}].[{m}]: {probe}" if table else f"  {probe}")
+    rate = _rate(passed, len(items))
+    details: dict = {"probed": len(items), "passed": passed, "values": values,
+                     "blank_or_failed": [m for _t, m in items if values[m] is None]}
     if rate < 0.5:
         details["note"] = "fewer than half of the sampled measures return a value"
-    ok = rate >= c.cfg["measure_pass_rate"]
-    return CheckResult(cid, "pass" if ok else "fail",
-                       f"{passed} of {len(measures)} sampled measures return a value", details)
+        report += ["", f"⚠️  Warning: Only {rate:.1%} of measures returned non-blank values"]
+    if rate >= c.cfg["measure_pass_rate"]:
+        return CheckResult(cid, "pass",
+                           f"{passed} of {len(items)} sampled measures return a value",
+                           details, report)
+    return CheckResult(cid, "fail",
+                       f"Only {passed}/{len(items)} {noun} returned non-blank ({rate:.1%}). "
+                       f"Expected at least {c.cfg['measure_pass_rate']:.0%}.", details, report)
 
 
 def check_measure_sample(c: LiveContext) -> CheckResult:
-    measures = [m for _t, m in c.model.measures][: c.cfg["sample_measures"]]
-    return _measure_sample(c, "live-measure-sample", measures, "the model declares no measures")
+    items = [("", m) for _t, m in c.model.measures][: c.cfg["sample_measures"]]
+    return _measure_sample(c, "live-measure-sample", items)
 
 
 def check_parameter_table_measures(c: LiveContext) -> CheckResult:
     cid = "live-parameter-table-measures"
     if not c.cfg["parameter_table_measures"]:
-        return CheckResult(cid, "skip", "disabled (live.parameter_table_measures = false): "
-                                        "field-parameter tables normally own no measures")
+        return CheckResult(cid, "skip",
+                           "Report tables are parameter tables, not measure tables. "
+                           "Skipping for now.")
     prefixes = tuple(c.cfg["parameter_table_prefixes"])
     per_table: dict[str, list[str]] = {}
     for t, m in c.model.measures:
         if t.startswith(prefixes):
             per_table.setdefault(t, []).append(m)
-    measures = [m for ms in per_table.values() for m in ms[:5]]
-    return _measure_sample(c, cid, measures, "no parameter measure tables with measures found")
+    if not per_table:
+        return CheckResult(cid, "fail", "No x-Selector measure tables found")
+    items = [(t, m) for t, ms in per_table.items() for m in ms[:5]]
+    return _measure_sample(c, cid, items, noun="Report measures")
 
 
-def _refresh_probe(c: LiveContext) -> tuple[str, str, dict]:
+def _refresh_probe(c: LiveContext) -> tuple[str, str, dict, float]:
+    start = time.perf_counter()
     hist = c.client.refreshes(1)
+    ms = (time.perf_counter() - start) * 1000
     if not hist:
-        return "warn", "no refresh history found", {}
+        return "warn", "No refresh history found", {"refresh_count": 0}, ms
     latest = hist[0]
-    status = latest.get("status") or "Unknown"
-    details = {"status": status, "endTime": latest.get("endTime"), "requestId": latest.get("requestId")}
+    status = latest.get("status", "Unknown")
+    details = {"status": status, "end_time": latest.get("endTime"),
+               "request_id": latest.get("requestId")}
     if status == "Completed":
-        return "pass", f"last refresh Completed at {latest.get('endTime')}", details
-    return "warn", f"last refresh status: {status}", details
+        return ("pass", f"Latest refresh completed successfully at {latest.get('endTime')}",
+                details, ms)
+    return "warn", f"Latest refresh status: {status}", details, ms
 
 
 def check_refresh_status(c: LiveContext) -> CheckResult:
-    outcome, msg, details = _refresh_probe(c)
-    return CheckResult("live-refresh-status", outcome, msg, details)
+    cid = "live-refresh-status"
+    outcome, msg, details, ms = _refresh_probe(c)
+    report = ["  " + _probe("✅ PASS" if outcome == "pass" else "❌ FAIL",
+                            "Latest refresh status", msg, ms)]
+    if outcome != "pass":
+        report += ["", f"⚠️  WARNING: {msg}", f"    Details: {details}"]
+    message = msg if outcome == "pass" else f"Refresh status check failed (non-blocking): {msg}"
+    return CheckResult(cid, outcome, message, details, report)
 
 
 def _parse_time(text: str) -> _dt.datetime:
@@ -682,145 +950,317 @@ def _parse_time(text: str) -> _dt.datetime:
     return value if value.tzinfo else value.replace(tzinfo=_dt.timezone.utc)
 
 
-def _freshness_probe(c: LiveContext) -> tuple[str, str, dict]:
+def _freshness_probe(c: LiveContext) -> tuple[str, str, dict, float]:
+    start = time.perf_counter()
+    max_hours = c.cfg["freshness_max_hours"]
     hist = c.client.refreshes(10)
+    ms = (time.perf_counter() - start) * 1000
     if not hist:
-        return "warn", "no refresh history found", {}
+        return "warn", "No refresh history found", {"refresh_count": 0}, ms
     done = next((h for h in hist if h.get("status") == "Completed"), None)
     if done is None:
-        return "warn", "no successful refresh found", {}
+        return "warn", "No successful refresh found in history", {"completed_refresh_count": 0}, ms
+    raw = done.get("endTime")
     try:
-        age = (c.client.now() - _parse_time(str(done.get("endTime")))).total_seconds() / 3600
+        age = (c.client.now() - _parse_time(str(raw))).total_seconds() / 3600
     except (TypeError, ValueError) as exc:
-        return "warn", f"cannot read the refresh end time: {exc}", {}
-    details = {"age_hours": round(age, 3), "endTime": done.get("endTime")}
-    if age <= c.cfg["freshness_max_hours"]:
-        return "pass", f"data is {age:.1f} hours old", details
-    return "warn", f"data is {age:.0f} hours old (limit {c.cfg['freshness_max_hours']})", details
+        return ("warn", f"Error checking data freshness: {exc}", {"error": str(exc)}, ms)
+    fresh = age <= max_hours
+    details = {"end_time": raw, "age_hours": age, "max_hours": max_hours, "is_fresh": fresh}
+    if fresh:
+        return "pass", f"Data refreshed {age:.1f} hours ago (within {max_hours}h threshold)", \
+            details, ms
+    return "warn", f"Data is {age:.1f} hours old (exceeds {max_hours}h threshold)", details, ms
 
 
 def check_freshness(c: LiveContext) -> CheckResult:
-    outcome, msg, details = _freshness_probe(c)
-    return CheckResult("live-freshness", outcome, msg, details)
+    cid = "live-freshness"
+    outcome, msg, details, ms = _freshness_probe(c)
+    name = f"Data freshness (max {c.cfg['freshness_max_hours']}h)"
+    report = ["  " + _probe("✅ PASS" if outcome == "pass" else "❌ FAIL", name, msg, ms)]
+    if outcome != "pass":
+        report += ["", f"⚠️  WARNING: {msg}", f"    Details: {details}"]
+    message = msg if outcome == "pass" else f"Data freshness check failed (non-blocking): {msg}"
+    return CheckResult(cid, outcome, message, details, report)
 
 
 def check_smoke(c: LiveContext) -> CheckResult:
-    start = time.perf_counter()
-    items: list[tuple[str, bool, str]] = []
+    cid = "live-smoke"
+    items: list[tuple[str, bool, str, float]] = []
     prefix = c.cfg["dimension_prefix"]
     for t in [t for t in c.model.tables_with_columns if t.startswith(prefix)]:
-        ok, why = _row_probe(c, t)
-        items.append((f"rows: {t}", ok, why))
+        ok, why, ms = _table_probe(c, t)
+        items.append((f"Table '{t}' has data", ok, why, ms))
     for _t, m in c.model.measures[: c.cfg["suite_measures"]]:
-        ok, why = _measure_probe(c, m)
-        items.append((f"measure: {m}", ok, why))
-    outcome, msg, _d = _refresh_probe(c)
-    items.append(("refresh status", outcome == "pass", msg))
-    outcome, msg, _d = _freshness_probe(c)
-    items.append(("freshness", outcome == "pass", msg))
-    passed = sum(1 for _n, ok, _w in items if ok)
+        ok, why, ms, _value = _measure_probe(c, m)
+        items.append((f"Measure '[{m}]' not blank", ok, why, ms))
+    outcome, msg, _details, ms = _refresh_probe(c)
+    items.append(("Latest refresh status", outcome == "pass", msg, ms))
+    outcome, msg, _details, ms = _freshness_probe(c)
+    items.append((f"Data freshness (max {c.cfg['freshness_max_hours']}h)",
+                   outcome == "pass", msg, ms))
+    passed = sum(1 for _n, ok, _w, _ms in items if ok)
+    failed = len(items) - passed
+    rate = _rate(passed, len(items))
+    total_ms = sum(ms for _n, _ok, _w, ms in items)
+    report = ["", "=" * 80, "COMPREHENSIVE SMOKE TEST SUITE", "=" * 80, "",
+              "-" * 80, "SUMMARY", "-" * 80,
+              f"Total tests: {len(items)}",
+              f"Passed: {passed} ({rate:.1%})",
+              f"Failed: {failed}"]
+    if failed:
+        report += ["", "Failed tests:"]
+        report += ["  ❌ " + _probe("❌ FAIL", name, why, ms)
+                   for name, ok, why, ms in items if not ok]
+    report += ["", f"Total execution time: {total_ms:.2f}ms ({total_ms / 1000:.2f}s)",
+               "=" * 80, ""]
     details = {"passed": passed, "total": len(items),
-               "failed_items": [f"{n}: {w}" for n, ok, w in items if not ok],
-               "elapsed_ms": round((time.perf_counter() - start) * 1000, 3)}
-    ok = _rate(passed, len(items)) >= c.cfg["suite_pass_rate"]
-    return CheckResult("live-smoke", "pass" if ok else "fail",
-                       f"{passed} of {len(items)} smoke items passed", details)
+               "failed_items": [f"{name}: {why}" for name, ok, why, _ms in items if not ok],
+               "elapsed_ms": total_ms}
+    if rate >= c.cfg["suite_pass_rate"]:
+        return CheckResult(cid, "pass",
+                           f"{passed} of {len(items)} smoke items passed", details, report)
+    return CheckResult(cid, "fail",
+                       f"Smoke test suite failed. Pass rate: {rate:.1%} (expected >= "
+                       f"{c.cfg['suite_pass_rate']:.0%}). {failed} tests failed.", details, report)
+
+
+DATASET_PROPERTIES = (("id", "id"), ("name", "name"), ("configuredBy", "configured_by"),
+                      ("isRefreshable", "is_refreshable"),
+                      ("targetStorageMode", "target_storage_mode"),
+                      ("workspaceId", "workspace_id"), ("workspaceName", "workspace_name"))
+
+
+def _dataset_properties(client: _Client) -> dict:
+    data = client.dataset()
+    return {label: data.get(key) for key, label in DATASET_PROPERTIES}
 
 
 def check_identity(c: LiveContext) -> CheckResult:
+    cid = "live-identity"
     r = c.client.execute('EVALUATE ROW( "UserPrincipalName", USERPRINCIPALNAME(), '
                          '"UserName", USERNAME(), "UserObjectId", USEROBJECTID() )')
     if r.error:
-        return CheckResult("live-identity", "error", f"identity query failed: {r.error}")
-    ds = c.client.dataset()
+        return CheckResult(cid, "error", f"identity query failed: {r.error}")
+    props = _dataset_properties(c.client)
     details = {"user_principal_name": scalar(r.first, "UserPrincipalName"),
                "user_name": scalar(r.first, "UserName"),
                "user_object_id": scalar(r.first, "UserObjectId"),
-               "dataset_name": ds.get("name"), "is_refreshable": ds.get("isRefreshable"),
-               "storage_mode": ds.get("targetStorageMode"),
+               "dataset_name": props["name"], "is_refreshable": props["is_refreshable"],
+               "storage_mode": props["target_storage_mode"],
                "note": "role membership cannot be read without admin rights"}
-    return CheckResult("live-identity", "pass",
-                       f"querying as {details['user_principal_name']}", details)
+    report = ["", "=== RLS Detection Test ===", "",
+              f"Query executed in {r.elapsed_ms:.2f}ms",
+              f"Row count: {len(r.rows)}",
+              "", "User Identity:"]
+    for row in r.rows:
+        report += [f"  {key}: {value}" for key, value in row.items()]
+    report += ["", f"Dataset: {props['name']}",
+               f"Is Refreshable: {props['is_refreshable']}",
+               f"Target Storage Mode: {props['target_storage_mode']}",
+               "", "✅ User identity retrieved",
+               "⚠️  Cannot directly query RLS roles (requires admin). "
+               "Check manually in Fabric workspace."]
+    return CheckResult(cid, "pass",
+                       f"querying as {details['user_principal_name']}", details, report)
 
 
 def check_filter_compare(c: LiveContext) -> CheckResult:
-    rows, flagged = [], []
+    cid = "live-filter-compare"
+    rows: list[dict[str, Any]] = []
+    flagged: list[str] = []
+    report: list[str] = []
     for t in c.cfg["filter_probe_tables"]:
         n, err = c.table_count(t, "RowCount")
+        report += ["", f"--- Testing table: {t} ---"]
         if err:
-            return CheckResult("live-filter-compare", "error", f"COUNTROWS({t}) failed: {err}")
+            return CheckResult(cid, "error", f"COUNTROWS({t}) failed: {err}", {}, report)
+        report.append(f"COUNTROWS({quote_table(t)}): {n}")
         entry: dict[str, Any] = {"table": t, "countrows": n}
         top = c.client.execute(f"EVALUATE TOPN(10, {quote_table(t)})")
-        entry["topn_rows"] = None if top.error else len(top.rows)
         if top.error:
-            entry["topn_error"] = top.error
+            report.append(f"❌ Error querying {t}: {top.error[:100]}")
+            entry["topn_actual"] = "ERROR"
+            entry["countrows_all"] = "ERROR"
+            entry["error"] = top.error[:100]
+            rows.append(entry)
+            continue
+        entry["topn_actual"] = len(top.rows)
+        report.append(f"EVALUATE TOPN(10, {quote_table(t)}): {len(top.rows)} rows returned")
         tot = c.client.execute(f'EVALUATE ROW( "TotalRows", CALCULATE(COUNTROWS({quote_table(t)}), '
                                f'ALL({quote_table(t)})) )')
-        entry["countrows_all"] = None if tot.error else count(tot.first, "TotalRows")
         if tot.error:
-            entry["all_error"] = tot.error
-        if entry["countrows_all"] is not None and entry["countrows_all"] != n:
-            entry["note"] = "filter context or RLS detected"
+            report.append(f"❌ Error querying {t}: {tot.error[:100]}")
+            entry["countrows_all"] = "ERROR"
+            entry["error"] = tot.error[:100]
+            rows.append(entry)
+            continue
+        all_count = count(tot.first, "TotalRows")
+        entry["countrows_all"] = all_count
+        report.append(f"COUNTROWS with ALL({quote_table(t)}): {all_count}")
+        if top.rows:
+            report += ["", f"Sample data from {t} (first row):"]
+            report += [f"  {key}: {value}" for key, value in list(top.rows[0].items())[:5]]
+        if all_count != n:
+            entry["discrepancy"] = True
             flagged.append(t)
         rows.append(entry)
-    return CheckResult("live-filter-compare", "pass",
+    report += ["", "=" * 80, "SUMMARY", "=" * 80,
+               f"{'Table':<30} {'COUNTROWS':<15} {'TOPN Actual':<15} {'ALL()':<15} "
+               f"{'Filter?':<10}", "-" * 80]
+    for entry in rows:
+        indicator = "⚠️ YES" if entry.get("discrepancy") else "✅ NO"
+        report.append(f"{entry['table']:<30} {str(entry['countrows']):<15} "
+                      f"{str(entry['topn_actual']):<15} {str(entry['countrows_all']):<15} "
+                      f"{indicator:<10}")
+    if flagged:
+        report += ["", "⚠️  WARNING: Filter context or RLS detected!",
+                   f"   {len(flagged)} tables show different counts with/without ALL()",
+                   "   This suggests Row-Level Security or implicit filters are active."]
+    else:
+        report += ["", "✅ No filter context detected",
+                   "   COUNTROWS and COUNTROWS with ALL() return same values"]
+    return CheckResult(cid, "pass",
                        f"{len(flagged)} table(s) count differently with ALL()",
-                       {"tables": rows, "flagged": flagged})
+                       {"tables": rows, "flagged": flagged}, report)
 
 
 def check_metadata(c: LiveContext) -> CheckResult:
-    refreshes = [{k: r.get(k) for k in ("status", "endTime", "requestId")} for r in c.client.refreshes(5)]
-    details = {"dataset": c.client.dataset(), "refreshes": refreshes,
-               "datasources": c.client.datasources()}
-    return CheckResult("live-metadata", "pass", "dataset metadata collected", details)
+    cid = "live-metadata"
+    props = _dataset_properties(c.client)
+    refreshes = c.client.refreshes(5)
+    datasources = c.client.datasources()
+    report = ["", "=== Connection Metadata Investigation ===", "", "Dataset Properties:"]
+    report += [f"  {key}: {value}" for key, value in props.items()]
+    report += ["", "Refresh History (last 5):"]
+    for i, refresh in enumerate(refreshes, 1):
+        report.append(f"  {i}. Status: {refresh.get('status', 'Unknown')}, "
+                      f"End: {refresh.get('endTime', 'Unknown')}, "
+                      f"ID: {refresh.get('requestId', 'Unknown')}")
+    report += ["", "Datasources:"]
+    for i, source in enumerate(datasources, 1):
+        report.append(f"  {i}. Connection: {source}")
+    report += ["", "✅ Metadata investigation complete"]
+    details = {"dataset": c.client.dataset(),
+               "refreshes": [{k: r.get(k) for k in ("status", "endTime", "requestId")}
+                             for r in refreshes],
+               "datasources": datasources}
+    return CheckResult(cid, "pass", "dataset metadata collected", details, report)
 
 
 def check_filter_diagnostic(c: LiveContext) -> CheckResult:
-    findings: list[dict] = []
+    cid = "live-filter-diagnostic"
+    findings: list[dict[str, Any]] = []
+    report = ["", "=" * 80, "COMPREHENSIVE FILTER CONTEXT DIAGNOSTIC REPORT", "=" * 80, "",
+              "1. User Identity Check..."]
     who = c.client.execute('EVALUATE ROW("User", USERPRINCIPALNAME())')
     if who.error:
-        findings.append({"level": "ERROR", "item": "identity", "message": who.error})
+        value = f"ERROR: {who.error[:50]}"
+        findings.append({"name": "User Identity", "value": value, "level": "ERROR"})
+        report.append(f"   ❌ Error: {who.error[:50]}")
     else:
-        findings.append({"level": "INFO", "item": "identity",
-                         "message": f"querying as {scalar(who.first, 'User')}"})
+        user = scalar(who.first, "User")
+        findings.append({"name": "User Identity", "value": user, "level": "INFO"})
+        report.append(f"   ✅ User: {user}")
+    report += ["", "2. Calendar Table Row Count..."]
     cal = c.cfg["calendar_table"]
     r = c.client.execute(f'EVALUATE ROW("Count", COUNTROWS({quote_table(cal)}))')
     raw = None if r.error else scalar(r.first, "Count")
-    if r.error or raw is None:
-        findings.append({"level": "ERROR", "item": "calendar",
-                         "message": r.error or "the calendar count came back BLANK"})
+    if r.error:
+        value = f"ERROR: {r.error[:50]}"
+        findings.append({"name": "Calendar Rows", "value": value, "level": "ERROR"})
+        report.append(f"   ❌ Error: {r.error[:50]}")
+    elif raw is None or int(raw) == 0:
+        value = "ERROR: count is BLANK or 0"
+        findings.append({"name": "Calendar Rows", "value": value, "level": "ERROR"})
+        report.append("   ❌ Error: count is BLANK or 0")
     else:
         n = int(raw)
-        level = "CRITICAL" if n == 1 else ("WARNING" if n < 100 else "OK")
-        findings.append({"level": level, "item": "calendar", "message": f"{n} calendar rows"})
+        if n == 1:
+            level = "CRITICAL"
+            report.append(f"   🔴 CRITICAL: Only {n} row (expected 365+)")
+        elif n < 100:
+            level = "WARNING"
+            report.append(f"   ⚠️  WARNING: Only {n} rows (expected 365+)")
+        else:
+            level = "OK"
+            report.append(f"   ✅ OK: {n} rows")
+        findings.append({"name": "Calendar Rows", "value": n, "level": level})
+    report += ["", "3. Filter Context Check (COUNTROWS vs ALL)..."]
     dims = [t for t in c.cfg["filter_probe_tables"] if t.startswith(c.cfg["dimension_prefix"])
             and t != cal]
     if dims:
-        d = quote_table(dims[0])
+        table = dims[0]
+        d = quote_table(table)
         cmp_ = c.client.execute(f'EVALUATE ROW( "Normal", COUNTROWS({d}), '
                                 f'"WithALL", CALCULATE(COUNTROWS({d}), ALL({d})) )')
         if cmp_.error:
-            findings.append({"level": "ERROR", "item": dims[0], "message": cmp_.error})
+            value = f"ERROR: {cmp_.error[:50]}"
+            findings.append({"name": "Filter Context", "value": value, "level": "ERROR"})
+            report.append(f"   ❌ Error: {cmp_.error[:50]}")
         else:
             a, b = count(cmp_.first, "Normal"), count(cmp_.first, "WithALL")
-            findings.append({"level": "WARNING" if a != b else "OK", "item": dims[0],
-                             "message": f"{a} rows, {b} with ALL()"})
+            if a != b:
+                value = f"DETECTED: {a} vs {b}"
+                findings.append({"name": "Filter Context", "value": value, "level": "WARNING"})
+                report.append(f"   ⚠️  WARNING: Filter detected ({a} vs {b})")
+            else:
+                value = "None detected"
+                findings.append({"name": "Filter Context", "value": value, "level": "OK"})
+                report.append(f"   ✅ OK: No filter context ({a} rows)")
+    report += ["", "4. Dataset Refresh Status..."]
     hist = c.client.refreshes(1)
     if not hist:
-        findings.append({"level": "INFO", "item": "refresh", "message": "no refresh history"})
+        findings.append({"name": "Refresh Status", "value": "No history", "level": "INFO"})
+        report.append("   ⚠️  No refresh history found")
     else:
-        status = hist[0].get("status") or "Unknown"
-        findings.append({"level": "OK" if status == "Completed" else "WARNING", "item": "refresh",
-                         "message": f"last refresh {status}"})
+        status = hist[0].get("status")
+        level = "OK" if status == "Completed" else "WARNING"
+        findings.append({"name": "Refresh Status", "value": status, "level": level})
+        if status == "Completed":
+            report.append("    ✅ Last refresh: Completed")
+        else:
+            report.append(f"   ⚠️  Last refresh: {status}")
+    report += ["", "=" * 80, "DIAGNOSTIC SUMMARY", "=" * 80]
+    groups = (("CRITICAL", "🔴 CRITICAL ISSUES:"), ("WARNING", "⚠️  WARNINGS:"),
+              ("ERROR", "❌ ERRORS:"))
+    counted = {level: [f for f in findings if f["level"] == level] for level, _ in groups}
+    for level, title in groups:
+        if counted[level]:
+            report += ["", title]
+            report += [f"   - {f['name']}: {f['value']}" for f in counted[level]]
+    if not any(counted[level] for level, _ in groups):
+        report += ["", "✅ All diagnostics passed - no filter context or RLS detected"]
+    report += ["", "=" * 80, "RECOMMENDATIONS", "=" * 80]
+    critical = counted["CRITICAL"]
+    warnings = counted["WARNING"]
+    if critical or warnings:
+        report += ["", "1. Check Row-Level Security (RLS) settings in Fabric workspace:",
+                   "   - Navigate to the dataset in Fabric",
+                   "   - Check Security > Row-Level Security",
+                   "   - Verify service principal is not assigned restrictive roles",
+                   "", "2. Verify service principal permissions:",
+                   "   - Ensure service principal has 'Read' access to workspace",
+                   "   - Check if any workspace-level filters are applied",
+                   "", "3. Review model for implicit filters:",
+                   "   - Check calculation groups",
+                   "   - Review any model-level filter expressions"]
+    else:
+        report += ["", "✅ No action required - data access appears unrestricted"]
+    report += ["", "=" * 80]
     recs = []
-    if any(f["level"] in ("CRITICAL", "WARNING", "ERROR") for f in findings):
+    if critical or warnings:
         recs = ["check the RLS roles and the account the query runs as",
                 "check the service principal's access to the workspace",
                 "check calculation groups and model-level filters"]
-    critical = any(f["level"] == "CRITICAL" for f in findings)
-    return CheckResult("live-filter-diagnostic", "fail" if critical else "pass",
-                       f"{len(findings)} diagnostic finding(s)",
-                       {"findings": findings, "recommendations": recs})
+    if critical:
+        names = ", ".join(f["name"] for f in critical)
+        return CheckResult(cid, "fail",
+                           f"Critical issues detected: {names}. Row-Level Security or filter "
+                           "context is likely limiting data access.",
+                           {"findings": findings, "recommendations": recs}, report)
+    return CheckResult(cid, "pass", f"{len(findings)} diagnostic finding(s)",
+                       {"findings": findings, "recommendations": recs}, report)
 
 
 # ---------------------------------------------------------------------------
@@ -828,17 +1268,39 @@ def check_filter_diagnostic(c: LiveContext) -> CheckResult:
 # ---------------------------------------------------------------------------
 
 BPA_RULES = [
-    {"id": "DAX_DIVISION_USAGE", "name": "Use DIVIDE instead of /", "category": "DAX Expressions",
-     "severity": 3, "fix": "Use DIVIDE(numerator, denominator) so a zero denominator returns BLANK."},
-    {"id": "PERF_CALCULATED_COLUMNS", "name": "Calculated columns", "category": "Performance",
-     "severity": 2, "fix": "Move the column logic to Power Query or into a measure."},
-    {"id": "NAME_MEASURE_DESCRIPTIONS", "name": "User-facing measures have descriptions",
-     "category": "Naming Conventions", "severity": 2, "fix": "Add a description."},
-    {"id": "DAX_FULLY_QUALIFIED_COLUMNS", "name": "Fully qualified column references",
-     "category": "DAX Expressions", "severity": 2, "fix": "Write Table[Column]."},
-    {"id": "META_HIDDEN_FOREIGN_KEYS", "name": "Hide foreign keys", "category": "Metadata",
-     "severity": 2, "fix": "Hide key columns used only by relationships."},
+    {"id": "DAX_DIVISION_USAGE", "name": "Avoid division operator (use DIVIDE function)",
+     "category": "DAX Expressions", "severity": 3, "scope": "Measure",
+     "description": "Measures should use DIVIDE() instead of / for better error handling"},
+    {"id": "DAX_FULLY_QUALIFIED_COLUMNS", "name": "Column references should be fully qualified",
+     "category": "DAX Expressions", "severity": 2, "scope": "Measure",
+     "description": "Use Table[Column] instead of [Column] for clarity"},
+    {"id": "PERF_CALCULATED_COLUMNS", "name": "Avoid calculated columns where possible",
+     "category": "Performance", "severity": 2, "scope": "Column",
+     "description": "Calculated columns can impact refresh performance"},
+    {"id": "META_HIDDEN_FOREIGN_KEYS", "name": "Hide foreign key columns from report view",
+     "category": "Metadata", "severity": 2, "scope": "Column",
+     "description": "Foreign keys should be hidden from end users"},
+    {"id": "NAME_MEASURE_DESCRIPTIONS", "name": "User-facing measures should have descriptions",
+     "category": "Naming Conventions", "severity": 2, "scope": "Measure",
+     "description": "Measures visible to users should include descriptions"},
 ]
+
+BPA_FIXES = {
+    "DAX_DIVISION_USAGE":
+        "Replace / with DIVIDE(numerator, denominator) for better error handling",
+    "DAX_FULLY_QUALIFIED_COLUMNS": "Qualify every column reference with its table",
+    "PERF_CALCULATED_COLUMNS":
+        "Consider moving logic to M (Power Query) or creating a measure instead",
+    "META_HIDDEN_FOREIGN_KEYS": "Hide the key column used only by a relationship",
+    "NAME_MEASURE_DESCRIPTIONS":
+        "Add a description explaining what this measure calculates",
+}
+
+BPA_ANALYSIS_FAILED = {
+    "id": "BPA_ANALYSIS_FAILED", "name": "BPA Analysis Failed", "category": "System",
+    "severity": 5, "scope": "Model",
+    "description": "The analysis could not read the model's metadata",
+}
 
 
 @dataclass
@@ -904,15 +1366,16 @@ class LiveBPA:
     def _rule(self, rid: str) -> dict:
         return next(r for r in self.rules if r["id"] == rid)
 
-    def _violation(self, rid: str, obj: str, otype: str, message: str) -> BPAViolation:
-        r = self._rule(rid) if rid != "BPA_ANALYSIS_FAILED" else {
-            "id": rid, "name": "Analysis failed", "category": "System", "severity": 5,
-            "fix": "Check the connection and permissions."}
+    def _violation(self, rid: str, obj: str, otype: str, message: str,
+                   fix: Optional[str] = None) -> BPAViolation:
+        r = self._rule(rid) if rid != "BPA_ANALYSIS_FAILED" else BPA_ANALYSIS_FAILED
         return BPAViolation(rid, r["name"], r["category"], r["severity"], obj, otype, message,
-                            r["fix"], _dt.datetime.now(_dt.timezone.utc).isoformat())
+                            fix if fix is not None else BPA_FIXES.get(rid, ""),
+                            _dt.datetime.now().isoformat())
 
     def analyze_model(self) -> BPAReport:
-        start = time.perf_counter()
+        start = _dt.datetime.now()
+        clock = time.perf_counter()
         out: list[BPAViolation] = []
         objects = 0
         try:
@@ -922,69 +1385,184 @@ class LiveBPA:
             for row in [] if m.error else m.rows:
                 expr = str(scalar(row, "Expression") or "")
                 if "/" in expr and "divide" not in expr.lower():
-                    name = str(scalar(row, "Name"))
-                    out.append(self._violation("DAX_DIVISION_USAGE", name, "Measure",
-                                               f"{name} divides with '/'; use DIVIDE"))
+                    name = str(row.get("[Name]", "Unknown"))
+                    out.append(self._violation(
+                        "DAX_DIVISION_USAGE", name, "Measure",
+                        f"Measure '{name}' uses / operator instead of DIVIDE() function"))
             cols = self.client.execute("EVALUATE FILTER( INFO.COLUMNS(), [Type] = 2 )")
             for row in [] if cols.error else cols.rows:
-                table = scalar(row, "TableName") or scalar(row, "TableID")
-                obj = f"{table}[{scalar(row, 'Name')}]"
-                out.append(self._violation("PERF_CALCULATED_COLUMNS", obj, "Column",
-                                           f"{obj} is a calculated column"))
+                table = str(row.get("[TableName]", "Unknown"))
+                column = str(row.get("[Name]", "Unknown"))
+                out.append(self._violation(
+                    "PERF_CALCULATED_COLUMNS", f"{table}[{column}]", "CalculatedColumn",
+                    f"Calculated column '{column}' in table '{table}' may impact performance"))
             desc = self.client.execute('EVALUATE FILTER( INFO.MEASURES(), ISBLANK([Description]) '
                                        '|| [Description] = "" )')
             prefix = self.options["user_facing_prefix"]
             for row in [] if desc.error else desc.rows:
-                name = str(scalar(row, "Name"))
+                name = str(row.get("[Name]", "Unknown"))
+                table = str(row.get("[TableName]", "Unknown"))
                 if name.startswith(prefix):
-                    out.append(self._violation("NAME_MEASURE_DESCRIPTIONS", name, "Measure",
-                                               f"user-facing measure {name} has no description"))
+                    out.append(self._violation(
+                        "NAME_MEASURE_DESCRIPTIONS", name, "Measure",
+                        f"User-facing measure '{name}' in table '{table}' lacks description"))
             mc = self.client.execute('EVALUATE ROW("MeasureCount", COUNTROWS(INFO.MEASURES()))')
             cc = self.client.execute('EVALUATE ROW("ColumnCount", COUNTROWS(INFO.COLUMNS()))')
-            objects = (0 if mc.error else count(mc.first, "MeasureCount")) + \
-                      (0 if cc.error else count(cc.first, "ColumnCount"))
+            if mc.error or cc.error:
+                objects = 0
+            else:
+                objects = count(mc.first, "MeasureCount") + count(cc.first, "ColumnCount")
         except Exception as exc:  # noqa: BLE001 - one system finding instead of a crash
-            out.append(self._violation("BPA_ANALYSIS_FAILED", "model", "Model", str(exc)))
-        ms = max((time.perf_counter() - start) * 1000, 0.001)
-        return BPAReport(out, objects, ms, _dt.datetime.now(_dt.timezone.utc))
+            out.append(self._violation("BPA_ANALYSIS_FAILED", "ModelAnalysis", "System",
+                                       f"BPA analysis encountered an error: {exc}",
+                                       fix="Check model connectivity and permissions"))
+        ms = max((time.perf_counter() - clock) * 1000, 0.001)
+        return BPAReport(out, objects, ms, start)
+
+
+def _severity_icon(severity: int) -> str:
+    if severity >= 4:
+        return "🔴"
+    if severity == 3:
+        return "🟠"
+    if severity == 2:
+        return "🟡"
+    return "ℹ️"
+
+
+def _bpa_report_lines(report: BPAReport, model: str) -> list[str]:
+    lines = ["", "🔍 Running Fabric BPA analysis...",
+             "", "=" * 80, "FABRIC BPA ANALYSIS REPORT", "=" * 80,
+             f"Analysis completed: {report.timestamp}",
+             f"Duration: {report.analysis_duration_ms:.2f}ms",
+             f"Objects analyzed: {report.total_objects_analyzed}",
+             "", "VIOLATION SUMMARY:",
+             f"  🔴 Critical (4-5): {report.critical_count}",
+             f"  🟠 Errors (3):     {report.error_count}",
+             f"  🟡 Warnings (2):   {report.warning_count}",
+             f"  ℹ️  Info (1):       {report.info_count}",
+             f"  📊 Total:          {len(report.violations)}",
+             ""]
+    by_category: dict[str, list[BPAViolation]] = {}
+    for v in report.violations:
+        by_category.setdefault(v.category, []).append(v)
+    if by_category:
+        lines.append("VIOLATIONS BY CATEGORY:")
+        for category in sorted(by_category):
+            violations = by_category[category]
+            lines += ["", f"{category}: {len(violations)} violations"]
+            lines += [f"  {_severity_icon(v.severity)} {v.rule_name}: {v.object_name}"
+                      for v in violations]
+    else:
+        lines.append("✅ No violations found!")
+    lines += ["", "=" * 80]
+    if by_category:
+        lines += ["", f"📋 BPA Results Summary ({len(report.violations)} total violations):"]
+        for category in sorted(by_category):
+            violations = by_category[category]
+            critical = sum(1 for v in violations if v.severity >= 4)
+            errors = sum(1 for v in violations if v.severity == 3)
+            warnings = sum(1 for v in violations if v.severity == 2)
+            lines.append(f"  {category}: {len(violations)} violations ({critical} critical, "
+                         f"{errors} errors, {warnings} warnings)")
+    else:
+        lines += ["", "✅ BPA Analysis: No violations found!"]
+    lines += ["", "=" * 80, "FABRIC BPA AUDIT REPORT", "=" * 80,
+              f"Generated: {_dt.datetime.now()}",
+              f"Model: {model}",
+              "", "1. ANALYSIS SUMMARY",
+              f"   Duration: {report.analysis_duration_ms:.2f}ms",
+              f"   Objects analyzed: {report.total_objects_analyzed}",
+              f"   Rules evaluated: {len(BPA_RULES)}",
+              "", "2. VIOLATION SUMMARY",
+              f"   🔴 Critical (4-5): {report.critical_count}",
+              f"   🟠 Errors (3):     {report.error_count}",
+              f"   🟡 Warnings (2):   {report.warning_count}",
+              f"   ℹ️  Info (1):       {report.info_count}",
+              f"   📊 Total:          {len(report.violations)}",
+              ""]
+    if report.violations:
+        lines.append("3. RULES TRIGGERED")
+        counts: dict[str, int] = {}
+        for v in report.violations:
+            counts[v.rule_id] = counts.get(v.rule_id, 0) + 1
+        for rule_id, count_ in sorted(counts.items(), key=lambda item: item[1], reverse=True):
+            sample = next(v for v in report.violations if v.rule_id == rule_id)
+            lines += [f"   {rule_id}: {count_} violations",
+                      f"      Rule: {sample.rule_name}",
+                      f"      Category: {sample.category}",
+                      f"      Severity: {sample.severity}",
+                      ""]
+    lines.append("4. RECOMMENDATIONS")
+    if report.critical_count:
+        lines += ["   🚫 IMMEDIATE ACTION REQUIRED:",
+                  "      Fix critical violations before deployment"]
+    else:
+        lines.append("   ✅ No critical violations - deployment ready")
+    if report.error_count:
+        lines.append(f"   🟠 Address {report.error_count} error-level violations")
+    if report.warning_count:
+        lines.append(f"   🟡 Consider fixing {report.warning_count} warning-level violations")
+    lines += ["", "=" * 80]
+    return lines
 
 
 def check_bpa(c: LiveContext) -> CheckResult:
+    cid = "live-bpa"
+    health = c.client.health_check()
+    if health.get("status") != "healthy":
+        return CheckResult(cid, "fail", f"health check unhealthy: {health.get('error')}",
+                           {"health": health})
     report = LiveBPA(c.client, c.cfg.get("bpa")).analyze_model()
+    lines = _bpa_report_lines(report, str(c.client.dataset().get("workspaceName") or ""))
     cats: dict[str, int] = {}
     for v in report.violations:
         cats[v.category] = cats.get(v.category, 0) + 1
     details = {"by_category": cats, "objects": report.total_objects_analyzed,
-               "duration_ms": report.analysis_duration_ms,
+               "duration_ms": report.analysis_duration_ms, "health": health,
                "violations": [asdict(v) for v in report.violations]}
-    if report.critical_count:
-        return CheckResult("live-bpa", "fail", f"{report.critical_count} critical finding(s)", details)
+    failures = [v for v in report.violations if v.rule_id == "BPA_ANALYSIS_FAILED"]
+    if failures:
+        failure = failures[0]
+        return CheckResult(cid, "fail",
+                           f"🚫 BPA analysis failed: {failure.message}\n"
+                           f"Fix suggestion: {failure.fix_suggestion}\n\n"
+                           "This indicates a problem with model connectivity or permissions.",
+                           details, lines)
+    critical = report.get_violations_by_severity(4)
+    if critical:
+        listed = "\n".join(f"  🔴 {v.rule_name}: {v.object_name} ({v.message})"
+                           for v in critical)
+        return CheckResult(cid, "fail",
+                           f"🚫 {len(critical)} critical BPA violations found:\n{listed}\n\n"
+                           "These violations must be fixed before deployment. "
+                           "See BPA report for details and fix suggestions.", details, lines)
     if report.total_objects_analyzed == 0:
-        return CheckResult("live-bpa", "fail", "no objects could be analysed", details)
+        return CheckResult(cid, "fail", "no objects could be analysed", details, lines)
     if report.analysis_duration_ms >= (c.cfg.get("bpa") or {}).get("max_duration_ms", 30000):
-        return CheckResult("live-bpa", "fail", "the analysis took too long", details)
-    return CheckResult("live-bpa", "pass", f"{len(report.violations)} finding(s), none critical",
-                       details)
+        return CheckResult(cid, "fail", "the analysis took too long", details, lines)
+    return CheckResult(cid, "pass", f"{len(report.violations)} finding(s), none critical",
+                       details, lines)
 
 
 CHECKS: dict[str, Callable[[LiveContext], CheckResult]] = {
-    "live-refresh-status": check_refresh_status,
-    "live-freshness": check_freshness,
+    "live-uniform-row-limit": check_uniform_row_limit,
+    "live-calendar-rows": check_calendar_rows,
+    "live-dimension-multirow": check_dimension_multirow,
+    "live-calendar-vs-parameters": check_calendar_vs_parameters,
+    "live-parameter-audit": check_parameter_audit,
     "live-table-sample": check_table_sample,
     "live-dimension-rows": check_dimension_rows,
     "live-measure-sample": check_measure_sample,
     "live-parameter-table-measures": check_parameter_table_measures,
-    "live-uniform-row-limit": check_uniform_row_limit,
-    "live-calendar-rows": check_calendar_rows,
-    "live-dimension-multirow": check_dimension_multirow,
-    "live-calendar-scan": check_calendar_scan,
-    "live-calendar-vs-parameters": check_calendar_vs_parameters,
-    "live-parameter-audit": check_parameter_audit,
+    "live-refresh-status": check_refresh_status,
+    "live-freshness": check_freshness,
+    "live-smoke": check_smoke,
     "live-identity": check_identity,
     "live-filter-compare": check_filter_compare,
+    "live-calendar-scan": check_calendar_scan,
     "live-metadata": check_metadata,
     "live-filter-diagnostic": check_filter_diagnostic,
-    "live-smoke": check_smoke,
     "live-bpa": check_bpa,
 }
 

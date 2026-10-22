@@ -1,0 +1,13 @@
+table 'Coffee Measures'
+	lineageTag: 20d79eca-ef18-5399-ba14-617134a3752c
+
+		measure '!Roasts Sold' = SUM(_Roasts[RoastKey])
+			lineageTag: 7367d57f-8944-5555-905a-73678ab1fd1a
+
+	partition 'Coffee Measures' = calculated
+		mode: import
+		source =
+			let
+			    Source = #table({"!Roasts Sold"}, {})
+			in
+			    Source

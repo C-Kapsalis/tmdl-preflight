@@ -1,0 +1,21 @@
+table 'Coffee Measures'
+	lineageTag: 20d79eca-ef18-5399-ba14-617134a3752c
+
+	measure '!Cups Sold' = SUM(Sales[Cups])
+		lineageTag: 7367d57f-8944-5555-905a-73678ab1fd1a
+
+	measure '!Revenue' = SUM(Sales[Amount])
+		lineageTag: 110f24d5-1694-5fb6-802f-bf5422f70156
+
+	measure 'Avg Ticket' = DIVIDE([!Revenue], [!Cups Sold])
+		lineageTag: 8c524665-ec57-5d10-9595-19594483a107
+
+	measure 'Beans Roasted' = SUM(_Beans[Kilos])
+		lineageTag: 68b14a7d-54d3-508e-afb6-719e56685891
+
+	measure 'Shop Count' = COUNTROWS(_Shops)
+		lineageTag: 0bf2d83e-930a-5054-a456-c7089140fc30
+
+	partition 'Coffee Measures' = calculated
+		mode: import
+		source = ROW("x", 1)

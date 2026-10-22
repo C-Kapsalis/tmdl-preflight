@@ -1,0 +1,21 @@
+[
+  {
+    "query": "EVALUATE ROW( \"Value\", [!Selected Revenue], \"IsBlank\", ISBLANK([!Selected Revenue]) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Value]": null,
+                  "[IsBlank]": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

@@ -1,0 +1,107 @@
+[
+  {
+    "query": "EVALUATE ADDCOLUMNS( INFO.MEASURES(), \"HasDivision\", SEARCH(\"/\", [Expression], 1, 0) > 0, \"HasDIVIDE\", SEARCH(\"DIVIDE\", [Expression], 1, 0) > 0 )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Name]": "!Margin",
+                  "[Expression]": "DIVIDE([P], [S])",
+                  "[Description]": "Profit over sales.",
+                  "[HasDivision]": false,
+                  "[HasDIVIDE]": true,
+                  "[TableName]": "Coffee Measures"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE FILTER( INFO.COLUMNS(), [Type] = 2 )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": []
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE FILTER( INFO.MEASURES(), ISBLANK([Description]) || [Description] = \"\" )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": []
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"MeasureCount\", COUNTROWS(INFO.MEASURES()))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[MeasureCount]": 3
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"ColumnCount\", COUNTROWS(INFO.COLUMNS()))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[ColumnCount]": 12
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE { 1 }",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Value]": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

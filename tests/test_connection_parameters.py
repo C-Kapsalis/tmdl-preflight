@@ -34,6 +34,16 @@ def live(scenario: str, *checks: str, model: Path | None = None, strict: bool = 
     return code, json.loads(out) if out.strip() else {"stderr": err}
 
 
+def live_text(scenario: str, *checks: str, model: Path | None = None) -> tuple[int, str]:
+    model = model or LIVE / "models" / "coffee" / "Coffee.SemanticModel"
+    argv = ["live", str(model), "--workspace", "ws-coffee", "--dataset", "ds-coffee",
+            "--replay", str(LIVE / scenario)]
+    if checks:
+        argv += ["--checks", ",".join(checks)]
+    code, out, _err = run_cli(*argv)
+    return code, out
+
+
 def check_result(payload: dict, check_id: str) -> dict:
     found = [c for c in payload["checks"] if c["id"] == check_id]
     assert len(found) == 1, f"{check_id} missing from {payload}"
@@ -55,13 +65,14 @@ EXIT = {"fail": 1, "error": 1, "warn": 0, "pass": 0, "skip": 0}
 
 @pytest.mark.parametrize("scenario, outcome, message", [
     # fail: every table has exactly one row
-    pytest.param("uniform-all-one", "fail", "exactly one row", id="uniform-all-one"),
+    pytest.param("uniform-all-one", "fail", "exactly 1 row", id="uniform-all-one"),
     # warn: uniform 1000-row limit, acceptable for testing
     pytest.param("uniform-all-1000", "warn", "1000", id="uniform-all-1000"),
     # pass: counts vary
     pytest.param("uniform-varied", "pass", None, id="uniform-varied"),
     # warn: no count could be read
-    pytest.param("uniform-all-error", "warn", "could not retrieve any row counts", id="uniform-all-error"),
+    pytest.param("uniform-all-error", "warn", "Could not retrieve any row counts",
+                 id="uniform-all-error"),
 ])
 def test_detect_uniform_row_limit_pattern(scenario, outcome, message):
     code, payload = live(scenario, "live-uniform-row-limit")
@@ -78,7 +89,7 @@ def test_detect_uniform_row_limit_pattern(scenario, outcome, message):
 @pytest.mark.parametrize("scenario, outcome, note", [
     pytest.param("calendar-rows-1", "fail", None, id="calendar-rows-1"),
     pytest.param("calendar-rows-50", "warn", None, id="calendar-rows-50"),
-    pytest.param("calendar-rows-200", "pass", "less than one year", id="calendar-rows-200"),
+    pytest.param("calendar-rows-200", "pass", "less than 1 year", id="calendar-rows-200"),
     pytest.param("calendar-rows-730", "pass", None, id="calendar-rows-730"),
 ])
 def test_calendar_table_row_count_realistic(scenario, outcome, note):
@@ -86,10 +97,12 @@ def test_calendar_table_row_count_realistic(scenario, outcome, note):
     result = check_result(payload, "live-calendar-rows")
     assert result["outcome"] == outcome
     assert code == EXIT[outcome]
+    # the note about a short calendar is a line of the report block
+    code, out = live_text(scenario, "live-calendar-rows")
     if note:
-        assert note in result["message"]
+        assert note in out
     else:
-        assert "less than one year" not in result["message"]
+        assert "less than 1 year" not in out
 
 
 @pytest.mark.parametrize("scenario, outcome, single_row", [

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -337,8 +338,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_live = sub.add_parser("live", help="opt-in checks against the published dataset "
                                          "(Power BI REST; --replay answers from recordings)")
     p_live.add_argument("model", help="the local *.SemanticModel folder")
-    p_live.add_argument("--workspace", required=True, help="workspace (group) id")
-    p_live.add_argument("--dataset", required=True, help="dataset id")
+    p_live.add_argument("--workspace", help="workspace (group) id "
+                                            "(default: FABRIC_WORKSPACE_ID)")
+    p_live.add_argument("--dataset", help="dataset id (default: FABRIC_MODEL_ID)")
     p_live.add_argument("--checks", help="comma-separated live check ids (default: all)")
     p_live.add_argument("--json", action="store_true", help="machine-readable output")
     p_live.add_argument("--strict", action="store_true", help="exit 1 on warnings too")
@@ -1228,6 +1230,11 @@ def _cmd_live(args) -> int:
     model_dir = Path(args.model)
     if not (model_dir / "definition").is_dir():
         raise UsageError(f"{model_dir} has no definition/ folder; pass the local *.SemanticModel")
+    workspace = args.workspace or os.environ.get("FABRIC_WORKSPACE_ID")
+    dataset_id = args.dataset or os.environ.get("FABRIC_MODEL_ID")
+    if not workspace or not dataset_id:
+        raise UsageError("missing --workspace and --dataset "
+                         "(or FABRIC_WORKSPACE_ID and FABRIC_MODEL_ID)")
     options: dict = {}
     if not args.no_config:
         try:
@@ -1249,7 +1256,7 @@ def _cmd_live(args) -> int:
             token = live.token_provider(interactive=not args.non_interactive)
         except live.LiveUsageError as exc:
             raise UsageError(str(exc)) from exc
-        client = live.RestClient(args.workspace, args.dataset, token, args.cache_ttl)
+        client = live.RestClient(workspace, dataset_id, token, args.cache_ttl)
     if args.record:
         client = live.RecordingClient(client, Path(args.record))
     dataset = client.dataset()
@@ -1269,6 +1276,8 @@ def _cmd_live(args) -> int:
     else:
         print(f"dataset: {dataset.get('name')} (workspace {dataset.get('workspaceName')})")
         for r in results:
+            for line in r.report:
+                print(line)
             print(f"{r.outcome:5s}  {r.id}: {r.message}")
     return live.exit_code(results, args.strict)
 

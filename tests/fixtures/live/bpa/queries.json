@@ -12,21 +12,24 @@
                   "[Expression]": "[Sales] / [Orders]",
                   "[Description]": "",
                   "[HasDivision]": true,
-                  "[HasDIVIDE]": false
+                  "[HasDIVIDE]": false,
+                  "[TableName]": "Coffee Measures"
                 },
                 {
                   "[Name]": "!Margin",
                   "[Expression]": "DIVIDE([P], [S])",
                   "[Description]": "Profit over sales.",
                   "[HasDivision]": false,
-                  "[HasDIVIDE]": true
+                  "[HasDIVIDE]": true,
+                  "[TableName]": "Coffee Measures"
                 },
                 {
                   "[Name]": "Helper Ratio",
                   "[Expression]": "[A]/[B]",
                   "[Description]": "",
                   "[HasDivision]": true,
-                  "[HasDIVIDE]": false
+                  "[HasDIVIDE]": false,
+                  "[TableName]": "Coffee Measures"
                 }
               ]
             }
@@ -73,12 +76,14 @@
                 {
                   "[Name]": "!Revenue",
                   "[Expression]": "[Sales] / [Orders]",
-                  "[Description]": ""
+                  "[Description]": "",
+                  "[TableName]": "Coffee Measures"
                 },
                 {
                   "[Name]": "Helper Ratio",
                   "[Expression]": "[A]/[B]",
-                  "[Description]": ""
+                  "[Description]": "",
+                  "[TableName]": "Coffee Measures"
                 }
               ]
             }
@@ -96,7 +101,8 @@
             {
               "rows": [
                 {
-                  "[MeasureCount]": 3
+                  "[MeasureCount]": 3,
+                  "[TableName]": "Coffee Measures"
                 }
               ]
             }
