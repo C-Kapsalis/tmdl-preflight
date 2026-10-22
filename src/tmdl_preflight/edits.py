@@ -16,9 +16,10 @@ contract is the same for all of them:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 _BOM = "﻿"
 
@@ -86,6 +87,37 @@ def mixed_line_endings(path: Path) -> bool:
     lf = body.count("\n") - crlf
     cr = body.count("\r") - crlf
     return sum(1 for n in (crlf, lf, cr) if n) > 1
+
+
+def dump_json(data: Any, newline: str = "\n") -> str:
+    """The document as 2-space JSON with one trailing newline.
+
+    The key order of the document is kept, and a non-ASCII character is
+    written literally.
+    """
+    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    if newline != "\n":
+        text = text.replace("\n", newline)
+    return text
+
+
+def write_json(original: TextFile, data: Any) -> bool:
+    """Rewrite the file as 2-space JSON, keeping its byte-order mark.
+
+    The rewrite is proven: the new text must parse to the repaired
+    document. Raises :class:`EditRefused` when it does not.
+    """
+    expected = data
+
+    def verify(_old: str, new: str) -> None:
+        try:
+            written = json.loads(new)
+        except json.JSONDecodeError as exc:
+            raise EditRefused(f"the rewritten file is not valid JSON: {exc}") from exc
+        if written != expected:
+            raise EditRefused("the rewritten file does not hold the repaired document")
+
+    return verified_write(original, dump_json(data, original.newline), verify)
 
 
 def verified_write(

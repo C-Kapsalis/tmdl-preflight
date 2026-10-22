@@ -471,8 +471,8 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
 
         if not bookmark_files(ctx):
             raise UsageError(
-                "B003 was selected, but no bookmark file was found under the path "
-                "(archived copies are skipped); nothing scanned is not a clean result.")
+                f"error: no bookmark files under {ctx.root} — the glob is "
+                "broken, not the repo")
     if mode == "fix" and not getattr(args, "dry_run", False) and not getattr(args, "check", False):
         report = fix(ctx, ruleset, explicit=_parse_id_list(args.select))
     else:

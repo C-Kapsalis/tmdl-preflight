@@ -92,7 +92,10 @@ the example model with one defect each. Where that evidence and the
 | M022 | diagram-layout-blank (opt-in) | warning | yes |
 | M023 | model-validation-notes (opt-in) | info | no |
 | B005 | pages-metadata-schema (opt-in) | error | no |
+| B005 | pages-metadata-schema | error | no |
 | B006 | hierarchy-level-binding-shape | error | no |
+| B007 | report-format-schema | error | yes |
+| B008 | report-scaffold-integrity | error | no |
 | L001 | rls-role-grammar | error | no |
 | L002 | rls-username-function | error | no |
 | L003 | rls-in-values-bypass | error | no |
@@ -197,6 +200,76 @@ the same floor file and fails on a rise.
   (no RLS, static, dynamic via a mapping table, or incomplete) with the
   service-side concerns a file check cannot settle. BUGFIX: the section
   numbers of the original's guide are not printed, for the same reason.
+- BUGFIX: the report-format validator now runs as a check rule (B007): one
+  finding per defect, each carrying the validator's own message, and the
+  banner the script printed is not reproduced.
+- **B008** checks the report scaffold: `.platform`, `definition.pbir`,
+  `definition/version.json` and `definition/report.json` (and
+  `definition/pages/pages.json` when the report has pages) must be there, must
+  parse, and must carry the three properties the loader reads. A folder that
+  holds only `.platform` and `definition.pbir` (the blank-report form) needs
+  no version.json and no report.json. The option `required_files` adds the
+  files a team's own template requires.
+- BUGFIX: `.pbi/localSettings.json` is not a required file: one script wanted
+  it, the report-format validator only warns when it is there (B007), and the
+  rule follows the validator.
+- **B001** writes the bookmark file whole again (2-space indent, the key order
+  kept, one trailing newline), so the file it leaves behind is the one the
+  bookmark type checker wrote. Its findings carry the checker's wording
+  (`[howCreated] at howCreated = 'User' (string, must be int)`), and a value
+  the fixer cannot convert is no longer tagged as auto-fixable.
+- BUGFIX: a `howCreated` of `"-1"` becomes the integer -1; the original left
+  the string alone and failed its own re-check.
+- BUGFIX: a bookmark that starts with a byte-order mark is read; the original
+  counted it as an unreadable file.
+- `check` and `fix` accept a `*.bookmark.json` file, or a folder that holds
+  bookmark files, as a target: the bookmark rules no longer need a report
+  folder around them.
+- **B002** counts a visual only when it is a folder directly under a page's
+  `visuals` folder; a folder named `visuals` anywhere else (a theme's static
+  resources, for example) holds no visual and no longer hides a dangling
+  reference. A report's bookmarks are the files directly under its
+  `definition/bookmarks` folder. Its findings carry the original wording
+  (`<file>: visualName '<ref>' has no matching visual directory`, and
+  `Could not parse <path>: <error>` for a file it cannot read), and the rule
+  description keeps the advice on how to resolve one.
+- **B003** names the file it found an illegal key in, relative to the scan
+  root, so two reports that hold a bookmark of the same name are told apart:
+  the finding is `<path>  ->  options.<key>` and the fix line is
+  `<path>  ->  removed options.<key>`. The summaries are the ones the repair
+  script printed (`<n> illegal options key(s) across <scanned> bookmark
+  file(s):`, `clean: <scanned> bookmark file(s), no illegal options keys`,
+  `fixed <n> illegal options key(s):`, `nothing to fix: <scanned> bookmark
+  file(s) already clean`, and `REFUSED <n> unsafe repair(s):`).
+- BUGFIX: B003 removes an illegal key whatever its value is (an object, an
+  array, a number in exponent form); the original refused those repairs and
+  left the file unchanged.
+- STRICTER: **B005** (pages-metadata-schema) is no longer opt-in: the pages
+  metadata is checked in every run, because a report whose `pages.json`
+  declares another schema or whose `pageOrder` is not a list breaks the page
+  navigation. The option `accepted_schemas` still says which versions are
+  expected.
+- BUGFIX: **B004** reads `pageOrder` as a list of page names; a `pageOrder`
+  that is a string is no longer read as a list of one-letter page names (B005
+  reports it).
+- **B006** names the offender the way the gate that grew out of the same
+  script named it: `<visual.json>:<json path>.HierarchyLevel` (the path
+  starts with a dot), and `<visual.json>: invalid JSON (<error>)` for a file
+  it cannot read.
+- `check --select B003` on a path with no bookmark file says `error: no
+  bookmark files under <path> — the glob is broken, not the repo` and exits
+  2.
+- BUGFIX: a "MISSING $schema" finding of B007 names the path relative to the
+  `.Report` folder (`definition/pages/p1/visuals/v1/visual.json`, `.platform`);
+  the original computed the path three folders up, which was wrong for every
+  file but `page.json`.
+- BUGFIX: a `definition.pbir` whose `version` is not a string is an invalid
+  version format, and a file that is not a JSON object is skipped; the original
+  crashed on both. A byte-order mark is tolerated.
+- **B007** tags only the findings its fixer repairs as auto-fixable: the
+  schema URL and the version format of `version.json`. Everything else it
+  reports (a missing `definition.pbir`, a `report.json` without a theme, a
+  content file without a `$schema`) is a human decision.
 - **M002** pairs ``` fences by structure (a fence opens after `=` and closes
   on the next line that starts with backticks), so backticks inside a fenced
   string literal are no longer an "unpaired fence". It also reports a
@@ -538,6 +611,10 @@ unchanged.
 - `fix --dry-run` reports what would be repaired and writes nothing.
 - `fix --verbose` lists every file a dry run would change (the attach mode
   of M013 lists its files only with this flag).
+- STRICTER: `fix` exits 1 when findings remain after the re-check; the
+  original's fixers always exited 0 and left the verdict to the gate that ran
+  them. The re-check is the fix contract of every rule, so the run says what
+  is left.
 - `fix --clear-cache` deletes `<Model>.SemanticModel/.pbi/cache.abf` after
   lineage tags changed; without it the tool prints a hint when the cache
   exists.

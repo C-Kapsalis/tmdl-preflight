@@ -39,6 +39,7 @@ def scan_summary(ctx: Context) -> dict[str, int]:
         bookmarks += sum(1 for _ in report_dir.rglob("*.bookmark.json"))
         pages += sum(1 for _ in report_dir.rglob("page.json"))
         visuals += sum(1 for _ in report_dir.rglob("visual.json"))
+    bookmarks += len(ctx.bookmark_targets)
     return {
         "files": ctx.files_scanned(),
         "models": len(models),
@@ -193,6 +194,7 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
 
     dirty_rule_ids = {v.rule_id for v in first.violations}
     chosen = {e.lower() for e in (explicit or set())}
+    notes_before = len(ctx.notes)
     for rule in ruleset.rules:
         if not rule.fixable or (rule.id not in dirty_rule_ids and not rule.pending_repairs(ctx)):
             continue
@@ -208,12 +210,15 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
         # new state, not the parse cache.
         ctx.reload()
 
+    # what a fixer had to say survives the re-check, which starts with an
+    # empty note list
+    fixer_notes = list(ctx.notes[notes_before:])
     report.fix_notes = list(ctx.fix_notes)
     second = check(ctx, ruleset)
     report.refused_fixes = list(ctx.refused_fixes)
     report.violations = second.violations
     report.scanned = second.scanned
-    report.notes = list(dict.fromkeys(ctx.fix_notes + second.notes))
+    report.notes = list(dict.fromkeys(ctx.fix_notes + fixer_notes + second.notes))
     report.skipped = second.skipped
     report.skip_reasons = second.skip_reasons
     report.blocks = list(ctx.blocks)

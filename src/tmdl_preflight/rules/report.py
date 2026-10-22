@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
-from ..edits import EditRefused, read_text_file, verified_write
+from ..edits import EditRefused, read_text_file, verified_write, write_json
 from .base import Context, Rule, Severity, Violation
 
 # Bookmark JSON fields the report loader requires to be JSON integers.
@@ -38,9 +38,44 @@ def _bookmark_files(report_dir: Path, ctx: Optional[Context] = None) -> list[Pat
     return out
 
 
+def _is_archived(ctx: Context, path: Path) -> bool:
+    """Is this bookmark a copy of a report that was archived?"""
+    markers = (ctx.options.get("bookmarks") or {}).get("archive_markers", ARCHIVE_MARKERS)
+    if not markers:
+        return False
+    rel = ctx.scan_relative(path) or path.as_posix()
+    return any(m in rel for m in markers)
+
+
 def bookmark_files(ctx: Context) -> list[Path]:
     """Every bookmark file in scope (archived copies skipped)."""
-    return [f for r in ctx.report_dirs for f in _bookmark_files(r, ctx)]
+    files = [f for r in ctx.report_dirs for f in _bookmark_files(r, ctx)]
+    files.extend(f for f in ctx.bookmark_targets if not _is_archived(ctx, f))
+    return sorted(set(files))
+
+
+def report_of(path: Path) -> Optional[Path]:
+    """The report folder a bookmark belongs to, when there is one."""
+    for parent in path.parents:
+        if parent.name.endswith(".Report"):
+            return parent
+    return None
+
+
+def _relative(ctx: Context, path: Path) -> str:
+    """The path of a file relative to the scan root (POSIX)."""
+    return ctx.scan_relative(path) or path.name
+
+
+def _direct_bookmarks(ctx: Context) -> list[Path]:
+    """The bookmarks the scan root names itself (a file, or a folder of them)."""
+    out: list[Path] = []
+    for target in ctx.bookmark_targets:
+        if target.is_file():
+            out.append(target)
+        else:
+            out.extend(sorted(p for p in target.glob("*.bookmark.json") if p.is_file()))
+    return [f for f in out if not _is_archived(ctx, f)]
 
 
 def _walk_string_ints(obj: Any, path: str = "") -> Iterator[tuple[str, str, str]]:
@@ -87,38 +122,6 @@ def _coerce_value(key: str, value: str) -> Optional[int]:
     return None
 
 
-def surgical_coerce_string_ints(text: str) -> tuple[str, list[str]]:
-    """Rewrite string-typed int fields in the JSON *text* itself.
-
-    Only the offending values change (``"howCreated": "0"`` becomes
-    ``"howCreated": 0``); key order, spacing and every other byte stay as
-    they were. The edit is proven by parsing both sides: the new document
-    must equal the old one with exactly those values coerced. Raises
-    ``EditRefused`` otherwise.
-    """
-    before = json.loads(text)
-    expected = copy.deepcopy(before)
-    fixes = _coerce_string_ints(expected)
-    if not fixes:
-        return text, []
-    new = text
-    for key in INT_FIELDS:
-        pattern = re.compile(r'("' + re.escape(key) + r'"\s*:\s*)"([^"\\]*)"')
-
-        def repl(m: "re.Match[str]", key: str = key) -> str:
-            target = _coerce_value(key, m.group(2))
-            return m.group(0) if target is None else f"{m.group(1)}{target}"
-
-        new = pattern.sub(repl, new)
-    try:
-        after = json.loads(new)
-    except json.JSONDecodeError as exc:
-        raise EditRefused(f"edit produced invalid JSON: {exc}") from exc
-    if after != expected:
-        raise EditRefused("edit changed something beyond the string-typed integers")
-    return new, fixes
-
-
 class BookmarkIntegerTypesRule(Rule):
     id = "B001"
     name = "bookmark-int-types"
@@ -128,42 +131,73 @@ class BookmarkIntegerTypesRule(Rule):
         "Bookmark JSON requires howCreated, ComparisonKind and Version to be "
         "JSON integers. String values ('0', 'User', '2') make the report "
         "loader reject the bookmark with 'Expected Number but got String'. "
-        "Auto-fix rewrites only the offending values in place, then proves the "
-        "edit by parsing both versions of the file."
+        "The auto-fix rewrites the file with the integers in place."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
-        for report_dir in ctx.report_dirs:
-            for bf in _bookmark_files(report_dir, ctx):
-                try:
-                    data = json.loads(bf.read_text(encoding="utf-8-sig"))
-                except (json.JSONDecodeError, OSError) as exc:
-                    out.append(self.violation(f"unreadable bookmark JSON: {exc}", file=bf))
-                    continue
-                for json_path, field, value in _walk_string_ints(data):
-                    out.append(
-                        self.violation(
-                            f"{field} at {json_path} is the string '{value}' "
-                            f"(must be a JSON integer)",
-                            file=bf,
-                            obj=bf.stem,
-                        )
-                    )
+        files = bookmark_files(ctx)
+        if not files:
+            ctx.notes.append(f"No .bookmark.json files found under {ctx.root}")
+            return out
+        total = 0
+        dirty = 0
+        for bf in files:
+            try:
+                data = json.loads(bf.read_text(encoding="utf-8-sig"))
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+                out.append(self.violation(
+                    f"ERROR reading {bf}: {exc}", file=bf, fixable=False))
+                total += 1
+                dirty += 1
+                continue
+            found = 0
+            for json_path, field, value in _walk_string_ints(data):
+                out.append(self.violation(
+                    f"[{field}] at {json_path} = '{value}' (string, must be int)",
+                    file=bf,
+                    obj=bf.stem,
+                    fixable=_coerce_value(field, value) is not None,
+                ))
+                found += 1
+            total += found
+            dirty += 1 if found else 0
+        if total:
+            ctx.notes.append(
+                f"Total: {total} violation(s) across {dirty} file(s).")
         return out
 
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
-        for report_dir in ctx.report_dirs:
-            for bf in _bookmark_files(report_dir, ctx):
-                try:
-                    original = read_text_file(bf)
-                    new_text, fixes = surgical_coerce_string_ints(original.text)
-                    if fixes and verified_write(original, new_text):
-                        applied.extend(f"{bf.name}: {fx}" for fx in fixes)
-                except (json.JSONDecodeError, OSError, UnicodeDecodeError, EditRefused):
-                    continue  # unreadable or unprovable: stays a check failure
+        files_changed = 0
+        total = 0
+        for bf in bookmark_files(ctx):
+            try:
+                original = read_text_file(bf)
+                data = json.loads(original.text)
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                continue  # unreadable: stays a check failure
+            fixes = _coerce_string_ints(data)
+            if not fixes:
+                continue
+            try:
+                written = write_json(original, data)
+            except EditRefused:
+                continue
+            if written:
+                files_changed += 1
+                total += len(fixes)
+                applied.extend(f"fix: {fx}" for fx in fixes)
+        if files_changed:
+            ctx.notes.append(
+                f"Applied {total} fix(es) across {files_changed} file(s).")
+        else:
+            ctx.notes.append("No fixes needed.")
         return applied
+
+    def pending_repairs(self, ctx: Context) -> bool:
+        """True when there is a bookmark file to look at."""
+        return bool(bookmark_files(ctx))
 
 
 class BookmarkVisualRefsRule(Rule):
@@ -174,18 +208,28 @@ class BookmarkVisualRefsRule(Rule):
         "Every visualName a bookmark captures must resolve to an actual "
         "visual folder under pages/*/visuals/. A dangling reference means "
         "the visual was renamed or deleted after the bookmark was authored; "
-        "the bookmark will silently no-op or break on apply. Not "
-        "auto-fixable: the right resolution (restore the visual, retarget "
-        "or delete the bookmark) depends on intent."
+        "the bookmark will silently no-op or break on apply. It cannot be "
+        "auto-repaired: restore the missing visual, retarget the bookmark to "
+        "an existing visual, or delete the obsolete bookmark."
     )
 
     @staticmethod
     def _visual_names(report_dir: Path) -> set[str]:
+        """The names of the visuals the report holds.
+
+        Only the folders directly under a page's ``visuals`` folder count:
+        a folder named ``visuals`` anywhere else (a theme's static
+        resources, for example) holds no visual.
+        """
         names: set[str] = set()
-        for visuals_dir in report_dir.rglob("visuals"):
+        pages = report_dir / "definition" / "pages"
+        if not pages.is_dir():
+            return names
+        for page_dir in sorted(pages.iterdir()):
+            visuals_dir = page_dir / "visuals"
             if not visuals_dir.is_dir():
                 continue
-            for vdir in visuals_dir.iterdir():
+            for vdir in sorted(visuals_dir.iterdir()):
                 if vdir.is_dir():
                     names.add(vdir.name)
         return names
@@ -210,38 +254,49 @@ class BookmarkVisualRefsRule(Rule):
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
-        for report_dir in ctx.report_dirs:
-            visuals = self._visual_names(report_dir)
-            bookmarks = _bookmark_files(report_dir, ctx)
-            if not bookmarks or not visuals:
+        pairs = self._bookmarks_in_scope(ctx)
+        if not pairs:
+            return out
+        visuals = {report: self._visual_names(report) for _bf, report in pairs}
+        for bf, report in pairs:
+            if not visuals[report]:
                 continue
-            for bf in bookmarks:
-                try:
-                    data = json.loads(bf.read_text(encoding="utf-8-sig"))
-                except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+            try:
+                data = json.loads(bf.read_text(encoding="utf-8-sig"))
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+                out.append(self.violation(
+                    f"Could not parse {bf}: {exc}", file=bf, obj=bf.stem))
+                continue
+            if not isinstance(data, dict):
+                continue
+            for ref in self._referenced_visuals(data):
+                if ref not in visuals[report]:
                     out.append(self.violation(
-                        f"bookmark file cannot be read as JSON ({exc}); its visual "
-                        f"references cannot be checked and the report loader rejects it.",
+                        f"{bf.name}: visualName '{ref}' has no matching visual "
+                        f"directory",
                         file=bf, obj=bf.stem))
-                    continue
-                if not isinstance(data, dict):
-                    continue
-                for ref in self._referenced_visuals(data):
-                    if ref not in visuals:
-                        out.append(
-                            self.violation(
-                                f"bookmark captures visual '{ref}', but no "
-                                f"visual folder with that name exists under "
-                                f"pages/. The visual was probably renamed or "
-                                f"deleted after the bookmark was created, so "
-                                f"the bookmark will silently stop working; "
-                                f"restore the visual, re-create the bookmark, "
-                                f"or delete it.",
-                                file=bf,
-                                obj=bf.stem,
-                            )
-                        )
         return out
+
+    @staticmethod
+    def _bookmarks_in_scope(ctx: Context) -> list[tuple[Path, Path]]:
+        """The bookmark files to read, each with the report folder it is in.
+
+        A report's bookmarks are the files directly under its
+        ``definition/bookmarks`` folder: a copy in a sub-folder is not one.
+        """
+        pairs: list[tuple[Path, Path]] = []
+        for report_dir in ctx.report_dirs:
+            folder = report_dir / "definition" / "bookmarks"
+            if not folder.is_dir():
+                continue
+            for bf in sorted(folder.glob("*.bookmark.json")):
+                if not _is_archived(ctx, bf):
+                    pairs.append((bf, report_dir))
+        for bf in _direct_bookmarks(ctx):
+            report = report_of(bf)
+            if report is not None:
+                pairs.append((bf, report))
+        return pairs
 
 
 # Keys the report loader accepts in a bookmark's "options" object.
@@ -349,40 +404,64 @@ class BookmarkOptionsSchemaRule(Rule):
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
-        for report_dir in ctx.report_dirs:
-            for bf in _bookmark_files(report_dir, ctx):
-                try:
-                    data = json.loads(bf.read_text(encoding="utf-8-sig"))
-                except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-                    continue  # B001 reports unreadable bookmarks
-                for key in illegal_option_keys(data):
-                    out.append(
-                        self.violation(
-                            f"options.{key} is not a bookmark option the "
-                            f"report schema accepts, so the report is rejected "
-                            f"on import. Remove it (the auto-fix does); the "
-                            f"accepted keys are "
-                            f"{', '.join(sorted(ALLOWED_OPTIONS_KEYS))}.",
-                            file=bf,
-                            obj=bf.stem,
-                        )
-                    )
+        files = bookmark_files(ctx)
+        if not files:
+            return out
+        offenders = 0
+        for bf in files:
+            try:
+                data = json.loads(bf.read_text(encoding="utf-8-sig"))
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                continue  # B001 reports unreadable bookmarks
+            for key in illegal_option_keys(data):
+                out.append(self.violation(
+                    f"{_relative(ctx, bf)}  ->  options.{key}",
+                    file=bf,
+                    obj=bf.stem,
+                ))
+                offenders += 1
+        if offenders:
+            ctx.notes.append(
+                f"{offenders} illegal options key(s) across {len(files)} "
+                "bookmark file(s):")
+        else:
+            ctx.notes.append(
+                f"clean: {len(files)} bookmark file(s), no illegal options keys")
         return out
 
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
-        for report_dir in ctx.report_dirs:
-            for bf in _bookmark_files(report_dir, ctx):
-                try:
-                    original = read_text_file(bf)
-                    new_text, removed = strip_illegal_options(original.text)
-                    if removed and verified_write(original, new_text):
-                        applied.extend(f"{bf.name}: removed options.{k}" for k in removed)
-                except EditRefused as exc:
-                    ctx.refused_fixes.append(f"{self.id}: {bf}: {exc}")
-                except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-                    continue
+        files = bookmark_files(ctx)
+        fixed = 0
+        refused = 0
+        for bf in files:
+            try:
+                original = read_text_file(bf)
+                new_text, removed = strip_illegal_options(original.text)
+            except EditRefused as exc:
+                ctx.refused_fixes.append(f"{_relative(ctx, bf)}: {exc}")
+                refused += 1
+                continue
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                continue
+            if not removed:
+                continue
+            if verified_write(original, new_text):
+                rel = _relative(ctx, bf)
+                applied.extend(f"{rel}  ->  removed options.{k}" for k in removed)
+                fixed += len(removed)
+        if refused:
+            ctx.notes.append(f"REFUSED {refused} unsafe repair(s):")
+        elif fixed:
+            ctx.notes.append(f"fixed {fixed} illegal options key(s):")
+        else:
+            ctx.notes.append(
+                f"nothing to fix: {len(files)} bookmark file(s) already clean")
         return applied
+
+    def pending_repairs(self, ctx: Context) -> bool:
+        """True when there is a bookmark file to look at."""
+        return bool(bookmark_files(ctx))
 
 
 class ReportDefinitionIntegrityRule(Rule):
@@ -447,7 +526,9 @@ class ReportDefinitionIntegrityRule(Rule):
                     )
                     meta = None
                 if isinstance(meta, dict):
-                    names = [n for n in meta.get("pageOrder") or [] if isinstance(n, str)]
+                    order = meta.get("pageOrder")
+                    names = [n for n in order if isinstance(n, str)] \
+                        if isinstance(order, list) else []
                     active = meta.get("activePageName")
                     if isinstance(active, str) and active not in names:
                         names.append(active)
@@ -495,11 +576,10 @@ class PagesMetadataSchemaRule(Rule):
     id = "B005"
     name = "pages-metadata-schema"
     severity = Severity.ERROR
-    opt_in = True
     option_defaults = {"accepted_schemas": [PAGES_METADATA_SCHEMA]}
     description = (
-        "Opt-in pin of the PBIR pages metadata: definition/pages/pages.json "
-        "must exist, declare an accepted $schema (default: the 1.1.0 URL; "
+        "Pin of the PBIR pages metadata: definition/pages/pages.json must "
+        "exist, declare an accepted $schema (default: the 1.1.0 URL; "
         "accepted_schemas lists the versions your tooling expects) and a "
         "pageOrder array. A missing file or a pageOrder that is not a list "
         "breaks page navigation; an unexpected schema version means the file "
@@ -541,7 +621,7 @@ class PagesMetadataSchemaRule(Rule):
 def _hierarchy_problems(node: Any, path: str = "") -> Iterator[tuple[str, str]]:
     if isinstance(node, dict):
         for key, value in node.items():
-            here = f"{path}.{key}" if path else key
+            here = f"{path}.{key}"
             if key == "HierarchyLevel" and isinstance(value, dict):
                 expr = value.get("Expression")
                 problems = []
@@ -566,9 +646,10 @@ class HierarchyLevelBindingShapeRule(Rule):
     description = (
         "A visual field bound to a hierarchy level must be written as "
         "HierarchyLevel: {Expression: {Hierarchy: ...}, Level: <name>}: the "
-        "Level sits next to the Expression, never inside it. Any other shape "
-        "does not match the report definition schema, so the report can fail "
-        "to load. Unparseable visual.json files are reported too."
+        "Level sits next to the Expression, never inside it, and both parts "
+        "must be there. Any other shape does not match the report definition "
+        "schema, so the report can fail to load. Unparseable visual.json "
+        "files are reported too."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -581,12 +662,9 @@ class HierarchyLevelBindingShapeRule(Rule):
                 try:
                     data = json.loads(vf.read_text(encoding="utf-8-sig"))
                 except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
-                    out.append(self.violation(f"visual.json cannot be parsed ({exc}).",
+                    out.append(self.violation(f"{vf}: invalid JSON ({exc})",
                                               file=vf, obj=vf.parent.name))
                     continue
-                for where, problem in _hierarchy_problems(data):
-                    out.append(self.violation(
-                        f"HierarchyLevel at {where} {problem}; write it as "
-                        f"{{Expression: {{Hierarchy: ...}}, Level: ...}}.",
-                        file=vf, obj=f"{vf.parent.name}:{where}"))
+                for where, _problem in _hierarchy_problems(data):
+                    out.append(self.violation(f"{vf}:{where}", file=vf, obj=where))
         return out

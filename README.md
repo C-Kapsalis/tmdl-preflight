@@ -14,7 +14,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 
 ## Features
 
-- **117 rules** over the failure modes that reject imports or silently corrupt
+- **119 rules** over the failure modes that reject imports or silently corrupt
   results: duplicate lineage tags and object names, TMDL properties leaked
   into DAX, dangling `///` descriptions, tables with no partition, inline
   `#table` entity sources that force a composite model, DAX references to
@@ -25,7 +25,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
   opt-in, and project contracts (required objects, pinned relationships,
   field-parameter registrations) are declared in the configuration. The
   full catalog is generated into [`docs/rules.md`](docs/rules.md).
-- **24 auto-fixers** for the defects whose repair is fully mechanical,
+- **25 auto-fixers** for the defects whose repair is fully mechanical,
   applied via a check → fix → re-check loop that never lets a fixer vouch
   for itself.
 - **Surgical, verified edits.** Fixers rewrite single lines or single JSON
@@ -199,8 +199,10 @@ commit.
 | B002 | bookmarks referencing renamed or deleted visuals | error | no |
 | B003 | bookmark `options` keys outside the report schema | error | yes |
 | B004 | `definition.pbir` pointing at a missing model, `pages.json` naming missing pages, unparseable `visual.json` | error | no |
-| B005 | `pages.json` missing, with an unexpected `$schema`, or without a `pageOrder` list (opt-in) | error | no |
+| B005 | `pages.json` missing, with an unexpected `$schema`, or without a `pageOrder` list | error | no |
 | B006 | a `HierarchyLevel` binding with its `Level` inside the `Expression`, or missing either part | error | no |
+| B007 | a report folder whose `definition.pbir`, `version.json`, `report.json` or content files do not declare the published schemas | error | yes |
+| B008 | a report folder that misses a scaffold file, or whose files do not parse or lack the properties the loader reads | error | no |
 | L001 | a role without `modelPermission: read`, or a `tablePermission` with no filter | error | no |
 | L002 | a row filter that calls `USERNAME()` instead of `USERPRINCIPALNAME()` | error | no |
 | L003 | an `IN VALUES(...)` row filter that does not restrict the mapping table to the signed-in user | error | no |

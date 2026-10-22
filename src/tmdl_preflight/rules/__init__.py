@@ -124,6 +124,7 @@ from .report import (
     PagesMetadataSchemaRule,
     ReportDefinitionIntegrityRule,
 )
+from .report_format import ReportFormatSchemaRule, ReportScaffoldIntegrityRule
 from .structural import (
     CalcGroupImplicitMeasuresRule,
     ColumnDataTypeRule,
@@ -237,6 +238,8 @@ ALL_RULES: list[type[Rule]] = [
     BookmarkVisualRefsRule,
     BookmarkOptionsSchemaRule,
     ReportDefinitionIntegrityRule,
+    ReportFormatSchemaRule,
+    ReportScaffoldIntegrityRule,
     PagesMetadataSchemaRule,
     HierarchyLevelBindingShapeRule,
     FormatStringPresenceRule,

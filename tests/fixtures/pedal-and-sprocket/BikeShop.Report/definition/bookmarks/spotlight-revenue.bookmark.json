@@ -1,4 +1,5 @@
 {
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/1.4.0/schema.json",
   "name": "bm-spotlight-revenue",
   "displayName": "Spotlight revenue",
   "howCreated": 0,

@@ -54,3 +54,55 @@ class TestBookmarkVisualRefs:
         bm.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         code, payload = run_check(report, "B002")
         assert code == 1 and len(violations(payload, "B002")) == 1
+
+
+class TestBookmarkVisualScope:
+    """The set of existing visuals, and the bookmarks that are read."""
+
+    def test_a_visual_folder_outside_the_pages_does_not_count(self, project, report_dir):
+        """A folder named 'visuals' anywhere else holds no visual."""
+        bm = report_dir / "definition" / "bookmarks" / "spotlight-revenue.bookmark.json"
+        data = json.loads(bm.read_text(encoding="utf-8"))
+        data["options"]["targetVisualNames"] = ["v9"]
+        bm.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        static = report_dir / "StaticResources" / "visuals" / "v9"
+        static.mkdir(parents=True, exist_ok=True)
+        (static / "image.png").write_bytes(b"\x89PNG\r\n")
+        code, payload = run_check(report_dir, "B002")
+        assert code == 1
+        found = violations(payload, "B002")
+        assert len(found) == 1
+        assert "v9" in found[0]["message"]
+
+    def test_a_bookmark_in_a_sub_folder_is_not_read(self, project, report_dir):
+        bm = report_dir / "definition" / "bookmarks" / "spotlight-revenue.bookmark.json"
+        data = json.loads(bm.read_text(encoding="utf-8"))
+        data["options"]["targetVisualNames"] = ["v9"]
+        sub = report_dir / "definition" / "bookmarks" / "sub"
+        sub.mkdir(parents=True, exist_ok=True)
+        (sub / "copy.bookmark.json").write_text(
+            json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        code, payload = run_check(report_dir, "B002")
+        assert code == 0, payload
+        assert violations(payload, "B002") == []
+
+    def test_the_finding_carries_the_original_wording(self, project, report_dir):
+        bm = report_dir / "definition" / "bookmarks" / "spotlight-revenue.bookmark.json"
+        data = json.loads(bm.read_text(encoding="utf-8"))
+        data["options"]["targetVisualNames"] = ["v9"]
+        bm.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        code, payload = run_check(report_dir, "B002")
+        assert code == 1
+        found = violations(payload, "B002")
+        assert len(found) == 1
+        assert found[0]["message"] == (
+            "spotlight-revenue.bookmark.json: visualName 'v9' has no matching visual directory")
+
+    def test_an_unreadable_bookmark_says_so(self, project, report_dir):
+        broken = report_dir / "definition" / "bookmarks" / "broken.bookmark.json"
+        broken.write_text("{", encoding="utf-8")
+        code, payload = run_check(report_dir, "B002")
+        assert code == 1
+        found = violations(payload, "B002")
+        assert len(found) == 1
+        assert found[0]["message"].startswith(f"Could not parse {broken}: ")
