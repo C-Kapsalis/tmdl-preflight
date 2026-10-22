@@ -223,3 +223,35 @@ def test_a_repaired_table_is_pruned_from_its_own_model_entry_only(stand_in):
     assert data["refresh_policy"]["backlog"]["ir_fix_db/Roastery"] == []
     assert data["refresh_policy"]["backlog"]["ir_stamp_db/Roastery"] == ["Orders"]
     assert "Ratchet: pruned 1 entr(ies) from .tmdl-preflight.json `backlog:`." in out, out
+
+
+def test_the_pruned_backlog_is_still_a_readable_configuration(stand_in):
+    """Every other line of the file stays byte-identical."""
+    root = stand_in(ROOT)
+    cfg = root / ".tmdl-preflight.json"
+    cfg.write_text(
+        '{\n'
+        '  "refresh_policy": {\n'
+        '    "loader_function": "source_filter_dates",\n'
+        '    "window_markers": ["ir_dfilter"],\n'
+        '    "inline_template": "let ir_dfilter = \\" {date_column} >= RangeStart\\" in Source",\n'
+        '    "backlog": {"ir_fix_db/Roastery": ["Orders", "Ads"]}\n'
+        '  }\n'
+        '}\n', encoding="utf-8")
+    code, out, err = run_cli("fix", str(root), "--select", STRUCT, "--config", str(cfg))
+    text = cfg.read_text(encoding="utf-8")
+    assert json.loads(text)["refresh_policy"]["backlog"] == {"ir_fix_db/Roastery": []}
+    assert '"loader_function": "source_filter_dates"' in text
+    assert "Ratchet: pruned 2 entr(ies)" in out, out
+
+
+def test_the_pruned_entries_can_be_kept(stand_in):
+    root = stand_in(ROOT)
+    cfg = write_config(root, dict(CONFIG, refresh_policy=dict(
+        CONFIG["refresh_policy"],
+        backlog={"ir_fix_db/Roastery": ["Orders"]})))
+    code, out, err = run_cli("fix", str(root), "--select", STRUCT, "--config", str(cfg),
+                             "--no-prune")
+    data = json.loads(cfg.read_text(encoding="utf-8"))
+    assert data["refresh_policy"]["backlog"]["ir_fix_db/Roastery"] == ["Orders"]
+    assert "Ratchet" not in out, out

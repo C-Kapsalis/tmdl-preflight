@@ -99,6 +99,8 @@ def _array_items(text: str, start: int):
             i += 1
             continue
         v_end = _value_end(text, i)
+        if v_end <= i:
+            return
         yield i, v_end
         i = v_end
 
@@ -119,42 +121,42 @@ def _find_path(text: str, path: list[str]) -> Optional[tuple[int, int]]:
     return (start, end)
 
 
-def _element_span(text: str, s: int, e: int) -> tuple[int, int]:
-    """The span to cut when the array element at ``[s, e)`` is removed."""
-    line_start = text.rfind("\n", 0, s) + 1
-    before = text[line_start:s]
-    line_end = text.find("\n", e)
-    if line_end < 0:
-        line_end = len(text)
-    after = text[e:line_end]
-    if not before.strip() and not after.strip().rstrip(",").strip():
-        # the element owns its line: cut the whole line
-        return line_start, (line_end + 1 if line_end < len(text) else line_end)
-    j = e
-    while j < len(text) and text[j] in " \t\r\n":
-        j += 1
-    if j < len(text) and text[j] == ",":
-        return s, j + 1
-    j = s - 1
-    while j >= 0 and text[j] in " \t\r\n":
-        j -= 1
-    if j >= 0 and text[j] == ",":
-        return j, e
-    return s, e
 
-
-def _element_cuts(text: str, start: int, end: int, names: set[str]) -> list[tuple[int, int]]:
+def _element_cuts(text: str, start: int, end: int,
+                  names: set[str]) -> tuple[list[tuple[int, int]], int]:
     """The spans to cut when the named elements are removed from the array
-    at ``[start, end)``."""
-    cuts: list[tuple[int, int]] = []
-    for s, e in _array_items(text, start):
+    at ``[start, end)``, and how many elements that is.
+
+    The comma that separates two removed elements goes with one of them,
+    never with both: two cuts that overlap would take a bracket with them.
+    """
+    items = list(_array_items(text, start))
+    drop: set[int] = set()
+    removed = 0
+    for k, (s, e) in enumerate(items):
         try:
             value = json.loads(text[s:e])
         except ValueError:
             continue
-        if isinstance(value, str) and value in names:
-            cuts.append(_element_span(text, s, e))
-    return cuts
+        if not (isinstance(value, str) and value in names):
+            continue
+        removed += 1
+        drop.update(range(s, e))
+        if k + 1 < len(items):
+            # the separator that follows this element
+            drop.update(range(e, items[k + 1][0]))
+        elif k > 0:
+            # the separator before it, unless the element before it goes too
+            prev_end = items[k - 1][1]
+            if not any(i in drop for i in range(prev_end, s)):
+                drop.update(range(prev_end, s))
+    cuts: list[tuple[int, int]] = []
+    for i in sorted(drop):
+        if cuts and i == cuts[-1][1]:
+            cuts[-1] = (cuts[-1][0], i + 1)
+        else:
+            cuts.append((i, i + 1))
+    return cuts, removed
 
 
 def _apply_cuts(text: str, cuts: list[tuple[int, int]]) -> str:
@@ -172,10 +174,10 @@ def _prune_json(text: str, model: str, names: set[str]) -> tuple[str, int]:
     start, end = span
     if text[start:start + 1] != "[":
         return text, 0
-    cuts = _element_cuts(text, start, end, names)
-    if not cuts:
+    cuts, removed = _element_cuts(text, start, end, names)
+    if not removed:
         return text, 0
-    return _apply_cuts(text, cuts), len(cuts)
+    return _apply_cuts(text, cuts), removed
 
 
 def _prune_toml(text: str, model: str, names: set[str]) -> tuple[str, int]:
@@ -196,11 +198,11 @@ def _prune_toml(text: str, model: str, names: set[str]) -> tuple[str, int]:
         if arr_start < 0:
             continue
         arr_end = _value_end(section, arr_start)
-        cuts = _element_cuts(section, arr_start, arr_end, names)
-        if not cuts:
+        cuts, removed = _element_cuts(section, arr_start, arr_end, names)
+        if not removed:
             return text, 0
         new_section = _apply_cuts(section, cuts)
-        return text[:sec_start] + new_section + text[sec_end:], len(cuts)
+        return text[:sec_start] + new_section + text[sec_end:], removed
     return text, 0
 
 
