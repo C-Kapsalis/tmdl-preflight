@@ -291,3 +291,22 @@ def test_a_model_with_axis_tables_says_nothing(stand_in):
     code, payload = run_check(model, "F001")
     assert code == 0
     assert not [n for n in payload["notes"] if n.startswith("No x-/y-Selector")]
+
+
+# ---------------------------------------------------------------------------
+# PB17 - the byte-order mark and the line endings survive a repair
+# ---------------------------------------------------------------------------
+
+
+def test_a_file_with_a_bom_and_crlf_keeps_both(stand_in):
+    model = _model(stand_in, "fp_ragged_short_row")
+    path = _table(model, "x-Selector 1.tmdl")
+    raw = path.read_bytes()
+    assert b"\r\n" not in raw
+    path.write_bytes(b"\xef\xbb\xbf" + raw.replace(b"\n", b"\r\n"))
+    run_fix(model, "F004")
+    after = path.read_bytes()
+    assert after.startswith(b"\xef\xbb\xbf")
+    assert b"\r\n" in after
+    assert b"\n" not in after.replace(b"\r\n", b"")
+    assert b"AUTO-PADDED" in after

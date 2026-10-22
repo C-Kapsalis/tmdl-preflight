@@ -417,6 +417,14 @@ until configured.
   exit 2, a message on standard error, and never a Python traceback.
 - A lineage tag followed by a tab or several spaces after `lineageTag:` is
   rewritten like any other (before, only one space was handled).
+- **The field-parameter fixers keep the file's byte-order mark and its line
+  endings.** The original scripts rewrote every file they touched with the
+  platform's own line ending and dropped a byte-order mark, so a CRLF file
+  checked out on a Mac came back with LF. BUGFIX.
+- **The `fix` command always re-checks, and a finding that survives fails
+  the run.** The original's comma, separator and duplicate fixers always
+  exited 0 after `--fix`; the tool exits 1 when a selected error is still
+  there. STRICTER.
 - **Removing a date row from the second plot-specific table takes the
   separator with it.** The original left the previous row's comma behind,
   so the constructor ended with `,` before `}` - a defect of its own. BUGFIX.
