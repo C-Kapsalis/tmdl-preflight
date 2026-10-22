@@ -355,8 +355,9 @@ until configured.
   present required columns: <list>; missing required columns: <list>.
   These columns are critical for dimension-measure grouping`, and the
   inventory reports `Unique x-Selector categories found: <n>` with the
-  group ids and `Relationships involving z-Map: <n>`. A001 is a P1 check:
-  it is a warning, and `--strict` makes it fail the run.
+  group ids and `Relationships involving z-Map: <n>`. BUGFIX: A001 is a P1
+  check, so it is a warning (the spec says warning) and `--strict`, the
+  full run, fails it.
 - **The filter-measure rule reports the inventory of the filter
   measures.** Per model it reports `F-Measure Pattern Classification:
   Total f-measures: <n>` with a line per kind (STANDARD, AGGREGATOR,
