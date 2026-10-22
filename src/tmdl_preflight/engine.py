@@ -158,6 +158,7 @@ def check(ctx: Context, ruleset: RuleSet) -> PreflightReport:
         report.violations.extend(rule.check(ctx))
     report.scanned = scan_summary(ctx)
     report.notes = list(dict.fromkeys(ctx.notes))
+    report.blocks = list(ctx.blocks)
     return report
 
 

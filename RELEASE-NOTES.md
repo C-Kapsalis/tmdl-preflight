@@ -226,7 +226,7 @@ until configured.
   rows, keeps a copy of the file in `tables/backups/<file
   .double_slash_backup>` and is opt-in, because it removes text from a
   picker a user sees: a blanket `fix` skips it, `fix --select F016` runs
-  it.
+  it. A dry run says what it would remove and writes nothing.
 - **F017** reports a fenced field-parameter source that is not in its
   canonical form - a blank line, the indented brace, the rows with their
   blank runs collapsed, the indented closing brace - and the repair rewrites

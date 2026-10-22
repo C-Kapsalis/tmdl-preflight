@@ -93,26 +93,26 @@ class FieldParameterCommaRunsRule(Rule):
             note = no_axis_files_note(model)
             if note:
                 ctx.notes.append(note)
-            for table, part in self._targets(ctx):
-                if part is None:
-                    tf = _lines_of(table)
-                    if tf is None:
-                        continue
-                    found = [(line, len(offs)) for line, offs in comma_runs(tf.text.replace("\r\n", "\n"))]
-                    where, base = table.file, 1
-                    obj = f"{table.name} (field-parameter file)"
-                    place = ""
-                else:
-                    found = find_comma_runs(part.source)
-                    where, base = part.file, part.source_start_line or part.line
-                    obj = f"{table.name} (partition source)"
-                    place = " in calculated partition source"
-                for line, orphans in found:
-                    out.append(self.violation(
-                        f"{orphans} orphan comma(s){place}. {DESKTOP_COMMA} "
-                        f"Delete the orphan comma(s) (the auto-fix does).",
-                        file=where, line=base + line - 1, obj=obj,
-                    ))
+        for table, part in self._targets(ctx):
+            if part is None:
+                tf = _lines_of(table)
+                if tf is None:
+                    continue
+                found = [(line, len(offs)) for line, offs in comma_runs(tf.text.replace("\r\n", "\n"))]
+                where, base = table.file, 1
+                obj = f"{table.name} (field-parameter file)"
+                place = ""
+            else:
+                found = find_comma_runs(part.source)
+                where, base = part.file, part.source_start_line or part.line
+                obj = f"{table.name} (partition source)"
+                place = " in calculated partition source"
+            for line, orphans in found:
+                out.append(self.violation(
+                    f"{orphans} orphan comma(s){place}. {DESKTOP_COMMA} "
+                    f"Delete the orphan comma(s) (the auto-fix does).",
+                    file=where, line=base + line - 1, obj=obj,
+                ))
         return out
 
     def fix(self, ctx: Context) -> list[str]:

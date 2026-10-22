@@ -131,7 +131,42 @@ class FieldParameterDoubleSlashRowsRule(Rule):
                         f"the row carries '//' and would be read as a comment: {text.strip()}",
                         file=t.file, line=idx + 1, obj=f"{t.name}:{idx + 1}",
                     ))
+        if ctx.options.get("_dry_run"):
+            self._dry_run_report(ctx)
         return out
+
+    def _dry_run_report(self, ctx: Context) -> None:
+        """What the repair would do, printed when the run writes nothing."""
+        for model in ctx.models:
+            per_line: list[str] = []
+            per_file: list[str] = []
+            files = removed = 0
+            for t in self._tables(model):
+                try:
+                    lines = read_text_file(t.file).lines()
+                except (OSError, UnicodeDecodeError):
+                    continue
+                offenders, total = self._offenders(lines)
+                if not offenders:
+                    continue
+                for _idx, text in offenders:
+                    per_line.append(f"Removing: {text.strip()[:80]}...")
+                per_file.append(f"✓ {t.file.name}: Removed {len(offenders)}/{total} entries")
+                files += 1
+                removed += len(offenders)
+            if not files:
+                continue
+            ctx.blocks.append("\n".join(per_line + per_file))
+            ctx.blocks.append(self._summary(files, removed))
+            ctx.blocks.append(f"ℹ️  Would remove {removed} entries (dry run)")
+
+    @staticmethod
+    def _summary(files: int, removed: int) -> str:
+        return ("=" * 80 + "\n"
+                "SUMMARY\n"
+                + "=" * 80 + "\n"
+                f"Files modified: {files}\n"
+                f"Entries removed: {removed}")
 
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
@@ -173,12 +208,7 @@ class FieldParameterDoubleSlashRowsRule(Rule):
         if not files:
             ctx.blocks.append("✓ No entries with // found")
             return applied
-        ctx.blocks.append(
-            "=" * 80 + "\n"
-            "SUMMARY\n"
-            + "=" * 80 + "\n"
-            f"Files modified: {files}\n"
-            f"Entries removed: {removed_total}")
+        ctx.blocks.append(self._summary(files, removed_total))
         ctx.blocks.append(
             f"✓ Removed {removed_total} entries\n"
             f"  Backups in tables/backups/*.double_slash_backup")
@@ -202,7 +232,7 @@ class FieldParameterBlankLinesRule(Rule):
     )
 
     @staticmethod
-    def _canonical(text: str, lines: list[str]) -> Optional[tuple[int, int, str, int]]:
+    def _canonical(text: str, lines: list[str], newline: str) -> Optional[tuple[int, int, str, int]]:
         """``(open at, close at, canonical block, lines removed)`` of a file.
 
         ``None`` when the file holds no fenced calculated source.
@@ -211,8 +241,10 @@ class FieldParameterBlankLinesRule(Rule):
         if span is None:
             return None
         start, end, indent = span
-        open_line = lines[start - 1]
-        open_at = text.index(open_line) + len(open_line)
+        offset = 0
+        for line in lines[:start - 1]:
+            offset += len(line) + len(newline)
+        open_at = offset + len(lines[start - 1])
         close_at = text.index("```", open_at)
         raw = text[open_at:close_at]
         inner = re.search(r"\{(.*)\}", raw, re.DOTALL)
@@ -251,7 +283,7 @@ class FieldParameterBlankLinesRule(Rule):
                     tf = read_text_file(t.file)
                 except (OSError, UnicodeDecodeError):
                     continue
-                found = self._canonical(tf.text, tf.lines())
+                found = self._canonical(tf.text, tf.lines(), tf.newline)
                 if found is None:
                     continue
                 open_at, close_at, block, removed = found
@@ -264,16 +296,26 @@ class FieldParameterBlankLinesRule(Rule):
                 ))
         return out
 
+    def pending_repairs(self, ctx: Context) -> bool:
+        """The repair says something even when no file needs it: a model
+        without a tables folder is worth a word."""
+        return any(not (m.definition_path / "tables").is_dir() for m in ctx.models)
+
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
         changed = 0
+        missing = False
         for model in ctx.models:
+            if not (model.definition_path / "tables").is_dir():
+                ctx.blocks.append("⚠️  No tables directory")
+                missing = True
+                continue
             for t in model.table_list:
                 try:
                     tf = read_text_file(t.file)
                 except (OSError, UnicodeDecodeError):
                     continue
-                found = self._canonical(tf.text, tf.lines())
+                found = self._canonical(tf.text, tf.lines(), tf.newline)
                 if found is None:
                     continue
                 open_at, close_at, block, removed = found
@@ -288,6 +330,6 @@ class FieldParameterBlankLinesRule(Rule):
                 what = f"removed {removed} blank lines" if removed else "normalized indentation"
                 applied.append(f"✓ {t.file.name}: {what}")
                 changed += 1
-        if not changed:
+        if not changed and not missing:
             ctx.blocks.append("✓ No whitespace issues found in field parameter files")
         return applied

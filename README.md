@@ -14,7 +14,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 
 ## Features
 
-- **114 rules** over the failure modes that reject imports or silently corrupt
+- **116 rules** over the failure modes that reject imports or silently corrupt
   results: duplicate lineage tags and object names, TMDL properties leaked
   into DAX, dangling `///` descriptions, tables with no partition, inline
   `#table` entity sources that force a composite model, DAX references to
@@ -25,7 +25,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
   opt-in, and project contracts (required objects, pinned relationships,
   field-parameter registrations) are declared in the configuration. The
   full catalog is generated into [`docs/rules.md`](docs/rules.md).
-- **22 auto-fixers** for the defects whose repair is fully mechanical,
+- **24 auto-fixers** for the defects whose repair is fully mechanical,
   applied via a check → fix → re-check loop that never lets a fixer vouch
   for itself.
 - **Surgical, verified edits.** Fixers rewrite single lines or single JSON
@@ -69,14 +69,15 @@ severity, and whether the fixer can handle it:
 
 ```console
 $ tmdl-preflight check examples/bike-shop-broken
-BikeShop.SemanticModel/definition/tables/Metric Selector.tmdl:45  F001 error: stray comma run (1 orphan comma(s)) in calculated partition source. Power BI Desktop still opens the model, but every visual that uses this table fails ('Error fetching data for this visual'). Delete the orphan comma(s) (the auto-fix does). [Metric Selector (partition source)] (auto-fixable)
+BikeShop.SemanticModel/definition/tables/Metric Selector.tmdl:45  F001 error: 1 orphan comma(s). Power BI Desktop still opens the model, but every visual that uses this table fails ('Error fetching data for this visual'). Delete the orphan comma(s) (the auto-fix does). [Metric Selector (field-parameter file)] (auto-fixable)
 BikeShop.SemanticModel/definition/tables/Sales Measures.tmdl:21  S001 info: visible measure has no formatString, so it renders with the engine's default formatting. Add a formatString, or run with --ignore S001 if your formatting strategy lives elsewhere. [Sales Measures[Units Sold]]
+BikeShop.SemanticModel/definition/tables/Sales Measures.tmdl:25  M017 info: Line 25: Multiline DAX should use triple backticks
 BikeShop.SemanticModel/definition/tables/Stores.tmdl  M006 warning: table 'Stores' is defined in tables/ but has no 'ref table' line in model.tmdl. Power BI Desktop still loads the table, but model.tmdl is out of step with tables/. Add: ref table Stores [Stores] (auto-fixable)
 BikeShop.SemanticModel/definition/tables/Stores.tmdl:3  M003 error: lineageTag 'e689596a-59ea-4b2c-a14d-48596a7b8c9d' duplicates the one on table Products (Products.tmdl:3) [table Stores] (auto-fixable)
 BikeShop.SemanticModel/definition/tables/__Calendar.tmdl:4  M004 warning: lineageTag 'calendar-tag-TODO' is not a canonical UUID [table __Calendar] (auto-fixable)
 
 scanned: 1 model, 6 tables, 22 columns, 6 measures, 4 relationships, 8 DAX expressions, 1 report
-tmdl-preflight: 2 error(s), 2 warning(s), 1 info(s)
+tmdl-preflight: 2 error(s), 2 warning(s), 2 info(s)
 ```
 
 Exit code 1. The four defects carry the `(auto-fixable)` marker; the S001
@@ -91,12 +92,15 @@ $ tmdl-preflight fix /tmp/bike-shop
 fixed  M006: model.tmdl: + ref table Stores
 fixed  M003: Stores.tmdl:3 (table Stores): 'e689596a-...' -> '1556d6dd-6012-4be4-8d04-6383081d6e02'
 fixed  M004: __Calendar.tmdl:4 (table __Calendar): 'calendar-tag-TODO' -> '1e41940d-23a7-4d0f-b260-4c40ecdd16fa'
-fixed  F001: Metric Selector.tmdl: removed 1 orphan comma(s) from 'Metric Selector' partition source
+fixed  F001: Metric Selector.tmdl: removed 1 orphan comma(s)
 
 BikeShop.SemanticModel/definition/tables/Sales Measures.tmdl:21  S001 info: visible measure has no formatString, so it renders with the engine's default formatting. Add a formatString, or run with --ignore S001 if your formatting strategy lives elsewhere. [Sales Measures[Units Sold]]
+BikeShop.SemanticModel/definition/tables/Sales Measures.tmdl:25  M017 info: Line 25: Multiline DAX should use triple backticks
 
 scanned: 1 model, 6 tables, 22 columns, 6 measures, 4 relationships, 8 DAX expressions, 1 report
-tmdl-preflight: 0 error(s), 0 warning(s), 1 info(s), 4 fix(es) applied
+tmdl-preflight: 0 error(s), 0 warning(s), 2 info(s), 4 fix(es) applied
+
+Removed 1 orphan comma(s) across 1 file(s). Commit the changes and re-sync the affected workspace(s).
 ```
 
 Exit code 0, because the *re-check* came back clean, not because fixers
@@ -184,6 +188,8 @@ commit.
 | F013 | a measure parked on a field-parameter table | error | no |
 | F014 | a selector SWITCH branch that calls a measure that no longer exists | error | yes |
 | F015 | an axis table that is not an import-mode `("label", NAMEOF(...))` field parameter (opt-in) | info | no |
+| F016 | a field-parameter row that carries `//` (the repair is opt-in) | info | yes |
+| F017 | a fenced field-parameter source that drifted from its canonical form | info | yes |
 | A001 | the category-mapping table or one of its key columns is missing (opt-in) | error | no |
 | A002 | inventory of axis group ids and mapping-table relationships (opt-in) | info | no |
 | A003 | an account-filterable category whose mapping rows lack the account groups (opt-in) | error | yes |

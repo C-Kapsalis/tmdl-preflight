@@ -405,6 +405,8 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
     ctx.options = dict(cfg.sections)
     if getattr(args, "only", None):
         ctx.options["_fix_only"] = args.only
+    # a fix run that writes nothing: the rules may say what they would do
+    ctx.options["_dry_run"] = bool(getattr(args, "dry_run", False))
     ruleset = _effective_ruleset(full, cfg, args)
     explicit = _parse_id_list(getattr(args, "select", None)) or set()
     if explicit & {"b003", "bookmark-options-schema"}:

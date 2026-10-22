@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import run_check, run_fix, violations
+from conftest import run_check, run_cli, run_fix, violations
 
 pytestmark = [pytest.mark.p0]
 
@@ -173,3 +173,20 @@ def test_the_repair_says_what_it_changed(stand_in):
     assert any(f.startswith("F017: ✓ x-Selector 1.tmdl: removed ") for f in fixes), fixes
     code, payload = run_check(model, "F017")
     assert violations(payload, "F017") == []
+
+
+def test_the_dry_run_says_what_it_would_remove(stand_in):
+    model = _model(stand_in, "fieldparam_double_slash")
+    code, out, err = run_cli("fix", str(model), "--dry-run", "--select", "F016", "--no-config")
+    assert code == 0, err
+    assert "✓ x-Selector 1.tmdl: Removed 2/4 entries" in out
+    assert "ℹ️  Would remove 2 entries (dry run)" in out
+    text = _table(model, "x-Selector 1.tmdl").read_text(encoding="utf-8")
+    assert '// ("Old KPI", NAMEOF([CPM]), 1, "old_x"),' in text
+
+
+def test_a_model_without_a_tables_folder_says_so(stand_in):
+    model = _model(stand_in, "fieldparam_no_tables")
+    code, payload = run_fix(model, "F017")
+    assert code == 0
+    assert any(b == "⚠️  No tables directory" for b in payload["blocks"]), payload["blocks"]
