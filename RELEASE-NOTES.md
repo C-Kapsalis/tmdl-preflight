@@ -29,6 +29,14 @@
   dry run now leaves out what a skipped unsafe fixer would do and prints
   the same `not fixed  R007: …` line the real run prints. `fix --check`
   is unchanged (it neither lists nor counts a skipped fixer).
+- BUGFIX (kept): no fixer drops a refused edit silently. R007's swallow
+  was one of several: the fixers of F001 to F004, F006, F007, F014,
+  F016, F017, M021 and D004 caught the refusal at one or more sites and
+  moved on, so a file they could not prove (for
+  example one that mixes its line endings) stayed broken with exit 1 and
+  no word. The fix pass now reports any edit the verified writer refused
+  and its fixer did not report itself, as `refused  <rule>: <path>:
+  <reason>`, with the `ERROR` line on standard error and exit 2.
 
 ## 1.2.1 (2026-10-22)
 

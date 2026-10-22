@@ -27,6 +27,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from .edits import take_refusals
 from .rules.base import Context, RuleSet, Severity, Violation
 
 
@@ -206,7 +207,18 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
             if dirty_rule_ids & rule.repaired_rule_ids():
                 report.skipped_fixers.append(rule.id)
             continue
+        take_refusals()
+        recorded = len(ctx.refused_fixes)
         applied = rule.fix(ctx)
+        refusals = take_refusals()
+        if refusals and len(ctx.refused_fixes) == recorded:
+            # the fixer dropped a refused edit without reporting it; the
+            # refusal is reported all the same (exit 2)
+            for path, reason in refusals:
+                where = ctx.scan_relative(path) or path.name
+                entry = f"{rule.id}: {where}: {reason}"
+                if entry not in ctx.refused_fixes:
+                    ctx.refused_fixes.append(entry)
         if applied:
             report.fixes_applied.extend(f"{rule.id}: {a}" for a in applied)
             report.fixed_rule_ids.append(rule.id)

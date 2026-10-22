@@ -28,6 +28,20 @@ class EditRefused(RuntimeError):
     """A repair could not be proven safe; nothing was written."""
 
 
+#: Every edit :func:`verified_write` refused since the last
+#: :func:`take_refusals`, as ``(path, reason)``. The fix pass drains it
+#: after each fixer, so a refusal a fixer caught and dropped is still
+#: reported (exit 2) rather than lost.
+_REFUSALS: list[tuple[Path, str]] = []
+
+
+def take_refusals() -> list[tuple[Path, str]]:
+    """The refused edits recorded since the last call; clears the record."""
+    out = list(_REFUSALS)
+    _REFUSALS.clear()
+    return out
+
+
 @dataclass
 class TextFile:
     """A text file's content with its BOM stripped and its newline style noted."""
@@ -131,6 +145,18 @@ def verified_write(
     change. Raises :class:`EditRefused` when ``verify`` rejects the edit or
     the file changed since it was read.
     """
+    try:
+        return _verified_write(original, new_text, verify)
+    except EditRefused as exc:
+        _REFUSALS.append((original.path, str(exc)))
+        raise
+
+
+def _verified_write(
+    original: TextFile,
+    new_text: str,
+    verify: Optional[Callable[[str, str], None]],
+) -> bool:
     if new_text == original.text:
         return False
     if mixed_line_endings(original.path):

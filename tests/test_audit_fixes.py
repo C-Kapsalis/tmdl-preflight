@@ -180,3 +180,19 @@ def test_blanket_dry_run_matches_the_blanket_fix_for_r007(tmp_path):
     code, real, err = run_cli("fix", model, "--no-config")
     assert "not fixed  R007:" in real, real
     assert rel.read_text(encoding="utf-8") == AUTODETECTED
+
+
+def test_any_refused_fixer_edit_is_reported_and_exits_2(definition):
+    """The same swallow as R007's, in the field-parameter comma fixer: a
+    refused edit is reported, never dropped."""
+    f = definition / "tables" / "Metric Selector.tmdl"
+    text = f.read_text(encoding="utf-8").replace(
+        '\t\t\t\t    ( "Orders #", NAMEOF ( [Orders #] ), 1 ),', "\t\t\t\t    ,")
+    mixed = text.replace("\n", "\r\n", 1).encode("utf-8")
+    f.write_bytes(mixed)
+    code, out, err = run_cli("fix", definition.parent, "--select", "F001",
+                             "--no-config")
+    assert f.read_bytes() == mixed
+    assert code == 2, (code, out, err)
+    assert "refused  F001: " in out and "Metric Selector.tmdl" in out, out
+    assert "ERROR" in err, err
