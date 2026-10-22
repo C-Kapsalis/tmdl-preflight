@@ -45,6 +45,15 @@ def test_an_unfenced_source_is_read_too(stand_in):
     assert violations(payload) == []
 
 
+def test_a_table_without_a_partition_says_so(stand_in):
+    model = _model(stand_in, "shape_db", "Shape")
+    table = model / "definition" / "tables" / "x-Selector 1.tmdl"
+    text = table.read_text(encoding="utf-8")
+    table.write_text(text[:text.index("\tpartition ")], encoding="utf-8")
+    code, payload = run_check(model, RULE)
+    assert "x-Selector 1: No partition found" in [v["message"] for v in violations(payload)]
+
+
 def test_the_run_reports_the_partition_pattern_summary(stand_in):
     model = _model(stand_in, "shape_db", "Shape")
     code, payload = run_check(model, RULE)
