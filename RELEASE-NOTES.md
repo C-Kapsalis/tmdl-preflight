@@ -376,7 +376,8 @@ until configured.
   table was never probed; a measure line is now only a measure when it
   carries the `=`. A name that holds a doubled quote is still decoded
   (`It''s` is `It's`) and a `]` inside a measure reference is still
-  doubled. BUGFIX.
+  doubled. A parameter is read at any indentation too, and its value ends
+  at the first `meta` or at the end of the line. BUGFIX.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the
