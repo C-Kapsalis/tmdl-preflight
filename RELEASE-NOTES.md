@@ -138,6 +138,14 @@ until configured.
 - `check` and `fix` accept a `*.bookmark.json` file, or a folder that holds
   bookmark files, as a target: the bookmark rules no longer need a report
   folder around them.
+- **B002** counts a visual only when it is a folder directly under a page's
+  `visuals` folder; a folder named `visuals` anywhere else (a theme's static
+  resources, for example) holds no visual and no longer hides a dangling
+  reference. A report's bookmarks are the files directly under its
+  `definition/bookmarks` folder. Its findings carry the original wording
+  (`<file>: visualName '<ref>' has no matching visual directory`, and
+  `Could not parse <path>: <error>` for a file it cannot read), and the rule
+  description keeps the advice on how to resolve one.
 - BUGFIX: a "MISSING $schema" finding of B007 names the path relative to the
   `.Report` folder (`definition/pages/p1/visuals/v1/visual.json`, `.platform`);
   the original computed the path three folders up, which was wrong for every
