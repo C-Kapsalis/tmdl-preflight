@@ -69,7 +69,37 @@ WARNINGS:
   Reason: 'Revenue' is a measure, not a column. Use NAMEOF([Revenue]) instead
   Context: NAMEOF('Shop Measures'[Revenue])...
 
-================================================================================"""
+================================================================================
+"""
+
+
+EXPECTED_FAMILIES = """\
+================================================================================
+REPORT TABLE ANALYSIS
+================================================================================
+
+🔍 Parsing model...
+✅ Model parsed successfully
+
+📊 REPORT TABLES FOUND
+--------------------------------------------------------------------------------
+x-Selector tables: 0
+
+y-Selector tables: 0
+
+================================================================================
+SUMMARY
+================================================================================
+
+Combined:
+  Total NAMEOF references: 0
+  Total broken: 0
+
+================================================================================
+✅ ANALYSIS COMPLETE
+================================================================================
+"""
+
 
 
 class TestNameofReport:
@@ -81,7 +111,7 @@ class TestNameofReport:
         ))
         code, out, _err = run_cli("report", "nameof", model)
         assert code == 0
-        assert out.strip() == EXPECTED_REPORT
+        assert out.strip() == (EXPECTED_REPORT + "\n" + EXPECTED_FAMILIES).strip()
 
     def test_a_clean_model_says_so(self, tmp_path):
         model = _model(tmp_path, measures=_measure(

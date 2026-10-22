@@ -123,11 +123,10 @@ def test_report_complexity_numbers(tmp_path):
                             f"\tmeasure Big = \"{'y' * 5998}\"\n\t\tlineageTag: {TAG.format(10)}\n\n"))
     code, out, _ = run_cli("report", "complexity", model, "--json")
     data = json.loads(out)
-    lengths = sorted(m["length"] for m in data["measures"])
+    lengths = sorted(m["length"] for m in data["all_measures"])
     assert code == 0 and len(lengths) == 4
-    buckets = {b["bucket"]: b["count"] for b in data["buckets"]}
-    assert buckets["Very Large"] == 1 and data["top"][0]["measure"] == "Big"
-    assert data["statistics"]["p50"] == lengths[2]
+    assert data["top_10_complex"][0]["measure"] == "Big"
+    assert data["statistics"]["median_length"] == lengths[2]
 
 
 def test_report_relationships_spec_stand_in(tmp_path):
@@ -146,7 +145,7 @@ def test_report_relationships_spec_stand_in(tmp_path):
     assert (data["total_relationships"], data["active_relationships"], data["inactive_relationships"]) == (3, 2, 1)
     assert data["cardinality_types"] == {"many_to_one": 3}
     assert data["cross_filtering"]["bidirectional"] == 1
-    assert data["orphan_categories"] == {"parameter_tables": ["x-Plot Specific 1"],
+    assert data["orphan_categories"] == {"report_tables": ["x-Plot Specific 1"],
                                          "selector_tables": ["z-Selector Format"],
                                          "other_orphans": ["Old Import"]}
     assert data["hub_tables"][0] == {"table": "Sales", "relationship_count": 3}
