@@ -73,9 +73,26 @@ def test_recognizer_sees_split_line_and_shared_line_tuples():
 
 @pytest.mark.parametrize("folder,verdict", MODELS)
 def test_yselector_plot_specific_subset(stand_in, folder, verdict):
-    hits = [v for v in _findings(stand_in, folder) if "subset" in v["message"].lower()]
+    hits = [v for v in _findings(stand_in, folder) if "absent from every numbered" in v["message"]]
     if verdict == "pass":
         assert hits == []          # the placeholder row is exempt
     else:
         assert len(hits) == 1
         assert "beans[farm]" in hits[0]["message"].lower()
+
+
+def test_yselector_level_message_names_the_levels(stand_in):
+    hits = [v for v in _findings(stand_in, "cl_bad_db") if "MISSING from" in v["message"]]
+    assert len(hits) == 1
+    assert hits[0]["message"] == (
+        "NAMEOF(beans[roast]) in y-Selector 1,2 but MISSING from y-Selector 3")
+
+
+def test_yselector_subset_message_names_the_table_and_the_target(stand_in):
+    hits = [v for v in _findings(stand_in, "cl_bad_db")
+            if "absent from every numbered" in v["message"]]
+    assert len(hits) == 1
+    assert hits[0]["message"] == (
+        "y-Plot Specific 1: NAMEOF(beans[farm]) absent from every numbered "
+        "y-Selector level")
+

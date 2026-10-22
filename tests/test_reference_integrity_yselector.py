@@ -61,3 +61,43 @@ class TestYSelectorNoMeasures:
         assert code == 1
         found = violations(payload)
         assert len(found) == 1 and "y-Selector 2" in found[0]["message"]
+
+
+UNREAD_AXIS = """table 'y-Selector 1'
+\tcolumn 'y-Selector 1'
+\t\tsourceColumn: [Value1]
+
+\tpartition 'y-Selector 1' = calculated
+\t\tmode: import
+\t\tsource = ```
+\t\t\t\t{
+\t\t\t\t\t("Shop", NAMEOF('_Shops'[shop_name]), 0, "Shops_y")
+\t\t\t\t}
+\t\t\t\t```
+"""
+
+SHOPS = """table _Shops
+\tcolumn shop_name
+\t\tdataType: string
+
+\tpartition _Shops = m
+\t\tmode: import
+\t\tsource =
+\t\t\t\tlet
+\t\t\t\t    Source = Sql.Database("example-server", "roastery")
+\t\t\t\tin
+\t\t\t\t    Source
+"""
+
+
+def test_an_axis_table_no_measure_reads_is_not_a_defect(tmp_path):
+    """No measure reads the axis table: there is no reference to check, and
+    that is not a failure."""
+    tables = tmp_path / "Shop.SemanticModel" / "definition" / "tables"
+    tables.mkdir(parents=True)
+    (tables / "y-Selector 1.tmdl").write_text(UNREAD_AXIS, encoding="utf-8")
+    (tables / "_Shops.tmdl").write_text(SHOPS, encoding="utf-8")
+    code, payload = run_check(tmp_path / "Shop.SemanticModel", "D004")
+    assert code == 0, payload
+    assert violations(payload, "D004") == []
+

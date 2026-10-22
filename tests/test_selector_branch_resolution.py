@@ -138,3 +138,37 @@ def test_provider_detects_and_kills_positional_branch(tmp_path):
         "a parked branch was removed — parked branches are exempt")
     assert violations(payload) == [], "gate still red after the fix"
     assert code == 0
+
+
+TWO_GONE = FIXTURE_TABLE.replace(
+    '\t\t\t    "\'Fixture Measures\'[Gone Measure]", [Gone Measure],\n',
+    '\t\t\t    "\'Fixture Measures\'[Gone Measure]", [Gone Measure] + [Also Gone],\n'
+    '\t\t\t    "\'Fixture Measures\'[Second Gone]", [Second Gone],\n',
+)
+
+
+def test_one_line_with_two_missing_measures_gives_one_finding(tmp_path):
+    model = write_fixture_model(tmp_path, TWO_GONE)
+    _code, payload = run_check(model, RULE)
+    found = violations(payload)
+    assert len(found) == 2, found
+    one = [v for v in found if "[Also Gone]" in v["message"]]
+    assert len(one) == 1
+    message = one[0]["message"]
+    assert message.startswith(
+        "2 field-parameter selector branch(es) call a measure that does not exist — "
+        "the containing helper/projected measure fails at processing time and PBI "
+        "rejects the model on refresh/deploy.: ")
+    assert message.endswith("Fixture Measures.tmdl:11  [Gone Measure] [Also Gone]")
+
+
+def test_the_fix_reports_how_many_branches_it_killed(tmp_path):
+    model = write_fixture_model(tmp_path, TWO_GONE)
+    code, payload = run_fix(model, RULE)
+    assert code == 0, payload
+    assert any("killed 2 dangling selector branch(es)" in f for f in payload["fixes"]), payload["fixes"]
+    text = (model / "definition" / "tables" / "Fixture Measures.tmdl").read_text(encoding="utf-8")
+    assert "[Gone Measure]" not in text and "[Also Gone]" not in text
+    assert "[Second Gone]" not in text
+    assert violations(payload) == []
+

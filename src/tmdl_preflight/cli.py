@@ -274,7 +274,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_retag = fp_sub.add_parser("retag", help="move named rows from one category to another "
                                               "(all or nothing across the files)")
     p_retag.add_argument("files", nargs="+", help="field-parameter table files (.tmdl)")
-    p_retag.add_argument("--names", required=True, help="comma-separated row display names")
+    p_retag.add_argument("--names", required=True, action="append",
+                         help="row display name; comma-separated, or repeat the "
+                              "option for a name that holds a comma")
     p_retag.add_argument("--from", dest="old", required=True, help="the current category")
     p_retag.add_argument("--to", dest="new", required=True, help="the new category")
     p_retag.add_argument("--position", type=int, default=4,
@@ -940,7 +942,11 @@ def _cmd_fieldparam(args) -> int:
     from .edits import EditRefused
     from .rules.fp_axes import RetagIncomplete, retag_rows
 
-    names = _parse_list(args.names) or []
+    given = [x for x in (args.names or [])]
+    if len(given) == 1:
+        names = _parse_list(given[0]) or []
+    else:
+        names = [x.strip() for x in given if x.strip()]
     if not names:
         raise UsageError("--names needs at least one display name")
     for f in args.files:
@@ -948,7 +954,10 @@ def _cmd_fieldparam(args) -> int:
             raise UsageError(f"cannot find the file {f}")
     try:
         done = retag_rows([Path(f) for f in args.files], names, args.old, args.new, args.position)
-    except (RetagIncomplete, EditRefused) as exc:
+    except RetagIncomplete as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except EditRefused as exc:
         print(f"tmdl-preflight: {exc}", file=sys.stderr)
         return 1
     except (OSError, UnicodeDecodeError) as exc:

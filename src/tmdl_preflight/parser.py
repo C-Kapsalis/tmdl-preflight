@@ -305,7 +305,6 @@ def parse_table_file(path: Path) -> tuple[Optional[Table], list[ParseError]]:
                     expr, i2, _s, _e = _collect_expression(lines, i + 1, level, remainder[1:])
                     col.expression = expr
                     col.expression_line = _expression_start(i + 1, remainder[1:])
-                    col.expression_missing = not remainder[1:].strip()
                     i = i2
                 else:
                     i += 1

@@ -1,0 +1,29 @@
+/// The measures the report shows.
+table '#Report Measures'
+	lineageTag: 1a0c9b4d-2f3e-4a5b-8c6d-7e8f9a0b1c2d
+
+	measure Cost = 1
+		lineageTag: 2b1d0c5e-3a4f-4b5c-9d7e-8f9a0b1c2d3e
+
+	measure Revenue = 2
+		lineageTag: 3c2e1d6f-4b5a-4c6d-ae8f-9a0b1c2d3e4f
+
+	measure Margin = 3
+		lineageTag: 4d3f2e70-5c6b-4d7e-bf90-ab1c2d3e4f50
+
+	measure Orders = 4
+		lineageTag: 5e40f381-6d7c-4e8f-c0a1-bc2d3e4f5061
+
+	measure Cups = 5
+		lineageTag: 6f510492-7e8d-4f90-d1b2-cd3e4f506172
+
+	measure Refunds = 6
+		lineageTag: 7a6215a3-8f9e-40a1-e2c3-de4f50617283
+
+	partition '#Report Measures' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source

@@ -80,7 +80,7 @@ the example model with one defect each. Where that evidence and the
 | F008 | fieldparam-arity | error | no |
 | F009 | fieldparam-level-consistency | error | no |
 | F010 | fieldparam-retag (opt-in) | error | no (`fieldparam retag` command) |
-| F011 | fieldparam-category-required (opt-in) | error | no |
+| F011 | fieldparam-category-required | error | no |
 | F012 | fieldparam-coverage (opt-in) | info | no |
 | F013 | field-parameter-table-no-measures | error | no |
 | F014 | selector-branch-resolution | error | yes |
@@ -185,9 +185,10 @@ the same floor file and fails on a rise.
 - **M004** says `LineageTag '<tag>' is not a canonically-formatted UUID
   (expected 8-4-4-4-12 hex)`.
 - **M020** says `<Table>[<Column>] has empty expression` for a calculated
-  column whose expression is blank, and
-  `<Table>[<Column>] is marked as calculated but has no expression` when the
-  `=` has nothing at all.
+  column whose expression is empty, whether the expression is a blank block
+  or the `=` has nothing after it at all. STRICTER: the check covers every
+  table of the model, not only the axis tables; a calculated column with no
+  expression is broken wherever it sits.
 - **M023** (new, opt-in) carries the notes the file validator raised
   without failing on them: `Missing recommended model property: <p>`,
   `Column '<c>' missing dataType`,
@@ -356,6 +357,65 @@ the same floor file and fails on a rise.
 - `fix` exits 2 when a fixer refuses a repair it cannot prove (the file is
   left unchanged and listed under `refused_fixes`); other files are still
   repaired.
+- **F010** judges the numbered `y-Selector` tables and the `y-Plot Specific`
+  tables as ONE family: a display name must carry the same category in all
+  of them, and the finding says which file disagrees
+  (`Main is g_b in y-Plot Specific 1.tmdl but g_a in a sibling table`). The
+  globs that share their first word are one family, so the default family
+  is `y-Selector *` together with `y-Plot Specific *`. BUGFIX: before, only
+  the first file that held a name was compared, so a half-finished retag
+  went unnoticed.
+- **F011** runs in the default suite (it only looks at the tables named
+  `x-Selector 1` to `x-Selector 9` and `y-Selector 1` to `y-Selector 9`, so
+  it cannot fire on a model without them) and reports one finding per axis
+  family, with the rows that carry no category:
+  ```
+  Found 1 x-Selector entries without category (4th parameter)
+  All x-Selector field parameters must have 4th parameter (category_x_id)
+
+    - x-Selector 1: "Pace"
+
+  Valid categories: Performance_x, analytics_api_x, kplanner_x, etc.
+  Example: ("Cost", NAMEOF([!Cost]), -10, "Performance_x")
+  ```
+  A row behind a `--` or `//` marker is parked, not live, and is never
+  judged. BUGFIX: before, a parked row was reported as a row without a
+  category.
+- **F012** opens its report with the counts of the audit — how many measures
+  the metric axis names, how many user-facing measures there are, how many
+  of them the axis covers (with the share) and how many it does not, then
+  the dimension side: how many dimension tables the axis names, how many
+  the model holds, how many of them the axis does not expose and how many
+  the axis names that do not exist. The lists follow, each under its own
+  heading:
+  ```
+  User-facing measures not in x-Selector (5):
+    - #Report Measures[Cups]
+  ```
+  BUGFIX: a row that names its measure with a quoted table name
+  (`NAMEOF('#Report Measures'[Cost])`) counts as on the metric axis; the
+  measure is on the axis, whatever way the row spells it.
+- **F008** says what the rows carry and what the table declares:
+  `field-parameter tuples carry 7 field(s) but the table declares 6 column(s) (Value1..Value6) — mismatch breaks compilation.`
+  STRICTER: the check reads a field-parameter source that is not written
+  between fences; the original skipped those tables, but Desktop writes
+  some of them that way.
+- **F009** names the drilldown levels a dimension is missing from:
+  `NAMEOF(beans[roast]) in y-Selector 1,2 but MISSING from y-Selector 3`,
+  and reports every target a plot-specific table adds to the numbered
+  levels on its own:
+  `y-Plot Specific 1: NAMEOF(beans[farm]) absent from every numbered y-Selector level`.
+- **F013** says which table carries the measures and which family it
+  belongs to: `x-Selector 2 unexpectedly contains 1 measures. x-Selector tables should be dimension tables with columns only.`
+  A plot-specific table names the family it belongs to.
+- **F014** reports one finding per branch line, not per call, and the
+  finding carries the count of the model and the line it is about:
+  `2 field-parameter selector branch(es) call a measure that does not exist — the containing helper/projected measure fails at processing time and PBI rejects the model on refresh/deploy.: Fixture Measures.tmdl:11  [Gone Measure] [Also Gone]`.
+  The auto-fix says how many branches it killed, once per model:
+  `killed 2 dangling selector branch(es)`.
+- The findings of F011, F012, F013 and F014 name the object in the message
+  and leave the report's object field empty: the message already says which
+  table, which line and which measure the finding is about.
 
 ### Console reports
 
@@ -499,6 +559,14 @@ unchanged.
 - `fieldparam retag <files> --names N1,N2 --from OLD --to NEW` changes the
   category value of the named live rows across sibling tables; a name not
   found live under OLD fails with "retag incomplete" and nothing is written.
+  Every file given is retagged, and a name missing from any one of them
+  stops the whole run:
+  `field-parameter retag incomplete: ['Main'] not found under category 'g_a' in y-Selector 2.tmdl`.
+  `--names` may be given more than once, one name per option, for a display
+  name that holds a comma. The success lines list the retagged names in the
+  order their rows occur in the file. BUGFIX: before, only the first file
+  that held a name was rewritten, and the siblings were left behind — the
+  half-retag the family rule then reported.
 - New Python API: `tmdl_preflight.measure_classes.classify_measure_name`
   (helper vs user-facing names, helper subcategory, scaffolding noise) and
   `tmdl_preflight.roles.fact_tables` (the shared fact-table law).
@@ -898,7 +966,14 @@ unchanged.
   throughout and every line of a Windows checkout showed up as a change.
   The tool writes the file in the style it already has: a CRLF file loses
   exactly the line that was removed and stays CRLF. BUGFIX.
-- **A fact is matched only when the reference names it.** The reference
+- **An axis table that no measure reads is not a failure.** A model whose
+  `y-Selector` tables no measure references used to fail the
+  reference-integrity check with a division by zero; it now passes, because
+  there is no reference to check. BUGFIX.
+- **The axis tables are reference-checked in full.** Every expression of an
+  axis table is checked, not only the measures: a calculated column or a
+  partition source that names a table that does not exist is reported as
+  well. BUGFIX.- **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the
   name, so a measure reading `MySales[amount]` does not consume `Sales`.

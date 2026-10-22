@@ -1,0 +1,32 @@
+table 'x-Selector 1'
+	lineageTag: e1d98c1a-f605-4718-593a-5b6c7d8e9f01
+
+	column 'x-Selector 1'
+		lineageTag: f20a9d2b-0716-4829-6a4b-6c7d8e9f0112
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	column 'x-Selector 1 Fields'
+		isHidden
+		lineageTag: 031bae3c-1827-493a-7b5c-7d8e9f011223
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+	column 'x-Selector 1 Order'
+		isHidden
+		lineageTag: 142cbf4d-2938-4a4b-8c6d-8e9f01122334
+		summarizeBy: sum
+		sourceColumn: [Value3]
+
+	column 'x-Selector 1 Field Category'
+		lineageTag: 253dc05e-3a49-4b5c-9d7e-9f0112233445
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+	partition 'x-Selector 1' = calculated
+		mode: import
+		source = ```
+				{
+					("Cost", NAMEOF('#Report Measures'[Cost]), 0, "Performance_x")
+				}
+				```

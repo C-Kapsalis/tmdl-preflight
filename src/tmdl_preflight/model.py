@@ -28,9 +28,6 @@ class Column:
     is_hidden: bool = False
     is_key: bool = False
     expression: Optional[str] = None  # set for calculated columns
-    # True when the column was declared with '=' but the declaration carried
-    # no expression at all (the parser found no body to read)
-    expression_missing: bool = False
     # 1-based line on which the expression text starts (calculated columns)
     expression_line: Optional[int] = None
     description: Optional[str] = None  # from a /// comment run

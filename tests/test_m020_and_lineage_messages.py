@@ -19,7 +19,11 @@ def _model(tmp_path: Path, tables: dict[str, str]) -> Path:
 
 
 def test_a_calculated_column_without_an_expression(tmp_path):
-    """PA15: the second text."""
+    """PA15: a column declared with '=' and no expression at all.
+
+    The expression of the column is empty, so the column is reported with
+    the empty-expression text.
+    """
     d = _model(tmp_path, {"Beans": (
         "table Beans\n"
         "\tlineageTag: 11111111-1111-4111-8111-111111111111\n\n"
@@ -29,7 +33,7 @@ def test_a_calculated_column_without_an_expression(tmp_path):
     found = violations(run_check(d, "M020")[1], "M020")
     assert len(found) == 1, found
     assert found[0]["message"] == (
-        "Beans[kg] is marked as calculated but has no expression"), found[0]["message"]
+        "Beans[kg] has empty expression"), found[0]["message"]
 
 
 def test_a_calculated_column_with_an_empty_expression(tmp_path):
@@ -44,6 +48,20 @@ def test_a_calculated_column_with_an_empty_expression(tmp_path):
     assert len(found) == 1, found
     assert found[0]["message"] == (
         "Beans[kg] has empty expression"), found[0]["message"]
+
+
+def test_a_calculated_column_with_the_expression_on_the_next_line(tmp_path):
+    """PA15: the expression of a calculated column may sit on the next
+    line; such a column has an expression and is not reported."""
+    d = _model(tmp_path, {"Beans": (
+        "table Beans\n"
+        "\tlineageTag: 11111111-1111-4111-8111-111111111111\n\n"
+        "\tcolumn kg =\n"
+        "\t\t\tIF(Beans[price] > 1000, \"Premium\", \"Standard\")\n"
+        "\t\tdataType: string\n"
+    )})
+    found = violations(run_check(d, "M020")[1], "M020")
+    assert found == [], found
 
 
 def test_a_duplicate_tag_in_two_files(tmp_path):
