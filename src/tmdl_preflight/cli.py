@@ -1032,6 +1032,11 @@ def _cmd_fieldparam(args) -> int:
     return 0
 
 
+def _warn(message: str) -> None:
+    """A warning on standard error; the run goes on."""
+    print(f"WARNING: {message}", file=sys.stderr)
+
+
 def _cmd_manifest(args) -> int:
     from .manifest import WarehouseTargetError, build_manifest, find_entry, load_targets, render
 
@@ -1048,7 +1053,7 @@ def _cmd_manifest(args) -> int:
     opts = dict(cfg_sections.get("manifest") or {})
     target_opts = dict(opts.get("target") or {})
     targets_path = args.targets or target_opts.get("targets_file")
-    targets = load_targets(Path(targets_path)) if targets_path else {}
+    targets = load_targets(Path(targets_path), _warn) if targets_path else {}
     targets_name = Path(targets_path).name if targets_path else "the targets file"
     root = Path.cwd()
     model_arg = args.model
@@ -1228,7 +1233,7 @@ def _cmd_refs(args) -> int:
     from .manifest import load_targets
     from .refs import census, live_roots, render
 
-    targets = load_targets(Path(args.targets)) if args.targets else {}
+    targets = load_targets(Path(args.targets), _warn) if args.targets else {}
     live = live_roots(targets) if targets else None
     counts = census(args.name, [Path(p) for p in args.paths], args.history, args.loose, live)
     print(render(args.name, counts, args.loose, args.files, args.include_nonlive))

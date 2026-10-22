@@ -22,7 +22,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 GENERATED_BY = "tmdl-preflight manifest"
 TARGET_NOTE = ("Model declarations from expressions.tmdl must match the warehouse target "
@@ -667,37 +667,52 @@ def target_fields(entry: Optional[dict]) -> dict:
     return {"project": project, "dataset": dataset, "billing_project": billing}
 
 
-def load_targets(path: Optional[Path]) -> dict[str, dict]:
+def load_targets(path: Optional[Path],
+                 on_problem: Optional[Callable[[str], None]] = None) -> dict[str, dict]:
     """The targets file (YAML or JSON) as {key: entry}; missing or unreadable
     means no contract. Both the flat shape and the registry shape (a
-    ``clients:`` mapping) are accepted."""
+    ``clients:`` mapping) are accepted.
+
+    ``on_problem`` is told why a file that was named yields no contract
+    (missing, unreadable, unparseable, YAML without PyYAML), so the caller
+    can say so instead of running silently without it."""
     if path is None:
         return {}
+
+    def problem(reason: str) -> dict:
+        if on_problem is not None:
+            on_problem(f"targets file {path}: {reason}; running without a "
+                       f"target contract")
+        return {}
+
+    if not Path(path).is_file():
+        return problem("it does not exist")
     try:
         text = Path(path).read_text(encoding="utf-8-sig")
-    except (OSError, UnicodeDecodeError):
-        return {}
+    except (OSError, UnicodeDecodeError) as exc:
+        return problem(f"it cannot be read ({exc})")
     data: Any = None
     if str(path).endswith(".json"):
         try:
             data = json.loads(text)
-        except ValueError:
-            return {}
+        except ValueError as exc:
+            return problem(f"it is not valid JSON ({exc})")
     else:
         try:
             import yaml  # optional dependency
-        except ImportError:  # pragma: no cover - environment without PyYAML
+        except ImportError:
             try:
                 data = json.loads(text)
             except ValueError:
-                return {}
+                return problem("it is YAML and PyYAML is not installed "
+                               "(pip install PyYAML), or write it as JSON")
         else:
             try:
                 data = yaml.safe_load(text)
-            except yaml.YAMLError:
-                return {}
+            except yaml.YAMLError as exc:
+                return problem(f"it is not valid YAML ({str(exc).splitlines()[0]})")
     if not isinstance(data, dict):
-        return {}
+        return problem("it does not hold a mapping of entries")
     clients = data.get("clients")
     if isinstance(clients, dict):
         data = clients

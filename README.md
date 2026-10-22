@@ -405,7 +405,9 @@ writes a deterministic JSON manifest (tables with their role, columns,
 measures, the warehouse table each partition reads, relationships) for the
 pipelines next to the model; `--check` fails when the committed copy is stale,
 and a targets file pins the warehouse project and dataset each model must
-declare. `tmdl-preflight schema-check --manifest M --schema SNAPSHOT
+declare (a YAML targets file needs the optional PyYAML package; a targets
+file that is missing or cannot be parsed is named in a `WARNING` on standard
+error, and the run goes on without a contract). `tmdl-preflight schema-check --manifest M --schema SNAPSHOT
 [--strict] [--project P] [--dataset D]` compares it with a schema snapshot you
 export (model columns the warehouse lost fail; columns the model does not
 import are informational) and writes the result next to the manifest as

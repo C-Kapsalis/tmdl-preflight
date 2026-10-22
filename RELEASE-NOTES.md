@@ -37,6 +37,13 @@
   no word. The fix pass now reports any edit the verified writer refused
   and its fixer did not report itself, as `refused  <rule>: <path>:
   <reason>`, with the `ERROR` line on standard error and exit 2.
+- BUGFIX (kept): a `--targets` file the tool cannot use is named. A
+  missing file, one that cannot be read or parsed, and a YAML file read
+  without PyYAML installed were dropped with no message, so `manifest`
+  and `refs` ran as if no targets file had been given. They still run
+  without a contract (the exit code is unchanged), and now print
+  `WARNING: targets file <path>: <reason>; running without a target
+  contract` on standard error. PyYAML stays optional.
 
 ## 1.2.1 (2026-10-22)
 

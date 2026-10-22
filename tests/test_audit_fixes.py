@@ -196,3 +196,43 @@ def test_any_refused_fixer_edit_is_reported_and_exits_2(definition):
     assert code == 2, (code, out, err)
     assert "refused  F001: " in out and "Metric Selector.tmdl" in out, out
     assert "ERROR" in err, err
+
+
+# ---------------------------------------------------------------------------
+# 4. a targets file the tool cannot use is named, not ignored
+# ---------------------------------------------------------------------------
+
+
+def test_manifest_warns_about_a_missing_targets_file(tmp_path, project, monkeypatch):
+    monkeypatch.chdir(project)
+    code, out, err = run_cli("manifest", "BikeShop.SemanticModel", "--no-config",
+                             "--out", str(tmp_path / "m.json"),
+                             "--targets", str(tmp_path / "nope.yml"))
+    assert code == 0, (out, err)
+    assert "nope.yml" in err and "does not exist" in err, err
+
+
+def test_refs_warns_about_an_unparseable_targets_file(tmp_path, project):
+    bad = tmp_path / "targets.json"
+    bad.write_text("{not json", encoding="utf-8")
+    code, out, err = run_cli("refs", "Revenue", str(project), "--targets", str(bad))
+    assert code == 0, (out, err)
+    assert "targets.json" in err and "not valid JSON" in err, err
+
+
+def test_a_yaml_targets_file_without_pyyaml_is_named(tmp_path, project, monkeypatch):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "yaml", None)  # import yaml -> ImportError
+    t = tmp_path / "targets.yml"
+    t.write_text("clients:\n  one:\n    model_path: X.SemanticModel\n", encoding="utf-8")
+    code, out, err = run_cli("refs", "Revenue", str(project), "--targets", str(t))
+    assert code == 0, (out, err)
+    assert "targets.yml" in err and "PyYAML" in err, err
+
+
+def test_a_usable_targets_file_prints_no_warning(tmp_path, project):
+    t = tmp_path / "targets.json"
+    t.write_text('{"one": {"model_path": "BikeShop.SemanticModel"}}', encoding="utf-8")
+    code, out, err = run_cli("refs", "Revenue", str(project), "--targets", str(t))
+    assert "WARNING" not in err, err
