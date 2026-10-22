@@ -221,6 +221,16 @@ until configured.
   BUGFIX: a row that names its measure with a quoted table name
   (`NAMEOF('#Report Measures'[Cost])`) counts as on the metric axis; the
   measure is on the axis, whatever way the row spells it.
+- **F008** says what the rows carry and what the table declares:
+  `field-parameter tuples carry 7 field(s) but the table declares 6 column(s) (Value1..Value6) — mismatch breaks compilation.`
+  STRICTER: the check reads a field-parameter source that is not written
+  between fences; the original skipped those tables, but Desktop writes
+  some of them that way.
+- **F009** names the drilldown levels a dimension is missing from:
+  `NAMEOF(beans[roast]) in y-Selector 1,2 but MISSING from y-Selector 3`,
+  and reports every target a plot-specific table adds to the numbered
+  levels on its own:
+  `y-Plot Specific 1: NAMEOF(beans[farm]) absent from every numbered y-Selector level`.
 
 ### Commands and options
 

@@ -87,9 +87,9 @@ class FieldParameterArityRule(Rule):
                 if not declared or len(widths) != 1 or widths[0] == declared:
                     continue
                 out.append(self.violation(
-                    f"every row of '{table.name}' has {widths[0]} values, but the table "
-                    f"declares {declared} columns (Value1..Value{declared}); the calculated "
-                    f"table will not compile. Add or remove the column, or fix the rows.",
+                    f"field-parameter tuples carry {widths[0]} field(s) but the table "
+                    f"declares {declared} column(s) (Value1..Value{declared}) — "
+                    f"mismatch breaks compilation.",
                     file=table.file, line=rows[0].index + 1, obj=table.name,
                 ))
         return out
@@ -128,28 +128,28 @@ class FieldParameterLevelConsistencyRule(Rule):
 
     def _family(self, model: SemanticModel, fam: dict) -> list[Violation]:
         pattern = str(fam.get("levels") or "")
+        family = pattern.replace(" {n}", "")
         lo, hi = (list(fam.get("range") or [1, 9]) + [9])[:2]
-        levels: "OrderedDict[str, tuple[Table, set[str]]]" = OrderedDict()
+        levels: "OrderedDict[int, tuple[Table, set[str]]]" = OrderedDict()
         for n in range(int(lo), int(hi) + 1):
             table = model.get_table(pattern.replace("{n}", str(n)))
             tf = _read(table) if table is not None else None
             if tf is not None:
-                levels[table.name] = (table, nameof_targets(tf.text))
+                levels[n] = (table, nameof_targets(tf.text))
         out: list[Violation] = []
         if not levels:
             return out
         union: set[str] = set().union(*(t for _tb, t in levels.values()))
         if len(levels) >= 2:
             for target in sorted(union):
-                have = [name for name, (_tb, t) in levels.items() if target in t]
-                lack = [name for name, (_tb, t) in levels.items() if target not in t]
+                have = [n for n, (_tb, t) in levels.items() if target in t]
+                lack = [n for n, (_tb, t) in levels.items() if target not in t]
                 if not lack:
                     continue
                 first = levels[lack[0]][0]
                 out.append(self.violation(
-                    f"dimension {target} is missing from {', '.join(lack)} (present in "
-                    f"{', '.join(have)}), so it disappears at those drilldown levels. Add "
-                    f"the row to every level, or remove it from all of them.",
+                    f"NAMEOF({target}) in {family} {','.join(map(str, have))} "
+                    f"but MISSING from {family} {','.join(map(str, lack))}",
                     file=first.file, obj=f"{first.name}:{target}",
                 ))
         placeholder = str(fam.get("placeholder_table") or "").replace("'", "").lower()
@@ -161,12 +161,11 @@ class FieldParameterLevelConsistencyRule(Rule):
                     continue
                 extra = sorted(t for t in nameof_targets(tf.text) - union
                                if not (placeholder and t.startswith(placeholder)))
-                if extra:
+                for target in extra:
                     out.append(self.violation(
-                        f"'{table.name}' is not a subset of the {pattern.replace(' {n}', '')} "
-                        f"levels: it adds {', '.join(extra)}, which no level offers. Register "
-                        f"the dimension in the levels first, or drop the row.",
-                        file=table.file, obj=table.name,
+                        f"{table.name}: NAMEOF({target}) absent from every numbered "
+                        f"{family} level",
+                        file=table.file, obj=f"{table.name}:{target}",
                     ))
         return out
 
