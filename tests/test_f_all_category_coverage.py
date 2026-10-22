@@ -358,3 +358,25 @@ def test_strict_makes_a_coverage_gap_fail(tmp_path):
     assert code == 1, payload
 
 
+def test_a_gate_without_chains_is_skipped(tmp_path):
+    """No temp_basic/temp_alt: the chain checks cannot run."""
+    filters = F_FILTERS.replace(
+        "\t\t\tVAR temp_basic =\n", "\t\t\tVAR other =\n")
+    model = _model_with_gates(tmp_path, [["Beans", "", "Beans_x"]], filters)
+    code, payload = run_check(model, RULE, config={"rules": {RULE: {}}})
+    assert code == 0, payload
+    assert {"rule": "A004", "model": "Shop",
+            "reason": "f-All is absent or non-canonical (no temp_basic/temp_alt)"} \
+        in payload["skipped"]
+
+
+def test_a_gate_without_chains_reports_a_dangling_measure(tmp_path):
+    filters = F_FILTERS.replace(
+        "\t\t\tVAR temp_basic =\n", "\t\t\tVAR other =\n").replace(
+        "[f-Beans] > 0", "[f-Missing] > 0")
+    model = _model_with_gates(tmp_path, [["Beans", "", "Beans_x"]], filters)
+    code, payload = run_check(model, RULE, config={"rules": {RULE: {}}})
+    found = [v for v in violations(payload) if "undeclared-gate-measure" in v["message"]]
+    assert found and "f-Missing" in found[0]["message"], payload
+
+

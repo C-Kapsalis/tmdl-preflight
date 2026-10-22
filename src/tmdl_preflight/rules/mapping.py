@@ -362,21 +362,19 @@ class CategoryGateCoverageRule(Rule):
         # (1) both chains gate the same literals
         and_body = chain_body(text, and_chain, rf"VAR\s+{re.escape(or_chain)}|RETURN")
         or_body = chain_body(text, or_chain, r"VAR\s+|RETURN")
-        if and_body is None or or_body is None:
-            self.skip(ctx, f"{measure_name} is absent or non-canonical "
-                           f"(no {and_chain}/{or_chain})", model_id)
-            return out
-        and_lits, or_lits = gate_literals(and_body), gate_literals(or_body)
-        only_and = sorted(set(and_lits) - set(or_lits))
-        only_or = sorted(set(or_lits) - set(and_lits))
-        if only_and or only_or:
-            add("unpaired-chains",
-                f"{model_id}: f-All's AND/OR chains gate different category sets — "
-                f"the model filters inconsistently depending on how many categories "
-                f"are in scope.\n"
-                f"  only in {and_chain} (AND): {only_and or '—'}\n"
-                f"  only in {or_chain}   (OR): {only_or or '—'}" + hint,
-                Severity.ERROR, "chains")
+        chains = and_body is not None and or_body is not None
+        if chains:
+            and_lits, or_lits = gate_literals(and_body), gate_literals(or_body)
+            only_and = sorted(set(and_lits) - set(or_lits))
+            only_or = sorted(set(or_lits) - set(and_lits))
+            if only_and or only_or:
+                add("unpaired-chains",
+                    f"{model_id}: f-All's AND/OR chains gate different category sets — "
+                    f"the model filters inconsistently depending on how many categories "
+                    f"are in scope.\n"
+                    f"  only in {and_chain} (AND): {only_and or '—'}\n"
+                    f"  only in {or_chain}   (OR): {only_or or '—'}" + hint,
+                    Severity.ERROR, "chains")
 
         # (2) live IF([f-X] > 0 lines name declared measures
         dangling = sorted({name for _line, name in gate_measure_calls(text)
@@ -387,6 +385,11 @@ class CategoryGateCoverageRule(Rule):
                 f"are not declared in {table_name}.tmdl — f-All will fail to evaluate "
                 f"for the entire model: {dangling}",
                 Severity.ERROR, "gates")
+
+        if not chains:
+            self.skip(ctx, f"{measure_name} is absent or non-canonical "
+                           f"(no {and_chain}/{or_chain})", model_id)
+            return out
 
         # (3) to (6) need the registered categories
         mapping = load_mapping(model, prefix=self.options["mapping_prefix"])

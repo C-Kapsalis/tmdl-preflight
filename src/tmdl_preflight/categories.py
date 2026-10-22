@@ -182,13 +182,6 @@ class AxisRow:
     width: int
 
 
-def _unquote(value: str) -> Optional[str]:
-    value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] == '"':
-        return value[1:-1].replace('""', '"')
-    return None
-
-
 #: A row the attribution reader accepts:
 #: ``("label", NAMEOF('Table'[Measure]) or NAMEOF([Measure]), order, "group")``.
 _AXIS_ENTRY_RE = re.compile(
