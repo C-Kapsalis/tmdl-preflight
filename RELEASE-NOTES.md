@@ -1,5 +1,23 @@
 # Release notes
 
+## Fixes after v1.2.0 (unreleased)
+
+### Fixed
+
+- BUGFIX (kept): the manifest lists the tables in the same order on every
+  OS. It sorted the table files as paths, and Windows compares paths
+  without case, so `__Calendar` came before `Campaign Stats` there and
+  after it elsewhere: the `tables` list and the `by classification`
+  summary differed by OS, and a manifest committed from one OS read as
+  stale (`DRIFT`) under `--check` on the other. The files are now sorted
+  by name, case-sensitive, as they were on Linux and macOS. Found by
+  `test_manifest_prints_the_summary_the_pipelines_read` on windows-latest.
+- BUGFIX (kept): a floor file written on Windows ends its lines with LF.
+  `baseline --capture-floors`, `dead-facts --capture` and the ratchet
+  commands wrote the JSON in text mode, so Windows got CRLF. The format
+  is 2-space indent, sorted keys and a final `\n`, on every OS. Found by
+  `test_the_capture_writes_the_floor_file` on windows-latest.
+
 ## Unreleased
 
 This release adds a large set of rules and commands, with a test suite

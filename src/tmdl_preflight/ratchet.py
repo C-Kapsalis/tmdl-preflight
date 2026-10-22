@@ -83,7 +83,8 @@ def entry_for(floors: dict[str, Any], model_key: str) -> tuple[bool, Any]:
 
 
 def write_floors(path: str | Path, data: dict[str, Any], indent: Optional[int] = 2) -> None:
-    Path(path).write_text(json.dumps(data, indent=indent, sort_keys=True) + "\n", encoding="utf-8")
+    Path(path).write_text(json.dumps(data, indent=indent, sort_keys=True) + "\n", encoding="utf-8",
+                          newline="\n")
 
 
 # ---------------------------------------------------------------------------

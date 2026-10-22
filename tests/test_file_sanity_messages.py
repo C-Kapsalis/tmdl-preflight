@@ -13,13 +13,13 @@ def _model(tmp_path: Path, tables: dict[str, str] | None = None,
            model: str = "model Model\n") -> Path:
     definition = tmp_path / "Cafe.SemanticModel" / "definition"
     (definition / "tables").mkdir(parents=True)
-    (definition / "model.tmdl").write_text(model, encoding="utf-8")
+    (definition / "model.tmdl").write_text(model, encoding="utf-8", newline="\n")
     (definition / "database.tmdl").write_text(
-        "database\n\tcompatibilityLevel: 1601\n", encoding="utf-8")
+        "database\n\tcompatibilityLevel: 1601\n", encoding="utf-8", newline="\n")
     for name, body in (tables or {"Beans": (
             "table Beans\n\tlineageTag: 11111111-1111-4111-8111-111111111111\n"
     )}).items():
-        (definition / "tables" / f"{name}.tmdl").write_text(body, encoding="utf-8")
+        (definition / "tables" / f"{name}.tmdl").write_text(body, encoding="utf-8", newline="\n")
     return definition
 
 

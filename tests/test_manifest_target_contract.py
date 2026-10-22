@@ -235,13 +235,13 @@ def test_the_check_says_what_to_run_and_ignores_line_endings(stand_in, tmp_path)
     code, _out, err = run_cli("manifest", model, "--check", "--no-config")
     assert code == 1
     assert err == (f"DRIFT: {_manifest(model)} is stale. Run: tmdl-preflight manifest "
-                   f"{model.as_posix()}\n")
+                   f"{model}\n")
 
     _manifest(model).unlink()
     code, _out, err = run_cli("manifest", model, "--check", "--no-config")
     assert code == 1
     assert err == (f"MISSING: {_manifest(model)} was never generated. Run: tmdl-preflight "
-                   f"manifest {model.as_posix()}\n")
+                   f"manifest {model}\n")
 
 
 def test_the_written_manifest_uses_unix_line_endings(stand_in, tmp_path):

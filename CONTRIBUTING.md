@@ -13,7 +13,9 @@ guide covers how to set up, where things live, and how to add a rule.
 ## Development setup
 
 The tool has **zero runtime dependencies** (standard library only, Python
-≥ 3.10); the only dev dependency is `pytest`.
+≥ 3.10); the dev dependencies are `pytest` and `PyYAML` (the manifest
+tests read a YAML targets file, which the tool reads only when PyYAML is
+installed).
 
 ```console
 $ git clone https://github.com/c-kapsalis/tmdl-preflight.git

@@ -28,10 +28,10 @@ def test_the_text_report_has_the_reference_layout(stand_in):
     assert lines[1] == "RELATIONSHIP ANALYSIS"
     assert lines[2] == "=" * 60
     assert lines[4].startswith("📂 Reading: ")
-    assert lines[4].endswith("/Growth.SemanticModel/definition/relationships.tmdl")
+    assert lines[4].replace("\\", "/").endswith("/Growth.SemanticModel/definition/relationships.tmdl")
     assert lines[5] == "✅ Found 4 relationships"
     assert lines[7].startswith("📂 Scanning tables in: ")
-    assert lines[7].endswith("/Growth.SemanticModel/definition/tables")
+    assert lines[7].replace("\\", "/").endswith("/Growth.SemanticModel/definition/tables")
     assert lines[8] == "✅ Found 8 tables"
     assert lines[10] == "🔍 Analyzing relationship topology..."
     assert lines[11] == "✅ Analysis complete"
