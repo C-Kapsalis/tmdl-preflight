@@ -1,0 +1,15 @@
+table 'x-Selector 1'
+	lineageTag: 0ee70417-cd00-5b8f-891d-12e4e0350001
+
+	column 'x-Selector 1'
+		lineageTag: 0ee70417-cd00-5b8f-891d-12e4e0350002
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	partition 'x-Selector 1' = calculated
+		mode: import
+		source = ```
+				{
+					("Revenue", NAMEOF('Coffee Measures'[Total Revenue]), 0, "Sales_x")
+				}
+				```

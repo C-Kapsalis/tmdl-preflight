@@ -1,0 +1,44 @@
+cultureInfo en-US
+
+	linguisticMetadata =
+			{
+			  "Version": "1.0.0",
+			  "Language": "en-US",
+			  "Entities": {
+			    "live": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "_Live"
+			        }
+			      },
+			      "State": "Generated"
+			    },
+			    "old_stores": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "_Old Stores"
+			        }
+			      },
+			      "State": "Generated"
+			    },
+			    "old_stores_two": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "_Old Stores"
+			        }
+			      },
+			      "State": "Generated",
+			      "Qna": "Two"
+			    },
+			    "old_stores_three": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "_Old Stores"
+			        }
+			      },
+			      "State": "Generated",
+			      "Qna": "Three"
+			    }
+			  }
+			}
+	contentType: json

@@ -1,0 +1,22 @@
+table Empty
+	lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00015
+
+	column empty_id
+		dataType: int64
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00016
+		summarizeBy: none
+		sourceColumn: empty_id
+
+	column order_date
+		dataType: dateTime
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00017
+		summarizeBy: none
+		sourceColumn: order_date
+	refreshPolicy
+		policyType: basic
+		rollingWindowGranularity: year
+		rollingWindowPeriods: 6
+		incrementalGranularity: month
+		incrementalPeriods: 3
+	partition Empty = calculated
+			source = 1 + 1

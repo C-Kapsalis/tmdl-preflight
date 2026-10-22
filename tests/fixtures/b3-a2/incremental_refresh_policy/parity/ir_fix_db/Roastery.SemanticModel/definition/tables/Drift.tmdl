@@ -1,0 +1,35 @@
+table Drift
+	lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00004
+
+	column drift_id
+		dataType: int64
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00005
+		summarizeBy: none
+		sourceColumn: drift_id
+
+	column order_date
+		dataType: dateTime
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00006
+		summarizeBy: none
+		sourceColumn: order_date
+	refreshPolicy
+		policyType: basic
+		rollingWindowGranularity: year
+		rollingWindowPeriods: 6
+		incrementalGranularity: month
+		incrementalPeriods: 3
+		sourceExpression = ```
+				let
+				    ir_dfilter = " order_date >= '" & Date.ToText(DateTime.Date(RangeStart), "yyyy-MM-dd") & "' and order_date < '" & Date.ToText(DateTime.Date(RangeEnd), "yyyy-MM-dd") & "'",
+				    Source = Value.NativeQuery(Warehouse, "select * from orders_m where " & ir_dfilter)
+				in
+				    Source
+			```
+	partition Drift = m
+		mode: import
+		source =
+				let
+				    ir_dfilter = " order_date >= '" & Date.ToText(DateTime.Date(RangeStart), "yyyy-MM-dd") & "' and order_date < '" & Date.ToText(DateTime.Date(RangeEnd), "yyyy-MM-dd") & "'",
+				    Source = Value.NativeQuery(Warehouse, "select * from orders_n where " & ir_dfilter)
+				in
+				    Source

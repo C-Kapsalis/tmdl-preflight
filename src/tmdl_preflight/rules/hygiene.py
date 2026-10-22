@@ -9,7 +9,7 @@ from typing import Optional
 
 from ..edits import EditRefused, read_text_file, verified_write
 from ..parser import indent_level, parse_object_name
-from .base import Context, Rule, Severity, Violation
+from .base import Context, Rule, Severity, Violation, item_relative_path
 
 # ---------------------------------------------------------------------------
 # M017: structure lines indented with spaces
@@ -366,28 +366,88 @@ class DiagramLayoutBlankRule(Rule):
         "layout. Leave the rule off if your team curates layouts."
     )
 
-    def _stale(self, ctx: Context):
+    def _layouts(self, ctx: Context) -> tuple[list[Path], list[Path]]:
+        """``(stale, every)`` the diagram layouts under the scanned path.
+
+        A layout is stale when it is not the blank one. The comparison
+        ignores the line endings, so a copy of the blank layout that was
+        saved with CRLF is not stale.
+        """
         want = canonical_diagram_layout()
-        for model in ctx.models:
-            path = model.definition_path.parent / "diagramLayout.json"
-            if not path.is_file() or ".git" in path.parts:
-                continue
+        every = _find_diagram_layouts(ctx.root)
+        stale = []
+        for path in every:
             try:
                 text = path.read_bytes().decode("utf-8")
             except (OSError, UnicodeDecodeError):
-                text = None
-            if text != want:
-                yield path
+                text = ""
+            if text.replace("\r\n", "\n") != want:
+                stale.append(path)
+        return stale, every
 
     def check(self, ctx: Context) -> list[Violation]:
-        return [self.violation(
-            "diagramLayout.json is not the blank layout; stale table boxes accumulate "
-            "there. Replace it with the blank layout (the auto-fix does).",
-            file=path, obj=path.parent.name) for path in self._stale(ctx)]
+        out: list[Violation] = []
+        stale, every = self._layouts(ctx)
+        if not every:
+            ctx.notes.append("No diagramLayout.json files found — nothing to blank.")
+            return out
+        ctx.notes.append(
+            f"Found {len(every)} diagramLayout.json file(s): "
+            f"{len(every) - len(stale)} already blank, {len(stale)} to normalize.")
+        if stale:
+            ctx.notes.append("\n".join(
+                [f"✗ {len(stale)} diagram layout(s) carry stale/non-empty node data:"]
+                + [f"    {item_relative_path(path)}" for path in stale]))
+        else:
+            ctx.notes.append("✓ All diagram layouts are already blank.")
+        for path in stale:
+            out.append(self.violation(
+                "diagramLayout.json is not the blank layout; stale table boxes accumulate "
+                "there. Replace it with the blank layout (the auto-fix does).",
+                file=path, obj=path.parent.name))
+        return out
 
     def fix(self, ctx: Context) -> list[str]:
-        applied = []
-        for path in list(self._stale(ctx)):
+        applied: list[str] = []
+        stale, every = self._layouts(ctx)
+        if not every:
+            return applied
+        if not stale:
+            ctx.fix_notes.append(
+                "\n✓ Nothing to do — all diagram layouts already blank.")
+            return applied
+        for path in stale:
             path.write_bytes(canonical_diagram_layout().encode("utf-8"))
-            applied.append(f"{path.parent.name}/diagramLayout.json: replaced with the blank layout")
+            applied.append(f"{item_relative_path(path)}: replaced with the blank layout")
+        ctx.fix_notes.append("\n".join(
+            [f"    Blanked: {item_relative_path(path)}" for path in stale]
+            + ["", f"✓ Blanked {len(stale)} diagram layout(s)."]))
         return applied
+
+    def dry_run_report(self, ctx: Context) -> list[str]:
+        """What a dry run would do, in the rule's own words."""
+        stale, every = self._layouts(ctx)
+        if not every:
+            return []
+        if not stale:
+            return ["\n✓ Nothing to do — all diagram layouts already blank."]
+        return [f"    Would blank: {item_relative_path(path)}" for path in stale] + [
+            "", f"(dry-run) {len(stale)} file(s) would be blanked."]
+
+
+def _find_diagram_layouts(root: Path) -> list[Path]:
+    """Every ``diagramLayout.json`` of a semantic model under ``root``.
+
+    A model folder the tool does not load as a model is included: the
+    layout is stale whoever owns it.
+    """
+    candidates = [root] if root.name.endswith(".SemanticModel") else []
+    candidates += [d for d in root.rglob("*.SemanticModel") if d.is_dir()]
+    out = []
+    for model_dir in sorted(set(candidates)):
+        if ".git" in model_dir.parts:
+            continue
+        layout = model_dir / "diagramLayout.json"
+        if layout.is_file():
+            out.append(layout)
+    return sorted(out)

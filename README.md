@@ -218,7 +218,7 @@ commit.
 | O004 | a user-facing measure homed on a fact table (opt-in) | warning | no |
 | O005 | measures on a dimension table (opt-in) | info | no |
 | O006 | a measures table with no measures (opt-in) | info | no |
-| N020 | fewer `_` dimension tables than the template's floor (opt-in, disabled by default) | warning | no |
+| N020 | fewer `_` dimension tables than the template's floor (opt-in, disabled by default) | error | no |
 | O007 | a fact table no measure reads (opt-in ratchet) | error | no |
 | O008 | an intermediary helper (`-Name`) without a display folder (opt-in) | warning | no |
 | O009 | a visible helper measure not on the always-visible list (opt-in) | warning | yes |
@@ -301,6 +301,49 @@ strict = true                           # tmdl-preflight check . --profile ci
 
 Unknown keys, unknown rule ids and wrongly typed options are errors (exit
 2), never silent no-ops. An exemption without a `reason` is rejected.
+
+### Incremental refresh
+
+`P001` and `P002` read the `refresh_policy` section. The loader function is
+the one your facts load through, so it is a setting, not a guess:
+
+```toml
+[tool.tmdl-preflight.refresh_policy]
+loader_function = "source_filter_dates"   # the call the facts load through
+window_markers = ["RangeEnd"]              # what marks a source as windowed
+etl_stamp_columns = ["updated_at_db"]      # load stamps, not event dates
+inline_template = "let ir_dfilter = ..."   # the windowed query (one line)
+backlog = { "spinout-01/Sales" = ["Refunds"] }
+exempt = { "Import Log" = "a bookkeeping table" }
+```
+
+* `window_markers` — a source counts as windowed when it names
+  `RangeStart` and one of these markers. The default (`RangeEnd`) is
+  generic; the parity setting for a template that inlines its own window
+  variable is `window_markers = ["ir_dfilter"]`.
+* `inline_template` — the windowed query that replaces the loader call.
+  It must render to a **single line** (the placeholders `{view}`,
+  `{date_column}`, `{floor}` and `{table}` are substituted). An example
+  value, the warehouse query one template uses:
+
+  ```
+  let ir_dfilter = " cast({date_column} as date) >= parse_date('%m/%d/%Y', '" & Date.ToText(DateTime.Date(RangeStart), "MM/dd/yyyy") & "') and cast({date_column} as date) < parse_date('%m/%d/%Y', '" & Date.ToText(DateTime.Date(RangeEnd), "MM/dd/yyyy") & "') and cast({date_column} as date) >= parse_date('%m/%d/%Y', '" & Date.ToText({floor}, "MM/dd/yyyy") & "') ", ir_qstr = "SELECT * FROM `" & #"v-BQ_project" & "." & #"v-db" & "." & "{view}" & "` where " & ir_dfilter & #"v-rows_limit", ir_src = Value.NativeQuery(GoogleBigQuery.Database([CommandTimeout=#duration(0,3,0,0), BillingProject=#"v-BQ_billing_project"]){[Name= #"v-BQ_project" ]}[Data], ir_qstr, null, [EnableFolding=true]) in ir_src
+  ```
+
+  The repair replaces **only** the loader call, so the rest of the
+  partition's M source stands, and it writes the same body as the policy's
+  `sourceExpression`.
+* `backlog` — the facts that are known to be missing a `refreshPolicy`, per
+  model. `P002` does not report them, and the repair prunes the entries it
+  fixed (`--no-prune` keeps them).
+* `exempt` — a table-to-reason map, or a list of `{table, reason}` tables.
+
+The repair is unsafe (it changes what a partition stores), so it runs only
+when it is named:
+
+```console
+$ tmdl-preflight fix . --select refresh-policy-repair --only missing
+```
 
 ## Baselines
 

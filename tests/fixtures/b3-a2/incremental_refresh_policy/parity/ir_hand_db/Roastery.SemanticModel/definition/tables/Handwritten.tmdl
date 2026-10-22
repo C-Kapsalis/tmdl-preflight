@@ -1,0 +1,17 @@
+table Handwritten
+	lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00055
+
+	column hand_id
+		dataType: int64
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00056
+		summarizeBy: none
+		sourceColumn: hand_id
+
+	partition Handwritten = m
+		mode: import
+		source =
+			let
+			    a = RangeStart,
+			    b = RangeEnd
+			in
+			    a

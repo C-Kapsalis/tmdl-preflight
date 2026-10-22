@@ -136,11 +136,17 @@ def test_dimension_tables_naming_convention(tmp_path, model, expected_count):
     found = violations(payload, "N020")
     if expected_count < 20:
         assert len(found) == 1
-        assert found[0]["severity"] == "warning"
-        assert str(expected_count) in found[0]["message"]
-        assert code == 1  # --strict: warnings fail
+        assert found[0]["severity"] == "error"
+        assert found[0]["message"] == (
+            "Expected at least 20 dimension tables starting with '_', "
+            f"found {expected_count}")
+        assert code == 1
     else:
-        assert found == []
+        assert len(found) == 1
+        assert found[0]["severity"] == "info"
+        assert found[0]["message"].split("\n")[0] == (
+            "✅ Found 20 dimension tables starting with '_'")
+        assert found[0]["message"].split("\n")[1] == "Sample dimension tables:"
         assert code == 0
     # disabled by default: no finding without the opt-in
     code, payload = run_check(target, "N020")

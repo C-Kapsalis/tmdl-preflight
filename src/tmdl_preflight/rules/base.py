@@ -111,7 +111,8 @@ class Context:
         self.options: dict[str, Any] = {}
         # free-text notes rules want shown with the report (tighten hints)
         self.notes: list[str] = []
-        # lines a fixer prints while it works (progress, counts)
+        # notes a fixer produced (repair reports); the re-check clears
+        # ``notes`` but keeps these
         self.fix_notes: list[str] = []
         # multi-line closing advice a fixer prints after the fix summary
         self.blocks: list[str] = []
@@ -257,6 +258,23 @@ class Rule:
         """True when the fixer has work although its own check reported
         nothing (a fixer that also repairs another rule's findings)."""
         return False
+
+    def pending_fix_objects(self, ctx: Context, violations: list[Violation]) -> set[str]:
+        """The objects this rule's fixer would act on.
+
+        ``fix --check`` counts them, so a fixer that repairs another rule's
+        findings overrides this.
+        """
+        return {v.obj or v.path or "" for v in violations
+                if v.rule_id == self.id and v.fixable and v.severity is not Severity.INFO}
+
+    def dry_run_report(self, ctx: Context) -> list[str]:
+        """The lines a dry run prints for this rule, in the rule's own words.
+
+        A rule that has something to say about what a fix would do says it
+        here; the default is nothing.
+        """
+        return []
 
     def disabled_by_policy(self) -> bool:
         """True when a policy option turned this rule off for the run; the

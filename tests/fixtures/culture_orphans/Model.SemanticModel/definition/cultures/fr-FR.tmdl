@@ -1,0 +1,11 @@
+cultureInfo fr-FR
+
+	linguisticMetadata =
+			{
+			  "Version": "1.0.0",
+			  "Language": "fr-FR",
+			  "Binding": {
+			    "ConceptualEntity": "_Old Stores"
+			  }
+			}
+	contentType: json

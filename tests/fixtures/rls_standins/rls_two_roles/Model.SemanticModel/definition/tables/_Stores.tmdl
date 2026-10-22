@@ -1,0 +1,25 @@
+table _Stores
+	lineageTag: 2f155360-b3a7-5f19-a972-b708605967f4
+
+	column store_id
+		dataType: int64
+		lineageTag: 4f0194ce-e8df-5c79-96cf-a7e95da81e3f
+		summarizeBy: none
+		sourceColumn: store_id
+
+	column Region
+		dataType: string
+		lineageTag: 8116dfa4-cc07-51e6-b2c6-807ebdc08697
+		summarizeBy: none
+		sourceColumn: Region
+
+	column Email
+		dataType: string
+		lineageTag: 5a9ac019-3308-563a-b7d4-73ed96f8c1e1
+		summarizeBy: none
+		sourceColumn: Email
+
+	partition _Stores = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

@@ -1,0 +1,14 @@
+table 'z-Map Lookups'
+	lineageTag: 0ee70417-cd00-5b8f-891d-12e4e0350003
+
+	column 'z-Map Lookups'
+		lineageTag: 0ee70417-cd00-5b8f-891d-12e4e0350004
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	partition 'z-Map Lookups' = calculated
+		source = ```
+				{
+					("Revenue", NAMEOF('Coffee Measures'[Total Revenue]), 0, "Sales_x")
+				}
+				```

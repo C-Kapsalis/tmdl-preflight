@@ -1,0 +1,17 @@
+table Ledger
+	lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00010
+
+	column ledger_id
+		dataType: int64
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00011
+		summarizeBy: none
+		sourceColumn: ledger_id
+
+	partition Ledger = m
+		mode: import
+		source =
+			let
+			    Source = source_filter_dates("orders_n", "order_date", false, #"v-fromdate", #"v-isRolling", 30, #"v-rows_limit"),
+			    Other = 1
+			in
+			    Source

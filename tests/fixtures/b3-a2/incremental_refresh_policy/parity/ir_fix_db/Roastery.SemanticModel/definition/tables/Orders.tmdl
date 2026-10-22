@@ -1,0 +1,21 @@
+table Orders
+	lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00007
+
+	column orders_id
+		dataType: int64
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00008
+		summarizeBy: none
+		sourceColumn: orders_id
+
+	column order_date
+		dataType: dateTime
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00009
+		summarizeBy: none
+		sourceColumn: order_date
+	partition Orders = m
+		mode: import
+		source =
+				let
+				    Source = source_filter_dates("orders_n", "order_date", false, #"v-fromdate")
+				in
+				    Source

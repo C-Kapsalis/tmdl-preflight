@@ -1,0 +1,15 @@
+table 'y-Selector 1'
+	lineageTag: 0ee70417-cd00-5b8f-891d-12e4e0350007
+
+	column 'y-Selector 1'
+		lineageTag: 0ee70417-cd00-5b8f-891d-12e4e0350008
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	partition 'y-Selector 1' = calculated
+		mode: directQuery
+		source = ```
+				{
+					("Revenue", NAMEOF('Coffee Measures'[Total Revenue]), 0, "Sales_x")
+				}
+				```

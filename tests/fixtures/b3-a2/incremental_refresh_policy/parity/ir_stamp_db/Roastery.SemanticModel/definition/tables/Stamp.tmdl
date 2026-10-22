@@ -1,0 +1,21 @@
+table Stamp
+	lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00012
+
+	column stamp_id
+		dataType: int64
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00013
+		summarizeBy: none
+		sourceColumn: stamp_id
+
+	column order_date
+		dataType: dateTime
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00014
+		summarizeBy: none
+		sourceColumn: order_date
+	partition Stamp = m
+		mode: import
+		source =
+				let
+				    Source = source_filter_dates("stamps_n", "updated_at_db", false, #"v-fromdate")
+				in
+				    Source

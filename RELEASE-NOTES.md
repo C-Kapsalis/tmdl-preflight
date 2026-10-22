@@ -44,7 +44,7 @@ the example model with one defect each. Where that evidence and the
 | O005 | measures-in-dimension-tables (opt-in) | info | no |
 | O006 | empty-measure-tables (opt-in) | info | no |
 | O007 | dead-fact-tables (opt-in) | error | no |
-| N020 | dimension-prefix-floor (opt-in, disabled by default) | warning | no |
+| N020 | dimension-prefix-floor (opt-in, disabled by default) | error | no |
 | C012 | required-calc-groups (opt-in) | error | no |
 | O008 | intermediary-helper-folder (opt-in) | warning | no |
 | O009 | helper-measures-hidden (opt-in) | warning | yes |
@@ -121,6 +121,82 @@ the same floor file and fails on a rise.
 
 ### Changed rules
 
+- **P001** reports one finding per problem and words it the way the
+  original does: a policy that comes after the partition, a policy that
+  comes after a table-level annotation, a `policyType` outside
+  `('basic',)`, a granularity outside the four, a period count that is not
+  a positive integer, an unrecognized property, a missing
+  `sourceExpression`, a table with no M partition, a `sourceExpression`
+  that is not byte-identical to the partition source (the first difference
+  is shown, with its line and column), and a `sourceExpression` that names
+  no window. Only the drifted `sourceExpression` can be repaired
+  automatically; the other problems need a human, are not marked
+  auto-fixable and are not counted by `fix --check`.
+- **P002** reports the eligible facts that have no policy with the
+  original's reasons: a source that is already windowed (the block was
+  probably lost in a merge), an event-date fact on a view, with the
+  caution when the column is the ETL load stamp rather than an event date.
+  The facts whose M source is hand-written are listed once per model, and
+  the stale backlog entries are listed per model too. The exempt list
+  accepts a table-to-reason map or a list of `{table, reason}` tables.
+- **P001** reads the window markers from the configuration: a source
+  counts as windowed when it names `RangeStart` and one of
+  `window_markers` (default `["RangeEnd"]`).
+  BUGFIX: the original's test hard-coded the window variable of one
+  template; `window_markers = ["ir_dfilter"]` restores the original's exact
+  test.
+- **F015** says which table is wrong and what is wrong with it: `No
+  partition found`, `Partition mode is '<mode>', expected 'import'` and
+  `Source does not follow tuple pattern with NAMEOF`. It reads an unfenced
+  source as well as a fenced one, so a table whose `source =` is followed by
+  the M rows is judged on them. The run also prints, per model, how many
+  axis tables were analysed, how many follow the pattern and how many do
+  not, and how many of the calculated tables carry a partition (with the
+  partition modes they declare). BUGFIX: the original printed the emoji
+  double-encoded; the tool prints the intended characters.
+- **N020** counts the table FILES whose name starts with the prefix (the
+  convention is about the file name, not about the name the table
+  declares) and says `Expected at least <floor> dimension tables starting
+  with '<prefix>', found <n>`. When the floor is met, the rule reports
+  how many dimension tables there are and shows a sample of ten names.
+  The finding is an error, not a warning: the original failed the run
+  when the floor was not met. The rule stays opt-in and disabled by
+  default.
+- **M022** reports the diagram layouts the way the check has always
+  reported them: how many files it found, how many are already blank, and
+  the ones that carry stale node data. The repair says which file it
+  blanked and how many it blanked; a dry run says which file it would
+  blank and writes nothing. Every semantic-model folder under the scanned
+  path is checked, including one the tool does not load as a model, and a
+  blank layout saved with Windows line endings counts as blank.
+  BUGFIX: the layout the repair writes has LF line endings; the original
+  wrote the line endings of the platform it ran on.
+- **M021** reports the orphan bindings of a culture file as a block:
+  `ORPHAN BINDINGS (<n>): <path>` and one line per entity. The repair
+  prints how many binding nodes it dropped per file, and the run says how
+  many files it fixed and how many nodes it removed. Only a member value
+  or an array item binds: a binding that sits on the document's own top
+  level binds to nothing and is not reported. BUGFIX: a repaired culture
+  file keeps its line endings; the original rewrote the whole file with
+  LF.
+- **L001-L005** name the file and the problem in the wording the check
+  has always used: `<file>: missing `modelPermission: read``,
+  `<file>: `tablePermission <table>` has no `= <DAX>``,
+  `<file>: `<table>` filter uses USERNAME() — replace with
+  USERPRINCIPALNAME()`, the silent-bypass trap for a filter that reads a
+  mapping table with `IN VALUES(...)`, the mapping table that is not
+  `isHidden`, and the mapping table that is a relationship endpoint.
+  `modelPermission:` may be written with any spacing (`modelPermission:read`
+  is read). The mapping table is reported once, however many
+  relationships point at it. BUGFIX: the section numbers of the original's
+  guide are not printed; the tool does not ship that guide, so the
+  reference would point a reader at a document they do not have.
+- **L006** prints the inventory and the posture in the layout a reviewer
+  reads: the roles directory, the role files with their model permission
+  and the tables each may read, the user-mapping tables, and the posture
+  (no RLS, static, dynamic via a mapping table, or incomplete) with the
+  service-side concerns a file check cannot settle. BUGFIX: the section
+  numbers of the original's guide are not printed, for the same reason.
 - **M002** pairs ``` fences by structure (a fence opens after `=` and closes
   on the next line that starts with backticks), so backticks inside a fenced
   string literal are no longer an "unpaired fence". It also reports a
@@ -1050,6 +1126,40 @@ unchanged.
   axis table is checked, not only the measures: a calculated column or a
   partition source that names a table that does not exist is reported as
   well. BUGFIX.
+- **A permission line is read even when the line before it is a bare
+  permission.** The original never examined a `tablePermission` line that
+  followed a bare `tablePermission <T>` line, so its `USERNAME()` or
+  `IN VALUES` problem went unreported; and it read
+  `tablePermission T=<expr>` (no spaces) as a bare permission on a table
+  named `T=<expr>`. BUGFIX: both are read as written.
+- **The refresh repair replaces only the loader call.** The windowed query
+  takes the place of the loader call itself, so the rest of the partition's
+  M source (the surrounding `let ... in ...`, the other steps, the
+  indentation, the line breaks) stands, and the policy's `sourceExpression`
+  is the new partition body, line for line.
+  BUGFIX: the repair used to replace the whole source body with the
+  template, which dropped every other step of the M query.
+- **The refresh repair says what it did.** It prints the tables it
+  repaired, the tables it could not repair and why, the tables that owe a
+  manual XMLA full refresh because their partition source changed, and the
+  tables it only reinstated a policy over (no refresh owed).
+- **A refresh table the repair cannot write is reported, not skipped.** A
+  loader table with no `inline_template` configured, a source that is
+  deliberately unfiltered or has no date column, and a source whose loader
+  call cannot be parsed are listed under the failed repairs, and the
+  coverage finding for them is not marked auto-fixable.
+- **A blanket `fix --check` does not count the unsafe refresh fixer.** The
+  repair changes what a partition stores, so a blanket fix does not run
+  it; the check now counts what the selected fixers would act on and lists
+  the same rules, so `fix --check` without `--select` neither lists nor
+  counts P001, and `fix --check --select P001` does.
+- **The written refresh policy closes its fence with four tabs.** The
+  partition's own fence may sit at any indentation; the fence the repair
+  writes is always four tabs and three backticks.
+- **The refresh repair prunes the backlog it fixed.** The repaired entries
+  are removed from that model's backlog in the configuration file, line by
+  line, so every other line of the file stays byte-identical, and the run
+  says how many entries it pruned. `--no-prune` keeps them.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the
