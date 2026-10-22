@@ -28,7 +28,9 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-test = ["pytest>=7.0"]
+# PyYAML: the manifest tests read a YAML targets file, which the tool reads
+# only when PyYAML is installed (it stays an optional runtime import).
+test = ["pytest>=7.0", "PyYAML>=6.0"]
 
 [project.urls]
 Documentation = "https://tmdl-preflight-documentation.readthedocs.io/en/latest/"
