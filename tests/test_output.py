@@ -9,9 +9,9 @@ from tmdl_preflight.cli import main
 
 
 def _break_lineage(definition):
-    products = (definition / "tables" / "Products.tmdl").read_text(encoding="utf-8")
+    products = (definition / "tables" / "_Products.tmdl").read_text(encoding="utf-8")
     tag = re.search(r"lineageTag:\s*(\S+)", products).group(1)
-    stores_file = definition / "tables" / "Stores.tmdl"
+    stores_file = definition / "tables" / "_Stores.tmdl"
     stores = stores_file.read_text(encoding="utf-8")
     old = re.search(r"lineageTag:\s*(\S+)", stores).group(1)
     stores_file.write_text(stores.replace(old, tag, 1), encoding="utf-8")
@@ -33,7 +33,7 @@ def test_json_has_scanned_and_legacy_fields(project, definition, capsys):
     assert payload["scanned"]["relationships"] == 4
     v = payload["violations"][0]
     assert {"rule", "severity", "message", "file", "line", "object", "fixable"} <= set(v)
-    assert v["path"] == "BikeShop.SemanticModel/definition/tables/Stores.tmdl"
+    assert v["path"] == "BikeShop.SemanticModel/definition/tables/_Stores.tmdl"
 
 
 def test_json_flag_is_alias(project, capsys):
@@ -69,7 +69,7 @@ def test_sarif_format(project, definition, capsys):
     assert result["ruleId"] == "M003" and result["level"] == "error"
     assert driver["rules"][result["ruleIndex"]]["id"] == "M003"
     loc = result["locations"][0]["physicalLocation"]
-    assert loc["artifactLocation"]["uri"].endswith("tables/Stores.tmdl")
+    assert loc["artifactLocation"]["uri"].endswith("tables/_Stores.tmdl")
     assert loc["region"]["startLine"] == 3
     assert "\\" not in loc["artifactLocation"]["uri"]
 

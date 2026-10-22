@@ -8,9 +8,9 @@ import pytest
 
 
 def _break_lineage(definition):
-    products = (definition / "tables" / "Products.tmdl").read_text(encoding="utf-8")
+    products = (definition / "tables" / "_Products.tmdl").read_text(encoding="utf-8")
     tag = re.search(r"lineageTag:\s*(\S+)", products).group(1)
-    stores_file = definition / "tables" / "Stores.tmdl"
+    stores_file = definition / "tables" / "_Stores.tmdl"
     stores = stores_file.read_text(encoding="utf-8")
     old = re.search(r"lineageTag:\s*(\S+)", stores).group(1)
     stores_file.write_text(stores.replace(old, tag, 1), encoding="utf-8")

@@ -96,7 +96,9 @@ def test_fix_select_r007_removes_only_the_autodetected_block(stand_in):
     after = rel_file.read_text(encoding="utf-8")
     assert AD_ID not in after
     assert after.rstrip("\n") == keep.rstrip("\n")
-    assert after.endswith("\n") and not after.endswith("\n\n")
+    # the blank line that separated the two blocks stays: the fixer removes
+    # the offending block and nothing else
+    assert after.endswith("\n")
     assert violations(payload, "R007") == []
     # idempotent
     run_fix(model, "R007")

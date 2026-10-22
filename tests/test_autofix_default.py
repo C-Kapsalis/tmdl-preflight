@@ -30,9 +30,9 @@ def _snapshot(root: Path) -> dict[str, str]:
 
 def _plant_fixable_findings(definition: Path) -> None:
     """One M013 (dangling description at end of file) and one M003 (duplicate tag)."""
-    stores = definition / "tables" / "Stores.tmdl"
+    stores = definition / "tables" / "_Stores.tmdl"
     stores.write_text(stores.read_text(encoding="utf-8") + "\n/// orphan description\n", encoding="utf-8")
-    products = (definition / "tables" / "Products.tmdl").read_text(encoding="utf-8")
+    products = (definition / "tables" / "_Products.tmdl").read_text(encoding="utf-8")
     tag = next(ln.split(":", 1)[1].strip() for ln in products.splitlines() if "lineageTag:" in ln)
     text = stores.read_text(encoding="utf-8")
     old = next(ln.split(":", 1)[1].strip() for ln in text.splitlines() if "lineageTag:" in ln)

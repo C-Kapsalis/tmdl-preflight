@@ -62,14 +62,19 @@ def test_fact_tables_have_account_key(stand_in, tmp_path, floor, verdict, new):
         assert any("baseline" in v["message"].lower() or "record" in v["message"].lower()
                    for v in found)
         return
-    assert sorted(v["object"] for v in found) == sorted(new)
-    for v in found:
-        if v["object"] == "Sitemap":
-            assert "missing key column" in v["message"]
-        if v["object"] == "Ads":
-            assert "missing relationship" in v["message"]
+    # one finding per model, listing the new offenders
+    assert len(found) == (1 if new else 0)
+    message = found[0]["message"] if found else ""
+    for name in new:
+        assert f"    - {name}" in message
+    for name in set(("Ads", "Sitemap")) - set(new):
+        assert f"    - {name}" not in message
+    if "Sitemap" in new:
+        assert "missing 'account_x_id'" in message
+    if "Ads" in new:
+        assert "NO active relationship to _Accounts[account_x_id]" in message
     for passing in ("Campaigns", "Transactions"):
-        assert not any(v["object"] == passing for v in found)
+        assert passing not in message
 
 
 def test_unratcheted_run_classifies_offenders(stand_in):
@@ -77,8 +82,11 @@ def test_unratcheted_run_classifies_offenders(stand_in):
     root = stand_in("b3-a2/fact_table_account_key/roastery")
     opts = {k: v for k, v in OPTIONS.items() if k != "fail_without_baseline_entry"}
     code, payload = run_check(root, RULE, config={"rules": {RULE: opts}})
-    found = {v["object"]: v["message"] for v in violations(payload)}
+    found = violations(payload)
     assert code == 1
-    assert set(found) == {"Ads", "Sitemap"}
-    assert "missing relationship" in found["Ads"]
-    assert "missing key column" in found["Sitemap"]
+    assert len(found) == 1
+    message = found[0]["message"]
+    assert "    - Ads" in message
+    assert "    - Sitemap" in message
+    assert "missing 'account_x_id'" in message
+    assert "NO active relationship to _Accounts[account_x_id]" in message

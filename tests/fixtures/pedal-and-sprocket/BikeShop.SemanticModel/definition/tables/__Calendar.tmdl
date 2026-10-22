@@ -1,0 +1,45 @@
+/// Standard date table, generated as a calculated table.
+table __Calendar
+	lineageTag: 7f22e2f3-e273-44b5-8ad6-d1e2f3041526
+
+	column Date
+		dataType: dateTime
+		isKey
+		formatString: Long Date
+		lineageTag: 8033f304-f384-45c6-9be7-e2f304152637
+		summarizeBy: none
+		sourceColumn: [Date]
+
+	column Year
+		dataType: int64
+		lineageTag: 0f1a2b3c-4d5e-4f60-8a71-829304152637
+		summarizeBy: none
+		sourceColumn: [Year]
+
+	column Quarter
+		dataType: int64
+		lineageTag: 1a2b3c4d-5e6f-4071-8b82-930415263748
+		summarizeBy: none
+		sourceColumn: [Quarter]
+
+	column Month
+		dataType: int64
+		lineageTag: 2b3c4d5e-6f70-4182-9c93-041526374859
+		summarizeBy: none
+		sourceColumn: [Month]
+
+	column Week
+		dataType: int64
+		lineageTag: 3c4d5e6f-7081-4293-8da4-152637485960
+		summarizeBy: none
+		sourceColumn: [Week]
+
+	column Day
+		dataType: int64
+		lineageTag: 4d5e6f70-8192-43a4-9eb5-263748596071
+		summarizeBy: none
+		sourceColumn: [Day]
+
+	partition __Calendar = calculated
+		mode: import
+		source = CALENDAR(DATE(2024, 1, 1), DATE(2026, 12, 31))

@@ -631,7 +631,77 @@ unchanged.
   `<file> axis=<axis> renders '<name>' as <format> — <n> decimals`, so a
   reviewer sees which calculation group and which branch lost the
   decimals. One finding per failing axis, not one per model.
-- **`stats --measures` prints one summary per model.** A folder with two
+
+- **The cohort-calendar check reads the relationship sides.** A subject
+  dimension is the many side of an active relationship whose one side is a
+  cohort calendar and that is itself the one side of another active
+  relationship; the subject facts are the many sides of those dimensions.
+  The reverse edge a bidirectional relationship adds never makes a subject
+  or a fact.
+- **The anchor-calendar check records a floor.** The new option `floor`
+  names a JSON file that holds the dead calendars each model already has;
+  those do not fail, the ones that are new do. A calendar in the floor
+  that reaches something now produces a tighten note.
+- **The anchor-calendar check reads the template from any folder.** The
+  `template` option may name a model folder anywhere on disk, absolute or
+  relative to the configuration file; a folder that does not exist excludes
+  nothing. `retained` may be a list that applies to every model or a
+  mapping from a model key to the tables that model keeps unwired.
+- **The account-key check reports one finding per model.** The new
+  offenders are listed together, split into the ones that carry the key
+  column but have no active join and the ones that do not carry the key
+  column at all; the latter are called out as a template fact (a
+  core-model defect) or as model-specific, depending on the new
+  `template_facts` option (a list) or the new `template` option (a model
+  folder whose facts are read with the shared table-role law). A model with
+  a floor file but no entry of its own fails: the backlog has to be
+  recorded deliberately. The key column is matched case-sensitively.
+- **`check --capture-floor FILE` writes the ratchet floor** of the
+  selected rules and prints what it captured; the file keeps the entries
+  of the models it did not see.
+- **The cohort-calendar check stays opt-in on "nothing checked".** The
+  earlier gate failed a run in which no model had a cohort calendar with
+  subject facts; here a single-model run without cohort calendars would
+  fail for no reason, so the check is off by default. Set
+  `require_cohort_calendars: true` to make a run that checked nothing an
+  error.
+- **The relationship rules speak the reference's language.** R001 names a
+  missing endpoint ("From table not found: X (in relationship abcdef12...)")
+  and prints the validation summary as a note; R002 says "Invalid from
+  cardinality: X in abcdef12..." and prints the cardinality distribution;
+  R004 prints the cross-filtering analysis; R005 prints the orphan analysis
+  and exempts the tables that are expected to stand alone by name; R006
+  reports one finding per table pair, naming every relationship in it;
+  R007 says whether the relationship is active ("ACTIVE  <-- changing
+  measure results NOW") and prints the run note; R010 says "Cycle
+  detected: a -> b -> c -> a"; R011, R012 and R013 print their coverage,
+  cardinality and completeness notes. STRICTER: R010 now reports a table
+  joined to itself, and R011/R012 are errors (the reference fails on
+  them).
+- **R005 exempts the tables that stand alone by name.** A table whose name
+  holds "Plot Specific", "Selector" or "Measure", or that starts with
+  "z-", is expected to have no relationship; the rest are reported and
+  listed. The rule never fails the run.
+- **R009 runs by default.** A model without relationships.tmdl, or with a
+  file that parses to zero relationships, is an error. A single-table model
+  legitimately has none: switch the rule off with
+  `rules: {R009: {enabled: false}}`. STRICTER: the rule was a warning and
+  opt-in; the earlier gate failed the run.
+- **R013 and R014 run by default.** They are advisory (info), so they never
+  fail the run, and they print the completeness and the key-coverage
+  analysis. STRICTER: both were opt-in; the earlier gate always printed
+  them.
+- **R011 checks a model that has no calendar table.** Coverage is then 0%
+  and every fact is listed, instead of the model being skipped.
+- **R012 compares the cardinalities exactly as written.** "Many" is not
+  "many": a relationship that spells its cardinality with a capital letter
+  is reported, as the reference reports it.
+- **The R007 fixer keeps every other byte.** It removes the offending
+  relationship block from its header line up to the next relationship
+  declaration and leaves the rest of the file exactly as it was, blank
+  lines included. STRICTER: R007 can never be baselined (zero tolerance).
+- **A relationship declaration may be followed by any whitespace.** A tab
+  after the keyword starts the block, as a space does.- **`stats --measures` prints one summary per model.** A folder with two
   models prints two summaries, each with its own totals, in the layout a
   reviewer reads: the totals, the user-facing and helper split, the
   field-parameter surfacing, the helper subcategories, the top tables and

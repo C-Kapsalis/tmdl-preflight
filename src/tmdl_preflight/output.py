@@ -80,6 +80,9 @@ def _cwd_relative(file: Optional[Path]) -> str:
 
 def render_text(report: PreflightReport, root: Path) -> str:
     out: list[str] = []
+    out.extend(report.fix_notes)
+    if report.fix_notes:
+        out.append("")
     for applied in report.fixes_applied:
         out.append(f"fixed  {applied}")
     for planned in report.would_fix:

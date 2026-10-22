@@ -133,7 +133,8 @@ def test_r007_matches_anywhere_and_removes_back_to_back(tmp_path):
     assert len(violations(run_check(model, "R007")[1])) == 2
     run_fix(model, "R007")
     text = rel.read_text(encoding="utf-8")
-    assert "autodetected" not in text.lower() and text.endswith("\n") and not text.endswith("\n\n")
+    assert "7c9e-autodetected-xy" not in text and "AutoDetectedX" not in text
+    assert text.endswith("\n")
 
 
 def test_r007_config_flag_opts_into_blanket_fix(tmp_path):

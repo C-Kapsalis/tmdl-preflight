@@ -92,6 +92,8 @@ class PreflightReport:
     # the console report of a rule that came from a script with a report of
     # its own, rendered before the repair so it can describe what was there
     console: list[str] = field(default_factory=list)
+    # lines the fixers printed while they worked
+    fix_notes: list[str] = field(default_factory=list)
 
     def by_severity(self, severity: Severity) -> list[Violation]:
         return [v for v in self.violations if v.severity == severity]
@@ -137,6 +139,7 @@ class PreflightReport:
             "would_fix": self.would_fix,
             "refused_fixes": self.refused_fixes,
             "notes": self.notes,
+            "fix_notes": self.fix_notes,
             "violations": [v.to_dict() for v in self.violations],
             "scanned": self.scanned,
         }
@@ -180,6 +183,7 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
     report = PreflightReport()
     report.found = list(first.violations)
     ctx.refused_fixes = []
+    ctx.fix_notes = []
 
     dirty_rule_ids = {v.rule_id for v in first.violations}
     chosen = {e.lower() for e in (explicit or set())}
@@ -198,6 +202,7 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
         # new state, not the parse cache.
         ctx.reload()
 
+    report.fix_notes = list(ctx.fix_notes)
     second = check(ctx, ruleset)
     report.refused_fixes = list(ctx.refused_fixes)
     report.violations = second.violations

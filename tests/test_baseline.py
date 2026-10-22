@@ -104,9 +104,9 @@ def test_refuses_to_overwrite(project, capsys):
 
 
 def test_non_baselinable_rules_are_never_recorded(project, definition, capsys):
-    products = (definition / "tables" / "Products.tmdl").read_text(encoding="utf-8")
+    products = (definition / "tables" / "_Products.tmdl").read_text(encoding="utf-8")
     tag = re.search(r"lineageTag:\s*(\S+)", products).group(1)
-    stores = definition / "tables" / "Stores.tmdl"
+    stores = definition / "tables" / "_Stores.tmdl"
     text = stores.read_text(encoding="utf-8")
     old = re.search(r"lineageTag:\s*(\S+)", text).group(1)
     stores.write_text(text.replace(old, tag, 1), encoding="utf-8")

@@ -111,6 +111,8 @@ class Context:
         self.options: dict[str, Any] = {}
         # free-text notes rules want shown with the report (tighten hints)
         self.notes: list[str] = []
+        # lines a fixer prints while it works (progress, counts)
+        self.fix_notes: list[str] = []
         # fixes a fixer had to refuse (the proof failed; the file is untouched)
         self.refused_fixes: list[str] = []
 
@@ -267,6 +269,28 @@ class Rule:
 
     def check(self, ctx: Context) -> list[Violation]:  # pragma: no cover
         raise NotImplementedError
+
+    def capture_floor(self, ctx: Context) -> Optional[dict[str, list[str]]]:
+        """The ratchet floor this rule would record for the models in the run.
+
+        A rule that gates a backlog (not a defect class) can record what it
+        sees today, so the next run fails only on growth. Returns a mapping
+        from a model key to the objects the rule would accept, or None when
+        the rule has no floor.
+        """
+        return None
+
+    def floor_indent(self) -> int:
+        """The indent the captured floor file is written with."""
+        return 2
+
+    def floor_captured_message(self, floors: dict[str, list[str]]) -> str:
+        """The line the tool prints after it captured a floor."""
+        return f"captured floor for {len(floors)} model(s)"
+
+    def dry_run_notes(self, ctx: Context) -> list[str]:
+        """The lines a dry run prints instead of repairing anything."""
+        return []
 
     def fix(self, ctx: Context) -> list[str]:
         """Apply the auto-repair; return human-readable descriptions of each

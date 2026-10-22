@@ -1,5 +1,5 @@
 /// Product catalog: bikes, helmets, locks and accessories.
-table Products
+table _Products
 	lineageTag: e689596a-59ea-4b2c-a14d-48596a7b8c9d
 
 	column product_id
@@ -28,7 +28,7 @@ table Products
 		summarizeBy: none
 		sourceColumn: unit_price
 
-	partition Products = m
+	partition _Products = m
 		mode: import
 		source =
 				let

@@ -1,5 +1,5 @@
 /// One row per retail store.
-table Stores
+table _Stores
 	lineageTag: 3bdeaebf-ae3f-4071-9692-9daebfc0d1e2
 
 	column store_id
@@ -21,7 +21,7 @@ table Stores
 		summarizeBy: none
 		sourceColumn: region
 
-	partition Stores = m
+	partition _Stores = m
 		mode: import
 		source =
 				let

@@ -170,6 +170,10 @@ _DESC_RE = re.compile(r"^\s*///(?P<text>.*)$")
 # example a mis-indented measure swallowed by the previous expression).
 _RAW_TABLE_MEMBER_RE = re.compile(r"^[\t ]*(?:measure|column)[\t ]+\S")
 _RAW_RELATIONSHIP_RE = re.compile(r"^[\t ]*relationship[\t ]+\S")
+# A relationship block starts at the top level with the keyword and any
+# whitespace after it: "relationship <id>" and "relationship\t<id>" are the
+# same declaration.
+_RELATIONSHIP_START_RE = re.compile(r"^relationship\s+\S")
 
 
 def read_tmdl_text(path: Path) -> str:
@@ -649,8 +653,8 @@ def parse_relationships(
         stripped = line.strip()
         if not stripped:
             continue
-        if indent_level(line) == 0 and stripped.startswith("relationship "):
-            rel_id = stripped[len("relationship ") :].strip()
+        if indent_level(line) == 0 and _RELATIONSHIP_START_RE.match(stripped):
+            rel_id = stripped[len("relationship") :].strip()
             current = Relationship(rel_id=rel_id, file=path, line=idx)
             rels.append(current)
             continue
@@ -666,8 +670,10 @@ def parse_relationships(
             current.to_table, current.to_column = parse_endpoint(value)
         elif key == "fromCardinality":
             current.from_cardinality = value.lower()
+            current.from_cardinality_raw = value
         elif key == "toCardinality":
             current.to_cardinality = value.lower()
+            current.to_cardinality_raw = value
         elif key == "crossFilteringBehavior":
             current.cross_filtering = value
         elif key == "isActive":

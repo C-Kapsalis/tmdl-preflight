@@ -57,7 +57,7 @@ class TestTmdlWellFormed:
         assert any("unmatched DAX code fences" in v.message for v in violations)
 
     def test_null_bytes(self, project, definition):
-        f = definition / "tables" / "Stores.tmdl"
+        f = definition / "tables" / "_Stores.tmdl"
         f.write_bytes(f.read_bytes() + b"\x00")
         violations = TmdlWellFormedRule().check(Context(project))
         assert any("null bytes" in v.message for v in violations)
@@ -73,9 +73,9 @@ class TestTmdlWellFormed:
 class TestLineageTagUniqueness:
     def _duplicate_a_tag(self, definition):
         """Copy Products' table tag onto Stores' table tag."""
-        products = (definition / "tables" / "Products.tmdl").read_text(encoding="utf-8")
+        products = (definition / "tables" / "_Products.tmdl").read_text(encoding="utf-8")
         tag = re.search(r"lineageTag:\s*(\S+)", products).group(1)
-        stores_file = definition / "tables" / "Stores.tmdl"
+        stores_file = definition / "tables" / "_Stores.tmdl"
         stores = stores_file.read_text(encoding="utf-8")
         old_tag = re.search(r"lineageTag:\s*(\S+)", stores).group(1)
         stores_file.write_text(stores.replace(old_tag, tag, 1), encoding="utf-8")
@@ -101,7 +101,7 @@ class TestLineageTagUniqueness:
         ctx.reload()
         assert rule.check(ctx) == []
         # regenerated tag is a canonical UUID
-        stores = (definition / "tables" / "Stores.tmdl").read_text(encoding="utf-8")
+        stores = (definition / "tables" / "_Stores.tmdl").read_text(encoding="utf-8")
         new_tag = re.search(r"lineageTag:\s*(\S+)", stores).group(1)
         assert UUID_RE.match(new_tag)
 
@@ -109,7 +109,7 @@ class TestLineageTagUniqueness:
         tag = self._duplicate_a_tag(definition)
         ctx = Context(project)
         LineageTagUniquenessRule().fix(ctx)
-        products = (definition / "tables" / "Products.tmdl").read_text(encoding="utf-8")
+        products = (definition / "tables" / "_Products.tmdl").read_text(encoding="utf-8")
         assert tag in products  # original untouched
 
 
@@ -118,7 +118,7 @@ class TestLineageTagFormat:
         assert LineageTagFormatRule().check(Context(project)) == []
 
     def test_malformed_tag_detected_and_fixed(self, project, definition):
-        f = definition / "tables" / "Calendar.tmdl"
+        f = definition / "tables" / "__Calendar.tmdl"
         text = f.read_text(encoding="utf-8")
         old = re.search(r"lineageTag:\s*(\S+)", text).group(1)
         f.write_text(text.replace(old, "not-a-real-uuid", 1), encoding="utf-8")
@@ -142,7 +142,7 @@ class TestColumnDataTypes:
         assert ColumnDataTypeRule().check(Context(project)) == []
 
     def test_unknown_type_flagged(self, project, definition):
-        f = definition / "tables" / "Products.tmdl"
+        f = definition / "tables" / "_Products.tmdl"
         f.write_text(
             f.read_text(encoding="utf-8").replace("dataType: string", "dataType: text", 1),
             encoding="utf-8",
@@ -163,7 +163,7 @@ class TestModelTableReferences:
     def test_missing_ref_detected_and_fixed(self, project, definition):
         model = definition / "model.tmdl"
         model.write_text(
-            model.read_text(encoding="utf-8").replace("ref table Stores\n", ""),
+            model.read_text(encoding="utf-8").replace("ref table _Stores\n", ""),
             encoding="utf-8",
         )
         ctx = Context(project)
@@ -203,7 +203,7 @@ class TestEntityQuerySource:
         assert EntityQuerySourceRule().check(Context(project)) == []
 
     def test_entity_source_detected(self, project, definition):
-        stores = definition / "tables" / "Stores.tmdl"
+        stores = definition / "tables" / "_Stores.tmdl"
         stores.write_text(
             stores.read_text(encoding="utf-8").replace(
                 'Csv.Document(File.Contents("stores.csv"), [Delimiter = ",", Encoding = 65001])',
@@ -213,7 +213,7 @@ class TestEntityQuerySource:
         )
         violations = EntityQuerySourceRule().check(Context(project))
         assert len(violations) == 1
-        assert violations[0].obj == "Stores"
+        assert violations[0].obj == "_Stores"
         assert violations[0].severity == Severity.ERROR
 
 
@@ -225,9 +225,9 @@ class TestReservedTableNames:
         assert ReservedTableNameRule().check(Context(project)) == []
 
     def test_reserved_name_detected(self, project, definition):
-        f = definition / "tables" / "Products.tmdl"
+        f = definition / "tables" / "_Products.tmdl"
         f.write_text(
-            f.read_text(encoding="utf-8").replace("table Products", "table Measures", 1),
+            f.read_text(encoding="utf-8").replace("table _Products", "table Measures", 1),
             encoding="utf-8",
         )
         violations = ReservedTableNameRule().check(Context(project))
@@ -262,7 +262,7 @@ class TestMetadataInExpression:
 
     def test_property_buried_in_expression_body(self, project, definition, replace_in):
         replace_in(
-            definition / "tables" / "Calendar.tmdl",
+            definition / "tables" / "__Calendar.tmdl",
             "\t\tsource = CALENDAR(DATE(2024, 1, 1), DATE(2026, 12, 31))",
             "\t\tsource =\n\t\t\t\tCALENDAR(DATE(2024, 1, 1), DATE(2026, 12, 31))\n"
             "\t\t\t\tlineageTag: 11111111-2222-4333-8444-555555555555",
@@ -361,14 +361,14 @@ class TestDuplicateObjectNames:
         assert DuplicateObjectNamesRule().check(Context(project)) == []
 
     def test_tables_differing_by_case(self, project, definition):
-        src = definition / "tables" / "Stores.tmdl"
-        text = src.read_text(encoding="utf-8").replace("table Stores", "table STORES", 1)
+        src = definition / "tables" / "_Stores.tmdl"
+        text = src.read_text(encoding="utf-8").replace("table _Stores", "table _STORES", 1)
         text = re.sub(r"lineageTag: \S+", lambda m: f"lineageTag: {uuid.uuid4()}", text)
-        (definition / "tables" / "STORES copy.tmdl").write_text(text, encoding="utf-8")
+        (definition / "tables" / "_STORES copy.tmdl").write_text(text, encoding="utf-8")
         violations = DuplicateObjectNamesRule().check(Context(project))
-        # files are read in sorted order, so "STORES copy.tmdl" comes first
-        assert [v.obj for v in violations] == ["Stores"]
-        assert "duplicates table 'STORES'" in violations[0].message
+        # files are read in sorted order, so "_STORES copy.tmdl" comes first
+        assert [v.obj for v in violations] == ["_Stores"]
+        assert "duplicates table '_STORES'" in violations[0].message
 
     def test_duplicate_measure_in_one_table(self, project, definition, replace_in):
         replace_in(
@@ -416,7 +416,7 @@ class TestDanglingDescription:
         assert violations[0].severity == Severity.ERROR and violations[0].fixable
 
     def test_at_end_of_file_is_error(self, project, definition):
-        f = definition / "tables" / "Stores.tmdl"
+        f = definition / "tables" / "_Stores.tmdl"
         f.write_text(f.read_text(encoding="utf-8").rstrip("\n") + "\n\n/// orphan\n",
                      encoding="utf-8")
         violations = DanglingDescriptionRule().check(Context(project))
@@ -439,7 +439,7 @@ class TestDanglingDescription:
         assert rule.fix(Context(project)) == []
 
     def test_fix_at_eof_keeps_blank_lines_before_the_run(self, project, definition):
-        f = definition / "tables" / "Stores.tmdl"
+        f = definition / "tables" / "_Stores.tmdl"
         original = f.read_text(encoding="utf-8")
         f.write_text(original.rstrip("\n") + "\n\n/// orphan\n", encoding="utf-8")
         DanglingDescriptionRule().fix(Context(project))
@@ -492,14 +492,14 @@ class TestRefTableTarget:
         assert RefTableTargetRule().check(Context(project)) == []
 
     def test_ref_without_table(self, project, definition):
-        (definition / "tables" / "Stores.tmdl").unlink()
+        (definition / "tables" / "_Stores.tmdl").unlink()
         violations = RefTableTargetRule().check(Context(project))
         assert len(violations) == 1
-        assert violations[0].obj == "Stores" and violations[0].line == 13
+        assert violations[0].obj == "_Stores" and violations[0].line == 13
         assert RefTableTargetRule.baselinable is False
 
     def test_case_difference_still_resolves(self, project, definition, replace_in):
-        replace_in(definition / "model.tmdl", "ref table Stores\n", "ref table stores\n")
+        replace_in(definition / "model.tmdl", "ref table _Stores\n", "ref table _stores\n")
         assert RefTableTargetRule().check(Context(project)) == []
 
 

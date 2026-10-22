@@ -82,7 +82,7 @@ def test_the_anchor_calendar_rule_reads_a_floor_file(tmp_path):
     floors = root / "floors.json"
     floors.write_text(json.dumps({"Shop.SemanticModel": ["__First Order Calendar"]}),
                       encoding="utf-8")
-    code, payload = run_check(root, R016, config={"rules": {R016: {"floors": str(floors)}}})
+    code, payload = run_check(root, R016, config={"rules": {R016: {"floor": str(floors)}}})
     assert code == 0
     assert violations(payload) == []
 
@@ -91,17 +91,19 @@ def test_the_anchor_calendar_rule_fails_an_unlisted_calendar(tmp_path):
     root = _model(tmp_path)
     floors = root / "floors.json"
     floors.write_text(json.dumps({"Shop.SemanticModel": []}), encoding="utf-8")
-    code, payload = run_check(root, R016, config={"rules": {R016: {"floors": str(floors)}}})
+    code, payload = run_check(root, R016, config={"rules": {R016: {"floor": str(floors)}}})
     assert code == 1
     assert any("__First Order Calendar" in v["message"] for v in violations(payload))
 
 
-def test_a_configured_anchor_calendar_floor_that_does_not_exist_is_an_error(tmp_path):
+def test_an_anchor_calendar_floor_that_does_not_exist_is_an_empty_floor(tmp_path):
+    """R016: a floor file that is not there accepts nothing, so the dead
+    calendar is new and is reported."""
     root = _model(tmp_path)
     code, payload = run_check(root, R016, config={"rules": {R016: {
-        "floors": str(tmp_path / "absent.json")}}})
+        "floor": str(tmp_path / "absent.json")}}})
     assert code == 1
-    assert violations(payload)
+    assert any("__First Order Calendar" in v["message"] for v in violations(payload))
 
 
 def test_the_account_key_rule_fails_a_model_without_a_floor_entry(tmp_path):
