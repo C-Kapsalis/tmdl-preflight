@@ -44,7 +44,7 @@ the example model with one defect each. Where that evidence and the
 | O005 | measures-in-dimension-tables (opt-in) | info | no |
 | O006 | empty-measure-tables (opt-in) | info | no |
 | O007 | dead-fact-tables (opt-in) | error | no |
-| N020 | dimension-prefix-floor (opt-in, disabled by default) | warning | no |
+| N020 | dimension-prefix-floor (opt-in, disabled by default) | error | no |
 | C012 | required-calc-groups (opt-in) | error | no |
 | O008 | intermediary-helper-folder (opt-in) | warning | no |
 | O009 | helper-measures-hidden (opt-in) | warning | yes |
@@ -144,6 +144,14 @@ until configured.
   not, and how many of the calculated tables carry a partition (with the
   partition modes they declare). BUGFIX: the original printed the emoji
   double-encoded; the tool prints the intended characters.
+- **N020** counts the table FILES whose name starts with the prefix (the
+  convention is about the file name, not about the name the table
+  declares) and says `Expected at least <floor> dimension tables starting
+  with '<prefix>', found <n>`. When the floor is met, the rule reports
+  how many dimension tables there are and shows a sample of ten names.
+  The finding is an error, not a warning: the original failed the run
+  when the floor was not met. The rule stays opt-in and disabled by
+  default.
 - **M022** reports the diagram layouts the way the check has always
   reported them: how many files it found, how many are already blank, and
   the ones that carry stale node data. The repair says which file it

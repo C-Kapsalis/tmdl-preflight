@@ -212,7 +212,7 @@ commit.
 | O004 | a user-facing measure homed on a fact table (opt-in) | warning | no |
 | O005 | measures on a dimension table (opt-in) | info | no |
 | O006 | a measures table with no measures (opt-in) | info | no |
-| N020 | fewer `_` dimension tables than the template's floor (opt-in, disabled by default) | warning | no |
+| N020 | fewer `_` dimension tables than the template's floor (opt-in, disabled by default) | error | no |
 | O007 | a fact table no measure reads (opt-in ratchet) | error | no |
 | O008 | an intermediary helper (`-Name`) without a display folder (opt-in) | warning | no |
 | O009 | a visible helper measure not on the always-visible list (opt-in) | warning | yes |
