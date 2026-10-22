@@ -184,7 +184,7 @@ commit.
 | F013 | a measure parked on a field-parameter table | error | no |
 | F014 | a selector SWITCH branch that calls a measure that no longer exists | error | yes |
 | F015 | an axis table that is not an import-mode `("label", NAMEOF(...))` field parameter (opt-in) | info | no |
-| A001 | the category-mapping table or one of its key columns is missing (opt-in) | error | no |
+| A001 | the category-mapping table or one of its key columns is missing (opt-in) | warning | no |
 | A002 | inventory of axis group ids and mapping-table relationships (opt-in) | info | no |
 | A003 | an account-filterable category whose mapping rows lack the account groups (opt-in) | error | yes |
 | A004 | `f-All` gate chains that disagree, name missing measures, miss a category, or use inert or over-broad literals (opt-in; baseline) | error | no |

@@ -348,6 +348,15 @@ until configured.
   and the reason) instead of passing silently. A mapping table with no
   categories skips the four checks that need them, so no literal is
   reported inert and no baseline entry is reported stale.
+- **The mapping-table checks read the way the source tool reads them.** A
+  missing table is reported as `P1 WARNING: <table> table not found`, a
+  table that lacks a required column as `Z-Map Table Structure: table
+  found: <name>; total columns: <n>; required columns present: <k>/<m>;
+  present required columns: <list>; missing required columns: <list>.
+  These columns are critical for dimension-measure grouping`, and the
+  inventory reports `Unique x-Selector categories found: <n>` with the
+  group ids and `Relationships involving z-Map: <n>`. A001 is a P1 check:
+  it is a warning, and `--strict` makes it fail the run.
 
 ### Bug fixes
 

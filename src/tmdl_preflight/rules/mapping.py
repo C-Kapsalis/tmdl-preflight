@@ -16,7 +16,7 @@ from ..categories import (
     NON_ATTRIBUTING_GROUPS,
     FactTracer,
     MappingDecodeError,
-    axis_rows,
+    axis_group_ids,
     category_backing,
     chain_body,
     declared_gate_measures,
@@ -41,7 +41,7 @@ def _has_column(model: SemanticModel, table: str, column: str) -> bool:
 class MappingTableRequiredColumnsRule(Rule):
     id = "A001"
     name = "mapping-table-required-columns"
-    severity = Severity.ERROR
+    severity = Severity.WARNING
     opt_in = True
     option_defaults = {
         "mapping_table": MAPPING_TABLE,
@@ -52,8 +52,9 @@ class MappingTableRequiredColumnsRule(Rule):
         "The category-mapping table (which analysis category each axis group "
         "belongs to) must exist and declare its key columns (exact, "
         "case-sensitive names). Without them the category slicer and the "
-        "per-category filter measures silently return nothing. enabled = "
-        "false skips the rule."
+        "per-category filter measures silently return nothing. This is a P1 "
+        "check: it is a warning, and --strict makes it fail the run. enabled "
+        "= false skips the rule."
     )
 
     def disabled_by_policy(self) -> bool:
@@ -67,19 +68,20 @@ class MappingTableRequiredColumnsRule(Rule):
             table = model.get_table(name)
             if table is None:
                 out.append(self.violation(
-                    f"mapping table '{name}' not found; category filtering has no "
-                    f"category-to-group map. Restore the table from the template.",
+                    f"P1 WARNING: {name} table not found",
                     file=model.definition_path / "tables", obj=name,
                 ))
                 continue
             have = [c.name for c in table.column_list]
+            present = [c for c in required if c in have]
             missing = [c for c in required if c not in have]
             if missing:
                 out.append(self.violation(
-                    f"mapping table '{name}' ({len(have)} columns) lacks required "
-                    f"column(s) {', '.join(missing)}; present: "
-                    f"{', '.join(c for c in required if c in have) or 'none'}. Restore "
-                    f"the column(s) in the source and the table definition.",
+                    f"Z-Map Table Structure: table found: {name}; total columns: "
+                    f"{len(have)}; required columns present: {len(present)}/"
+                    f"{len(required)}; present required columns: {present}; missing "
+                    f"required columns: {missing}. These columns are critical for "
+                    f"dimension-measure grouping",
                     file=table.file, line=table.line, obj=name,
                 ))
         return out
@@ -93,31 +95,38 @@ class MappingTableInfoReportsRule(Rule):
     option_defaults = {"mapping_table": MAPPING_TABLE, "axis_globs": list(NUMBERED_X_AXIS_GLOBS)}
     description = (
         "Inventory for reviewers (never fails): the distinct group ids the "
-        "axis field-parameter tables use, and how many relationships touch "
-        "the mapping table (0 means it is used through DAX filtering only)."
+        "numbered x-axis tables use, and how many relationships touch the "
+        "mapping table (0 means it is used through DAX filtering only)."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         name = self.options["mapping_table"]
+        prefix = name.split(" ")[0]
         for model in ctx.models:
             table = model.get_table(name)
-            if table is None:
-                continue
-            groups = sorted({r.group for r in axis_rows(model, self.options["axis_globs"]) if r.group})
-            out.append(self.violation(
-                f"axis group ids ({len(groups)}): {', '.join(groups) or 'none'}",
-                file=table.file, obj=name,
-            ))
+            if table is not None:
+                groups = sorted(set(axis_group_ids(model, self.options["axis_globs"])))
+                out.append(self.violation(
+                    f"Unique x-Selector categories found: {len(groups)}\n"
+                    + "".join(f"  - {g}\n" for g in groups)
+                    + "z-Map table provides category mapping infrastructure",
+                    file=table.file, obj=name,
+                ))
             rel_file = model.definition_path / "relationships.tmdl"
             if not rel_file.is_file():
                 continue
-            prefix = name.split(" ")[0]
-            blocks = re.split(r"(?m)^relationship\b", rel_file.read_text(encoding="utf-8-sig"))[1:]
+            try:
+                content = rel_file.read_text(encoding="utf-8-sig")
+            except (OSError, UnicodeDecodeError):
+                continue
+            blocks = re.split(r"(?m)^relationship\b", content)
             count = sum(1 for b in blocks if prefix in b)
-            note = "" if count else "; the table is used through DAX filtering only"
+            note = (f"{prefix} has relationships defined" if count else
+                    f"No relationships found involving {prefix}. Note: {prefix} may "
+                    f"use calculated relationships or direct filtering")
             out.append(self.violation(
-                f"{count} relationship(s) mention '{prefix}'{note}",
+                f"Relationships involving {prefix}: {count}\n{note}",
                 file=rel_file, obj=name,
             ))
         return out

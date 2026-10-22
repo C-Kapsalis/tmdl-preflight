@@ -38,18 +38,33 @@ class TestMappingTableRequiredColumns:
         assert code == 0, payload
         assert violations(payload) == []
 
-    def test_missing_required_column_fails(self, stand_in):
+    def test_missing_required_column_is_a_warning(self, stand_in):
         code, payload = run_check(_model(stand_in, "failing_db"), self.RULE)
-        assert code == 1
+        assert code == 0, payload
         found = violations(payload)
         assert len(found) == 1 and "Analysis Subcategory" in found[0]["message"]
+        assert found[0]["severity"] == "warning"
+
+    def test_strict_makes_the_missing_column_fail(self, stand_in):
+        code, payload = run_check(_model(stand_in, "failing_db"), self.RULE, strict=True)
+        assert code == 1
+
+    def test_the_missing_column_message_names_the_table_structure(self, stand_in):
+        code, payload = run_check(_model(stand_in, "failing_db"), self.RULE)
+        assert violations(payload)[0]["message"] == (
+            "Z-Map Table Structure: table found: z-Map Dimension-Measure Groupings; "
+            "total columns: 2; required columns present: 2/3; present required "
+            "columns: ['category_x_id', 'Analysis Category']; missing required "
+            "columns: ['Analysis Subcategory']. These columns are critical for "
+            "dimension-measure grouping")
 
     def test_missing_table_fails_not_found(self, stand_in):
         model = _model(stand_in)
         (model / "definition" / "tables" / f"{ZMAP}.tmdl").unlink()
         code, payload = run_check(model, self.RULE)
-        assert code == 1
-        assert "not found" in violations(payload)[0]["message"]
+        assert code == 0, payload
+        assert violations(payload)[0]["message"] == (
+            "P1 WARNING: z-Map Dimension-Measure Groupings table not found")
 
     def test_disabled_by_policy_is_skipped(self, stand_in):
         code, payload = run_check(_model(stand_in, "failing_db"), self.RULE,
@@ -66,11 +81,29 @@ class TestMappingTableInfoReports:
         assert all(v["severity"] == "info" for v in violations(payload))
         assert "Sales_x" in text and "Traffic_x" in text
 
+    def test_the_group_inventory_names_the_axis_groups(self, stand_in):
+        code, payload = run_check(_model(stand_in), self.RULE)
+        text = "\n".join(v["message"] for v in violations(payload))
+        assert "Unique x-Selector categories found: 2" in text
+        assert "  - Sales_x" in text
+        assert "  - Traffic_x" in text
+        assert "z-Map table provides category mapping infrastructure" in text
+
     def test_z_map_relationship_completeness(self, stand_in):
         code, payload = run_check(_model(stand_in), self.RULE, strict=True)
         assert code == 0
         assert any("0" in v["message"] and "relationship" in v["message"].lower()
                    for v in violations(payload))
+
+    def test_the_relationship_count_runs_without_the_mapping_table(self, stand_in):
+        model = _model(stand_in)
+        (model / "definition" / "tables" / f"{ZMAP}.tmdl").unlink()
+        code, payload = run_check(model, self.RULE)
+        text = "\n".join(v["message"] for v in violations(payload))
+        assert "Relationships involving z-Map: 0" in text
+        assert ("No relationships found involving z-Map. Note: z-Map may use "
+                "calculated relationships or direct filtering") in text
+
 class TestMappingCategoryRequiredKeys:
     RULE = "mapping-category-required-keys"
 
