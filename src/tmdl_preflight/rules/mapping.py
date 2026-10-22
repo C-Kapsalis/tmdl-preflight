@@ -10,10 +10,9 @@ from pathlib import Path
 from typing import Optional
 
 from ..categories import (
-    ALL_AXIS_GLOBS,
     MAPPING_PREFIX,
     MAPPING_TABLE,
-    METRIC_AXIS_GLOBS,
+    NUMBERED_X_AXIS_GLOBS,
     NON_ATTRIBUTING_GROUPS,
     FactTracer,
     MappingDecodeError,
@@ -85,7 +84,7 @@ class MappingTableInfoReportsRule(Rule):
     name = "mapping-table-info-reports"
     severity = Severity.INFO
     opt_in = True
-    option_defaults = {"mapping_table": MAPPING_TABLE, "axis_globs": list(ALL_AXIS_GLOBS)}
+    option_defaults = {"mapping_table": MAPPING_TABLE, "axis_globs": list(NUMBERED_X_AXIS_GLOBS)}
     description = (
         "Inventory for reviewers (never fails): the distinct group ids the "
         "axis field-parameter tables use, and how many relationships touch "
@@ -129,7 +128,7 @@ class MappingCategoryRequiredKeysRule(Rule):
         "account_key_column": "account_x_id",
         "required_keys": ["Account_y", "Service_y"],
         "non_attributing_group_ids": list(NON_ATTRIBUTING_GROUPS),
-        "axis_globs": list(METRIC_AXIS_GLOBS),
+        "axis_globs": list(NUMBERED_X_AXIS_GLOBS),
         "declared_removals": [],
     }
     description = (

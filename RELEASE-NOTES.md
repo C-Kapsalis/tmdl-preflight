@@ -301,14 +301,35 @@ until configured.
   are unused — and the lists that say which fact is which. An exempt fact
   and an unused fact never fail; they are reported so that a reader can
   see why nothing was said about them.
+- **The mapping table's rows are read the way the source tool reads them.**
+  Only a row with three or more values attributes a category: the category
+  is the first value, the group id the third. A two-column table therefore
+  attributes nothing, and a null cell counts as empty (it is no longer the
+  text `None`).
+- **The category attribution reads the numbered x-axis tables only.** By
+  default it reads its axis rows from `x-Selector 1` to `x-Selector 9`; a
+  plot-specific table is added only by configuration.
+- **An axis row must have the source tool's shape to attribute.** A row is
+  `("label", NAMEOF('Table'[Measure]) or NAMEOF([Measure]), <order>,
+  "group")`: the label may not be empty, the order is a whole number, and
+  a row may span several lines. A row behind a `//` or `--` marker is not
+  a row.
+- **The measure trace follows every bracketed reference.** A reference is
+  the text between the brackets, trimmed of surrounding spaces, and it may
+  not span a line break. When two measures share a name, the later one in
+  model order is the one traced.
+- **The mapping fixer writes the payload in the layout the table stores.**
+  The rows are serialized with a comma and a space between items, a colon
+  and a space between keys, and every non-ASCII character escaped as
+  `\uXXXX`; only the first payload in the file is replaced.
 
 ### Bug fixes
 
-- **A fact is matched only when the reference names it.** The reference
-  counted a fact `Sales` as read whenever the text `Sales[` appeared, even
-  inside `MySales[`. The tool requires a non-word character before the
-  name, so a measure reading `MySales[amount]` does not consume `Sales`.
-  BUGFIX.
+- **A fact is matched by plain text, as the source tool matches it.** A
+  fact counts as read when the expression holds `'Fact'`, `[Fact]` or
+  `Fact[`, anywhere in the text. The earlier word-boundary rule was
+  stricter than the source tool, so the two could disagree about which
+  facts a measure reads.
 - **The filter-coverage finding names the command that writes the missing
   filter measure.** The repair lives in pbip-model-forge, not here, so the
   finding names the exact `pbip-forge f-filters --model <model>` command
