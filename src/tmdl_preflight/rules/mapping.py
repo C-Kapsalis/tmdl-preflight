@@ -295,17 +295,19 @@ class CategoryGateCoverageRule(Rule):
         "The f-All orchestrator measure gates every analysis category with "
         "IF(CONTAINSSTRING(all_cats, \"<Category>\"), IF([f-<Category>] > 0, ...)) "
         "in an AND chain and an OR chain. Six checks, named in each message: "
-        "unpaired-chains (the chains gate different literals, error), "
+        "unpaired-chains (the chains gate different literals), "
         "undeclared-gate-measure (a live IF([f-X] > 0 names no declared f- "
-        "measure, error), coverage-gap (a category with a resolvable f- "
-        "measure has no gate, warning), ungated-without-measure (warning), "
-        "inert-literal (a literal matches no registered category, error) and "
-        "over-broad-literal (a literal matches several categories, warning). "
-        "Coverage is substring based, as CONTAINSSTRING is. Categories come "
-        "from the encoded mapping table; without one the last four checks are "
-        "skipped. The baseline file (option baseline) accepts known findings "
-        "per model and only shrinks: an entry that no longer applies is "
-        "reported as stale."
+        "measure), coverage-gap (a category with a resolvable f- measure has "
+        "no gate), ungated-without-measure, inert-literal (a literal matches "
+        "no registered category) and over-broad-literal (a literal matches "
+        "several categories). The first, second and fifth are P0 checks and "
+        "fail the run; the third, fourth and sixth are P1 checks and are "
+        "warnings (P0 = error, P1 = warning, --strict = full run). Coverage is "
+        "substring based, as CONTAINSSTRING is. Categories come from the "
+        "encoded mapping table; without one the last four checks are skipped. "
+        "The baseline file (option baseline) accepts known findings per model "
+        "and only shrinks: an entry that no longer applies is reported as "
+        "stale."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -317,59 +319,73 @@ class CategoryGateCoverageRule(Rule):
 
     def _check_model(self, ctx: Context, model: SemanticModel, base: dict) -> list[Violation]:
         out: list[Violation] = []
-        orch = model.get_table(self.options["orchestrator_table"])
+        table_name = self.options["orchestrator_table"]
+        measure_name = self.options["orchestrator_measure"]
+        and_chain = self.options["and_chain"]
+        or_chain = self.options["or_chain"]
+        orch = model.get_table(table_name)
+        model_id = ctx.model_key(model)
+        if model_id.endswith(".SemanticModel"):
+            model_id = model_id[: -len(".SemanticModel")]
         if orch is None:
+            self.skip(ctx, f"model has no {table_name}.tmdl", model_id)
             return out
         try:
             text = orch.file.read_text(encoding="utf-8-sig").replace("\r\n", "\n")
         except (OSError, UnicodeDecodeError):
             return out
-        model_id = ctx.model_key(model)
-        if model_id.endswith(".SemanticModel"):
-            model_id = model_id[: -len(".SemanticModel")]
         file = orch.file
+        baseline = str(self.options.get("baseline") or "the baseline file")
+        hint = (f"\nRepair: pbip-forge f-filters --model {model_id}"
+                "\n        (append-only: existing/client-specific gates are never touched)")
 
-        def add(check: str, msg: str, severity: Severity, obj: str, line: Optional[int] = None):
-            out.append(self.violation(f"{check}: {msg}", file=file, line=line,
-                                      obj=f"{model_id}:{obj}", severity=severity))
+        def add(check: str, msg: str, severity: Severity, obj: Optional[str] = None):
+            out.append(self.violation(f"{check}: {msg}", file=file,
+                                      obj=f"{model_id}:{obj or check}",
+                                      severity=severity))
 
         declared = declared_gate_measures(text)
-        # (2) live IF([f-X] > 0 lines name declared measures
-        reported: set[str] = set()
-        for line, name in gate_measure_calls(text):
-            if name not in declared and name not in reported:
-                reported.add(name)
-                add("undeclared-gate-measure",
-                    f"IF([{name}] > 0 calls a measure '{self.options['orchestrator_table']}' "
-                    f"does not declare, so {self.options['orchestrator_measure']} fails "
-                    f"wherever it is evaluated. Restore the measure or drop the gate.",
-                    Severity.ERROR, name, line)
 
-        measure = orch.find_measure(self.options["orchestrator_measure"])
-        if measure is None:
-            return out
-        expr = measure.expression or ""
-        and_body = chain_body(expr, self.options["and_chain"], [f"VAR {self.options['or_chain']}", "RETURN"])
-        or_body = chain_body(expr, self.options["or_chain"], ["VAR ", "RETURN"])
+        def accepted(key: str) -> list[str]:
+            entry = (base.get(key) or {}).get(model_id) or []
+            return [str(x) for x in entry]
+
+        # (1) both chains gate the same literals
+        and_body = chain_body(text, and_chain, rf"VAR\s+{re.escape(or_chain)}|RETURN")
+        or_body = chain_body(text, or_chain, r"VAR\s+|RETURN")
         if and_body is None or or_body is None:
+            self.skip(ctx, f"{measure_name} is absent or non-canonical "
+                           f"(no {and_chain}/{or_chain})", model_id)
             return out
         and_lits, or_lits = gate_literals(and_body), gate_literals(or_body)
-        # (1) both chains gate the same literals
-        only_and = [x for x in and_lits if x not in or_lits]
-        only_or = [x for x in or_lits if x not in and_lits]
+        only_and = sorted(set(and_lits) - set(or_lits))
+        only_or = sorted(set(or_lits) - set(and_lits))
         if only_and or only_or:
             add("unpaired-chains",
-                f"the {self.options['and_chain']} and {self.options['or_chain']} chains of "
-                f"{self.options['orchestrator_measure']} gate different categories (only in "
-                f"{self.options['and_chain']}: {', '.join(only_and) or 'none'}; only in "
-                f"{self.options['or_chain']}: {', '.join(only_or) or 'none'}). Add the "
-                f"missing gate to the other chain.",
-                Severity.ERROR, "chains", measure.line)
+                f"{model_id}: f-All's AND/OR chains gate different category sets — "
+                f"the model filters inconsistently depending on how many categories "
+                f"are in scope.\n"
+                f"  only in {and_chain} (AND): {only_and or '—'}\n"
+                f"  only in {or_chain}   (OR): {only_or or '—'}" + hint,
+                Severity.ERROR, "chains")
 
+        # (2) live IF([f-X] > 0 lines name declared measures
+        dangling = sorted({name for _line, name in gate_measure_calls(text)
+                           if name not in declared})
+        if dangling:
+            add("undeclared-gate-measure",
+                f"{model_id}: f-All gates reference {len(dangling)} f- measure(s) that "
+                f"are not declared in {table_name}.tmdl — f-All will fail to evaluate "
+                f"for the entire model: {dangling}",
+                Severity.ERROR, "gates")
+
+        # (3) to (6) need the registered categories
         mapping = load_mapping(model, prefix=self.options["mapping_prefix"])
-        if mapping is None:
+        cats = sorted(mapping.categories()) if mapping else []
+        if not cats:
+            self.skip(ctx, "no decodable z-Map to derive registered categories from",
+                     model_id)
             return out
-        cats = mapping.categories()
 
         def gated(cat: str) -> bool:
             return any(lit in cat for lit in and_lits)
@@ -377,42 +393,90 @@ class CategoryGateCoverageRule(Rule):
         gaps = [c for c in cats if not gated(c) and resolve_gate_measure(c, declared)]
         no_measure = [c for c in cats if not gated(c) and not resolve_gate_measure(c, declared)]
         inert = [lit for lit in and_lits if not any(lit in c for c in cats)]
-        broad = {lit: [c for c in cats if lit in c] for lit in and_lits}
+        broad = {lit: sorted(c for c in cats if lit in c) for lit in and_lits}
         broad = {lit: cs for lit, cs in broad.items() if len(cs) > 1}
-
-        def accepted(key: str) -> list[str]:
-            entry = (base.get(key) or {}).get(model_id) or []
-            return [str(x) for x in entry]
-
         fleet = {str(x) for x in base.get("fleet_inert_literals") or []}
-        sev_w = Severity.WARNING
 
-        def ratchet(check: str, key: str, found: list[str], severity: Severity, text):
-            allowed = accepted(key)
-            for item in found:
-                if item not in allowed:
-                    add(check, text(item), severity, item, measure.line)
-            for item in allowed:
-                if item not in found:
-                    add(check, f"stale baseline entry '{item}' in {key} for {model_id}: it no "
-                        f"longer applies; remove it from the baseline (baselines only shrink).",
-                        severity, item)
+        # (3) a category that owns a filter measure must be gated
+        allowed = accepted("coverage_gaps")
+        new_gaps = sorted(set(gaps) - set(allowed))
+        if new_gaps:
+            add("coverage-gap",
+                f"{model_id}: {len(new_gaps)} analysis categor(ies) are registered in "
+                f"the z-Map and own an f- measure, but f-All does not gate them — "
+                f"those categories are silently excluded from filtering: {new_gaps}\n"
+                f"  (declared pre-existing gaps for this model: {sorted(allowed) or 'none'})"
+                + hint,
+                Severity.WARNING, "coverage-gap")
+        stale = sorted(set(allowed) - set(gaps))
+        if stale:
+            add("coverage-gap",
+                f"{model_id}: the baseline lists {len(stale)} categor(ies) under "
+                f"coverage_gaps that are now gated — the ratchet must tighten. Remove "
+                f"them from {baseline}: {stale}",
+                Severity.WARNING, "coverage-gap")
 
-        ratchet("coverage-gap", "coverage_gaps", gaps, sev_w, lambda c: (
-            f"category '{c}' has the gate measure [{resolve_gate_measure(c, declared)}] but no "
-            f"gate in {self.options['and_chain']}, so its rows are never filtered. Add the gate "
-            f"to both chains (pbip-forge can append it)."))
-        ratchet("ungated-without-measure", "ungated_without_measure", no_measure, sev_w, lambda c: (
-            f"category '{c}' has neither a gate nor an f- measure to gate on; write the "
-            f"measure and gate it, or retire the category's mapping rows."))
-        inert_new = [x for x in inert if x not in fleet]
-        ratchet("inert-literal", "inert_literals", inert_new, Severity.ERROR, lambda x: (
-            f"gate literal \"{x}\" matches no registered category, so the gate never fires; "
-            f"fix the literal or remove the gate."))
-        ratchet("over-broad-literal", "over_broad_literals", sorted(broad), sev_w, lambda x: (
-            f"gate literal \"{x}\" matches {len(broad[x])} categories "
-            f"({', '.join(broad[x])}), so one gate filters several categories on the same "
-            f"measure; use the full category name."))
+        # (4) a category with no filter measure to gate on is a declared gap
+        allowed = accepted("ungated_without_measure")
+        new_gaps = sorted(set(no_measure) - set(allowed))
+        if new_gaps:
+            add("ungated-without-measure",
+                f"{model_id}: {len(new_gaps)} analysis categor(ies) are registered in "
+                f"the z-Map, gated by no f-All line, and own no f- measure the gate "
+                f"could reference -- they render ungated and nothing else reports it: "
+                f"{new_gaps}\n"
+                f"  Either add `f-<Category>` (or the underscored variant) + run "
+                f"pbip-forge f-filters, or retire the z-Map rows, or declare the gap "
+                f"under ungated_without_measure in {baseline}." + hint,
+                Severity.WARNING, "ungated-without-measure")
+        stale = sorted(set(allowed) - set(no_measure))
+        if stale:
+            add("ungated-without-measure",
+                f"{model_id}: the baseline lists {len(stale)} categor(ies) under "
+                f"ungated_without_measure that are now gated or gone -- the ratchet "
+                f"must tighten. Remove them from {baseline}: {stale}",
+                Severity.WARNING, "ungated-without-measure")
+
+        # (5) a literal that matches no category never fires
+        allowed = accepted("inert_literals")
+        new_inert = sorted(set(inert) - set(allowed) - fleet)
+        if new_inert:
+            add("inert-literal",
+                f"{model_id}: {len(new_inert)} f-All gate literal(s) match no "
+                f"registered z-Map category, so the gate never fires and the intended "
+                f"category renders ungated: {new_inert}\n"
+                f"  registered categories: {cats}\n"
+                f"  Fix the literal to the z-Map spelling (substring match), or retire "
+                f"the line.",
+                Severity.ERROR, "inert-literal")
+        stale = sorted(set(allowed) - set(inert))
+        if stale:
+            add("inert-literal",
+                f"{model_id}: the baseline lists {len(stale)} literal(s) under "
+                f"inert_literals that now match a category -- remove them from "
+                f"{baseline}: {stale}",
+                Severity.ERROR, "inert-literal")
+
+        # (6) a literal that spans two categories gates the wrong one
+        allowed = accepted("over_broad_literals")
+        new_broad = sorted(set(broad) - set(allowed))
+        if new_broad:
+            detail = "; ".join(f"{lit!r} -> {broad[lit]}" for lit in new_broad)
+            add("over-broad-literal",
+                f"{model_id}: {len(new_broad)} f-All gate literal(s) span more than one "
+                f"registered z-Map category, so every category but one is gated on the "
+                f"WRONG fact and nothing errors: {detail}\n"
+                f"  Split into one exact literal per category, each resolving to its "
+                f"own f- measure, or declare the overlap intentional under "
+                f"over_broad_literals in {baseline} with a reason.",
+                Severity.WARNING, "over-broad-literal")
+        stale = sorted(set(allowed) - set(broad))
+        if stale:
+            add("over-broad-literal",
+                f"{model_id}: the baseline lists {len(stale)} literal(s) under "
+                f"over_broad_literals that are no longer over-broad -- the ratchet "
+                f"must tighten. Remove them from {baseline}: {stale}",
+                Severity.WARNING, "over-broad-literal")
         return out
 
 

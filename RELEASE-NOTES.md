@@ -335,6 +335,19 @@ until configured.
   with no `Binary.FromText(...)` payload is reported as `No binary data
   found in <file path>`, a payload that does not decode as `mapping
   payload does not decode: <reason>`, and the fixer writes nothing there.
+- **The gate-coverage rule reports one finding per check, worded as the
+  source tool words it.** A check that fires once says so once, and the
+  message names the model, the list it holds and the repair to run. The
+  gate patterns are strict again: `CONTAINSSTRING(all_cats, "<literal>")`
+  and `IF([f-X] > 0` are spelled the way the source tool spells them, and
+  the two chains are looked for in the whole `f-Filters` table file.
+- **A check that cannot run is listed as skipped, with the reason.** A
+  model without an `f-Filters` table, an `f-All` that is absent or
+  non-canonical (no `temp_basic`/`temp_alt`), and a mapping table that
+  yields no category are each reported under `skipped` (with the model
+  and the reason) instead of passing silently. A mapping table with no
+  categories skips the four checks that need them, so no literal is
+  reported inert and no baseline entry is reported stale.
 
 ### Bug fixes
 

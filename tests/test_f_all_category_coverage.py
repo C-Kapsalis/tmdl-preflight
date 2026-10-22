@@ -14,7 +14,7 @@ succeeds, so nothing else reports it.
 Registered categories are decoded from the encoded mapping table (`z-Map*`).
 Coverage is substring based, because that is what CONTAINSSTRING does.
 
-The rule `category-gate-coverage` reports one finding per problem; the
+The rule `category-gate-coverage` reports one finding per check; the
 message names the check:
   (1) ``unpaired-chains``          AND and OR chains gate different literals [error]
   (2) ``undeclared-gate-measure``  `IF([f-X] > 0` names an undeclared measure [error]
@@ -22,9 +22,13 @@ message names the check:
   (4) ``ungated-without-measure``  ungated category with no measure [warning, ratchet]
   (5) ``inert-literal``            literal matches no category [error]
   (6) ``over-broad-literal``       literal matches more than one category [warning, ratchet]
-Baseline entries that no longer apply produce a ``stale`` finding (the
+Baseline entries that no longer apply produce a finding of their own (the
 baselines only shrink). Each earlier test fails when its check reports for
 the model; the test asserts the tool reports exactly that.
+
+A check that cannot run is listed as skipped, with the reason: no
+f-Filters.tmdl, an f-All that is absent or non-canonical, or no decodable
+z-Map to derive the registered categories from.
 
 Stand-ins (tests/fixtures/b3-a2/f_all_category_coverage/roastery):
 - ``universal/Performance``: every check clean, relying on the fleet-wide
@@ -33,13 +37,14 @@ Stand-ins (tests/fixtures/b3-a2/f_all_category_coverage/roastery):
   line is ignored.
 - ``cg_db/Roastery``: every check fires (``Beans`` only in AND; live
   `IF([f-Roast] > 0`; ``Email Marketing Lists`` resolves through
-  `f-Email_Marketing_Lists` but is ungated; ``Cold Brew`` and
+  ``f-Email_Marketing_Lists`` but is ungated; ``Cold Brew`` and
   ``Email Marketing Campaigns`` have no measure; literal ``Tea`` is inert;
   ``Spend`` matches ``Spend`` and ``Blended Spend``).
 """
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -147,9 +152,11 @@ def test_stale_baseline_entries_fail(report):
     stale["over_broad_literals"] = {"universal/Performance": ["Email Marketing", "Beans"]}
     payload = report(stale)
     folder = "universal/Performance.SemanticModel"
-    for check, term in (("coverage-gap", "Beans"), ("ungated-without-measure", "Radio"),
-                        ("inert-literal", "Tea"), ("over-broad-literal", "Beans")):
-        hits = [h for h in _hits(payload, folder, check) if "stale" in h["message"]]
+    for check, term, marker in (("coverage-gap", "Beans", "ratchet must tighten"),
+                                ("ungated-without-measure", "Radio", "ratchet must tighten"),
+                                ("inert-literal", "Tea", "now match a category"),
+                                ("over-broad-literal", "Beans", "ratchet must tighten")):
+        hits = [h for h in _hits(payload, folder, check) if marker in h["message"]]
         assert hits and term in hits[0]["message"], (check, payload)
 
 
@@ -162,3 +169,107 @@ def test_no_mapping_table_skips_checks_3_to_6(stand_in):
     assert _hits(payload, folder, "undeclared-gate-measure")
     for check in ("coverage-gap", "ungated-without-measure", "inert-literal", "over-broad-literal"):
         assert _hits(payload, folder, check) == []
+
+
+# --- the messages, one finding per check ----------------------------------
+
+HINT = ("\nRepair: pbip-forge f-filters --model cg_db/Roastery"
+        "\n        (append-only: existing/client-specific gates are never touched)")
+
+EXPECTED = {
+    "unpaired-chains": (
+        "cg_db/Roastery: f-All's AND/OR chains gate different category sets — the "
+        "model filters inconsistently depending on how many categories are in scope.\n"
+        "  only in temp_basic (AND): ['Beans']\n"
+        "  only in temp_alt   (OR): —" + HINT),
+    "undeclared-gate-measure": (
+        "cg_db/Roastery: f-All gates reference 1 f- measure(s) that are not declared "
+        "in f-Filters.tmdl — f-All will fail to evaluate for the entire model: "
+        "['f-Roast']"),
+    "coverage-gap": (
+        "cg_db/Roastery: 1 analysis categor(ies) are registered in the z-Map and own "
+        "an f- measure, but f-All does not gate them — those categories are silently "
+        "excluded from filtering: ['Email Marketing Lists']\n"
+        "  (declared pre-existing gaps for this model: none)" + HINT),
+    "ungated-without-measure": (
+        "cg_db/Roastery: 2 analysis categor(ies) are registered in the z-Map, gated by "
+        "no f-All line, and own no f- measure the gate could reference -- they render "
+        "ungated and nothing else reports it: ['Cold Brew', 'Email Marketing Campaigns']\n"
+        "  Either add `f-<Category>` (or the underscored variant) + run pbip-forge "
+        "f-filters, or retire the z-Map rows, or declare the gap under "
+        "ungated_without_measure in {baseline}." + HINT),
+    "inert-literal": (
+        "cg_db/Roastery: 1 f-All gate literal(s) match no registered z-Map category, "
+        "so the gate never fires and the intended category renders ungated: ['Tea']\n"
+        "  registered categories: ['Beans', 'Blended Spend', 'Cold Brew', "
+        "'Email Marketing Campaigns', 'Email Marketing Lists', 'Spend']\n"
+        "  Fix the literal to the z-Map spelling (substring match), or retire the line."),
+    "over-broad-literal": (
+        "cg_db/Roastery: 1 f-All gate literal(s) span more than one registered z-Map "
+        "category, so every category but one is gated on the WRONG fact and nothing "
+        "errors: 'Spend' -> ['Blended Spend', 'Spend']\n"
+        "  Split into one exact literal per category, each resolving to its own f- "
+        "measure, or declare the overlap intentional under over_broad_literals in "
+        "{baseline} with a reason."),
+}
+
+
+def test_each_check_reports_one_finding_with_the_original_wording(report, tmp_path):
+    payload = report()
+    base = str(tmp_path / "category-gates.baseline.json")
+    for check, expected in EXPECTED.items():
+        hits = _hits(payload, "cg_db/Roastery.SemanticModel", check)
+        assert len(hits) == 1, (check, hits)
+        assert hits[0]["message"] == f"{check}: " + expected.replace("{baseline}", base)
+
+
+def test_a_lower_case_gate_literal_is_not_a_gate(report):
+    """The source tool spells the gate `CONTAINSSTRING(all_cats, "...")`."""
+    payload = report()
+    assert _hits(payload, "cg_db/Roastery.SemanticModel", "unpaired-chains")
+
+
+def test_a_lower_case_gate_literal_is_ignored(stand_in):
+    root = stand_in("b3-a2/f_all_category_coverage/roastery")
+    gates = root / "cg_db/Roastery.SemanticModel/definition/tables/f-Filters.tmdl"
+    gates.write_text(gates.read_text(encoding="utf-8").replace(
+        'CONTAINSSTRING(all_cats, "Beans")', 'containsstring(all_cats, "Beans")'),
+        encoding="utf-8")
+    _code, payload = run_check(root, RULE, config={"rules": {RULE: {}}})
+    assert _hits(payload, "cg_db/Roastery.SemanticModel", "unpaired-chains") == []
+
+
+# --- a check that cannot run is listed as skipped --------------------------
+
+def test_a_model_without_f_filters_is_skipped(stand_in, tmp_path):
+    root = stand_in("b3-a2/f_all_category_coverage/roastery")
+    (root / "cg_db/Roastery.SemanticModel/definition/tables/f-Filters.tmdl").unlink()
+    base = tmp_path / "category-gates.baseline.json"
+    base.write_text(json.dumps(BASELINE, indent=2), encoding="utf-8")
+    code, payload = run_check(root, RULE,
+                              config={"rules": {RULE: {"baseline": str(base)}}})
+    assert code == 0, payload
+    assert _hits(payload, "cg_db/Roastery.SemanticModel", "unpaired-chains") == []
+    assert {"rule": "A004", "model": "cg_db/Roastery",
+            "reason": "model has no f-Filters.tmdl"} in payload["skipped"]
+
+
+def test_an_empty_mapping_table_skips_checks_3_to_6(stand_in, tmp_path):
+    """A mapping table that decodes to no rows is no decodable mapping."""
+    root = stand_in("b3-a2/f_all_category_coverage/roastery")
+    zmap = root / "universal/Performance.SemanticModel/definition/tables/z-Map Dimension-Measure Groupings.tmdl"
+    import base64
+    import zlib
+    blob = base64.b64encode(zlib.compress(b"[]", 9)[2:-4]).decode()
+    zmap.write_text(re.sub(r'Binary\.FromText\("[^"]*"', f'Binary.FromText("{blob}")',
+                            zmap.read_text(encoding="utf-8")), encoding="utf-8")
+    base = tmp_path / "category-gates.baseline.json"
+    base.write_text(json.dumps(BASELINE, indent=2), encoding="utf-8")
+    code, payload = run_check(root / "universal", RULE,
+                              config={"rules": {RULE: {"baseline": str(base)}}})
+    assert code == 0, payload
+    assert violations(payload) == []
+    assert {"rule": "A004", "model": "Performance",
+            "reason": "no decodable z-Map to derive registered categories from"} \
+        in payload["skipped"]
+

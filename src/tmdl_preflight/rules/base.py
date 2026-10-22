@@ -110,6 +110,8 @@ class Context:
         self.notes: list[str] = []
         # fixes a fixer had to refuse (the proof failed; the file is untouched)
         self.refused_fixes: list[str] = []
+        # checks a rule could not run, with the reason
+        self.skips: list[dict] = []
 
     def model_key(self, model: SemanticModel) -> str:
         """The model's ``*.SemanticModel`` folder relative to the scan root
@@ -253,6 +255,10 @@ class Rule:
         """True when a policy option turned this rule off for the run; the
         engine then lists it under ``skipped`` instead of running it."""
         return False
+
+    def skip(self, ctx: "Context", reason: str, model: Optional[str] = None) -> None:
+        """Record that a check could not run for a model, and why."""
+        ctx.skips.append({"rule": self.id, "model": model, "reason": reason})
 
     def configure(self, options: dict[str, Any]) -> None:
         """Apply per-rule options (already validated by the config loader)."""

@@ -367,24 +367,31 @@ def category_backing(model: SemanticModel, mapping: MappingTable,
 # f-All gate chains
 # ---------------------------------------------------------------------------
 
-_GATE_LITERAL_RE = re.compile(r'CONTAINSSTRING\s*\(\s*all_cats\s*,\s*"((?:[^"]|"")*)"', re.IGNORECASE)
-_GATE_MEASURE_RE = re.compile(r"IF\s*\(\s*\[(f-[^\]]+)\]\s*>\s*0", re.IGNORECASE)
-_DECL_RE = re.compile(r"^\tmeasure\s+('(?:[^']|'')+'|[^\s=]+)")
+#: A gate literal: ``CONTAINSSTRING(all_cats, "<literal>")``, spelled the way
+#: the source tool spells it.
+_GATE_LITERAL_RE = re.compile(r'CONTAINSSTRING\(all_cats,\s*"([^"]+)"\)')
+#: A gate call: ``IF([f-X] > 0``.
+_GATE_MEASURE_RE = re.compile(r"IF\(\[(f-[^\]]+)\]\s*>\s*0")
+#: A declared filter measure: one tab of indentation, then the name.
+_DECL_RE = re.compile(r"^\tmeasure\s+(?:'(f-[^']+)'|(f-[^\s=]+))\s*=")
 
 
 def _live(line: str) -> bool:
     return not line.strip().startswith(("//", "--"))
 
 
-def chain_body(expr: str, var: str, stops: Iterable[str]) -> Optional[str]:
+def chain_body(text: str, var: str, stop: str) -> Optional[str]:
     """Text of ``VAR <var> =`` up to the next line that starts (after
-    indentation) with one of ``stops``."""
-    m = re.search(r"\bVAR\s+" + re.escape(var) + r"\s*=", expr, re.IGNORECASE)
+    indentation) with ``stop`` (a regular expression).
+
+    The source tool spells the chain in upper case and stops it at a line
+    break; a lower-case ``var`` or a different spelling is not a chain.
+    """
+    m = re.search(r"VAR\s+" + re.escape(var) + r"\s*=\s*", text)
     if not m:
         return None
-    rest = expr[m.end():]
-    alts = "|".join(re.escape(s) for s in stops)
-    end = re.search(r"\n[ \t]*(?:" + alts + r")", rest, re.IGNORECASE)
+    rest = text[m.end():]
+    end = re.search(r"\n\s*(?:" + stop + r")", rest)
     return rest[: end.start()] if end else rest
 
 
@@ -394,7 +401,7 @@ def gate_literals(body: str) -> list[str]:
         if not _live(line):
             continue
         for m in _GATE_LITERAL_RE.finditer(line):
-            lit = m.group(1).replace('""', '"')
+            lit = m.group(1)
             if lit not in out:
                 out.append(lit)
     return out
@@ -417,9 +424,7 @@ def declared_gate_measures(text: str, prefix: str = "f-") -> list[str]:
         m = _DECL_RE.match(line.rstrip("\r"))
         if not m:
             continue
-        name = m.group(1)
-        if name.startswith("'"):
-            name = name[1:-1].replace("''", "'")
+        name = m.group(1) or m.group(2)
         if name.startswith(prefix):
             out.append(name)
     return out
