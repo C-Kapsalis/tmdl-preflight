@@ -1222,6 +1222,13 @@ unchanged.
 
 ### Bug fixes
 
+- **A blanket `fix` names a skipped unsafe fixer only when it had work.**
+  The line "not fixed R007: its fixer can change data, so a blanket fix
+  skips it" appeared on every model, because R007's fixer always runs when
+  it is selected (to say it found nothing). A blanket fix now names an
+  unsafe fixer (P001, D004, R007, F016) only when the run reported findings
+  it repairs: its own, or, for P001, the missing policies P002 reports. The
+  summary counts do not change. BUGFIX.
 - **An inline-row table is recognised only in the case M spells it.** M is
   case-sensitive, so a source that says `table.fromrows(` calls a
   different function and does not author the table's rows. The tool
@@ -1596,9 +1603,9 @@ and rule wins; DESKTOP: Power BI Desktop evidence).
 - Test convention: `test_policy_defaults::test_dax_success_rate_threshold_never_suppresses_per_expression_errors`
   sets `min_success_rate` to 0.8: the example model has 7 expressions, so
   one unbalanced expression is 85.7%.
-- Test convention: `test_fixers_config_contract` lists the unsafe fixers by
-  their rule names: refresh-policy-repair, dax-reference-resolution and
-  autodetected-relationships.
+- Test convention: `test_fixers_config_contract` lists the four unsafe
+  fixers by their rule names: refresh-policy-repair, dax-reference-resolution,
+  autodetected-relationships and fieldparam-double-slash-rows.
 - STRICTER: `test_rls::test_mapping_table_is_hidden` judges the table's own
   `isHidden`; a hidden column no longer makes a visible mapping table pass.
 - BUGFIX: `test_integration_f_categories::test_f_measure_coverage_analytics_zero_f_measures`:
