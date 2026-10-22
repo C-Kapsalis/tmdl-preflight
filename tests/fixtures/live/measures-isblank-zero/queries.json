@@ -1,0 +1,84 @@
+[
+  {
+    "query": "EVALUATE ROW( \"Value\", [!Cups Sold], \"IsBlank\", ISBLANK([!Cups Sold]) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Value]": 42,
+                  "[IsBlank]": 0
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"Value\", [!Revenue], \"IsBlank\", ISBLANK([!Revenue]) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Value]": null,
+                  "[IsBlank]": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"Value\", [Avg Ticket], \"IsBlank\", ISBLANK([Avg Ticket]) )",
+    "response": {
+      "error": "Measure 'Avg Ticket' failed to evaluate"
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"Value\", [Beans Roasted], \"IsBlank\", ISBLANK([Beans Roasted]) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Value]": null,
+                  "[IsBlank]": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"Value\", [Shop Count], \"IsBlank\", ISBLANK([Shop Count]) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Value]": null,
+                  "[IsBlank]": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

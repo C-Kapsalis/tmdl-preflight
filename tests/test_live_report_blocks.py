@@ -254,3 +254,266 @@ def test_the_date_range_skip_text(tmp_path):
     assert result["outcome"] == "skip"
     assert result["message"] == \
         f"expressions.tmdl not found under {model / 'definition'}"
+
+
+# ---------------------------------------------------------------------------
+# PB152: the connection parameter audit
+# ---------------------------------------------------------------------------
+
+def _set_param(model, old: str, new: str) -> None:
+    f = model / "definition" / "expressions.tmdl"
+    text = f.read_text(encoding="utf-8")
+    assert text.count(old) == 1
+    f.write_text(text.replace(old, new), encoding="utf-8")
+
+
+def test_the_parameter_audit_report(tmp_path):
+    import shutil
+
+    model = tmp_path / "Coffee.SemanticModel"
+    shutil.copytree(MODEL, model)
+    code, out = live_text("params-calendar-730", "live-parameter-audit", model=model)
+    assert code == 0
+    lines = out.splitlines()
+    assert lines[1:12] == [
+        "",
+        "=" * 80,
+        "CONNECTION PARAMETER AUDIT REPORT",
+        "=" * 80,
+        "",
+        "1. PARAMETER CONFIGURATION",
+        "-" * 80,
+        "",
+        "  Time/Data Filters:",
+        "    v-daysAgo: 90",
+        "    v-fromdate: #date(2024, 1, 1)",
+    ]
+    assert "  ✅ No critical issues detected" in lines
+    assert "3. LIVE DATA VALIDATION" in lines
+    assert "    __Calendar: 730 rows" in lines
+    assert "    _Accounts: 40 rows" in lines
+    assert "✅ Audit report generated successfully" in lines
+    assert lines[-1] == "pass   live-parameter-audit: 0 parameter issue(s)"
+
+
+def test_a_warning_is_numbered_and_the_critical_issue_follows_it(tmp_path):
+    import shutil
+
+    model = tmp_path / "Coffee.SemanticModel"
+    shutil.copytree(MODEL, model)
+    _set_param(model, 'v-rows_limit = " "', 'v-rows_limit = "LIMIT 500"')
+    _set_param(model, "#date(2024, 1, 1)", "#date(2027, 10, 18)")
+    code, out = live_text("params-calendar-730", "live-parameter-audit", model=model)
+    assert code == 0
+    assert "    ⚠️  WARNING: v-rows_limit" in out
+    assert "       Issue: Row limit applied - data incomplete" in out
+    assert "       Recommendation: Review limit value for environment" in out
+    assert "    🔴 CRITICAL: v-fromdate" in out
+    assert "       Issue: Future date (365 days ahead) - no historical data" in out
+    # the critical issue is the second one, so it is numbered 2
+    assert "    2. Change to past date (e.g., 2023-01-01)" in out
+    assert "    1. Change to ' ' (blank) for production" not in out
+
+
+def test_only_limit_one_is_critical(tmp_path):
+    import shutil
+
+    for value, severity in (("LIMIT 1", "CRITICAL"), ("LIMIT 10", "WARNING"),
+                             ("LIMIT 100", "WARNING"), ("LIMIT  1", "WARNING")):
+        model = tmp_path / value.replace(" ", "_") / "Coffee.SemanticModel"
+        shutil.copytree(MODEL, model)
+        _set_param(model, 'v-rows_limit = " "', f'v-rows_limit = "{value}"')
+        code, payload = live("params-calendar-730", "live-parameter-audit", model=model)
+        issues = check_result(payload, "live-parameter-audit")["details"]["issues"]
+        assert [i["severity"] for i in issues] == [severity], value
+
+
+def test_the_audit_never_fails_the_run(tmp_path):
+    import shutil
+
+    model = tmp_path / "Coffee.SemanticModel"
+    shutil.copytree(MODEL, model)
+    _set_param(model, 'v-rows_limit = " "', 'v-rows_limit = "LIMIT 1"')
+    code, payload = live("params-calendar-730", "live-parameter-audit", model=model)
+    assert code == 0
+    assert check_result(payload, "live-parameter-audit")["outcome"] == "pass"
+
+
+# ---------------------------------------------------------------------------
+# PB153: the table sample
+# ---------------------------------------------------------------------------
+
+def test_the_table_sample_lines():
+    code, out = live_text("tables-mostly-empty", "live-table-sample")
+    assert code == 1
+    lines = [line for line in out.splitlines() if line.startswith("  ")]
+    assert len(lines) == 4
+    assert lines[0].startswith("  ❌ FAIL Table 'Sales' has data: Table 'Sales' is empty (0 rows) (")
+    assert lines[1].startswith("  ❌ FAIL Table '_Beans' has data: Table '_Beans' is empty (0 rows) (")
+    assert lines[2].startswith("  ✅ PASS Table '_Days' has data: Table '_Days' has 30 rows (")
+    assert out.splitlines()[-1] == \
+        "fail   live-table-sample: Only 1/4 tables have data (25.0%). Expected at least 60%."
+
+
+# ---------------------------------------------------------------------------
+# PB154: the dimension rows
+# ---------------------------------------------------------------------------
+
+def test_the_dimension_rows_lines():
+    code, out = live_text("dims-one-empty", "live-dimension-rows")
+    assert code == 1
+    assert "  ❌ FAIL Table '_Days' has data: Table '_Days' is empty (0 rows) (" in out
+    assert "  ✅ PASS Table '_Beans'" not in out
+    assert "⚠️  Warning: 1 dimension tables are empty: ['_Days']" in out
+    assert out.splitlines()[-1] == (
+        "fail   live-dimension-rows: Only 2/3 dimension tables have data (66.7%). "
+        "Failed tables: ['_Days']")
+
+
+def test_no_dimension_table_is_a_failure():
+    code, payload = live("tables-populated", "live-dimension-rows",
+                         model=LIVE / "models" / "coffee-no-dims" / "Coffee.SemanticModel")
+    result = check_result(payload, "live-dimension-rows")
+    assert result["outcome"] == "fail"
+    assert result["message"] == "No dimension tables found starting with '_'"
+    assert code == 1
+
+
+# ---------------------------------------------------------------------------
+# PB155: the measure sample
+# ---------------------------------------------------------------------------
+
+def test_a_falsy_is_blank_means_the_measure_returned_a_value():
+    code, payload = live("measures-isblank-zero", "live-measure-sample")
+    result = check_result(payload, "live-measure-sample")
+    assert result["outcome"] == "pass"
+    assert result["details"]["passed"] == 1
+    assert result["details"]["values"]["!Cups Sold"] == 42
+
+
+def test_the_measure_sample_lines():
+    code, out = live_text("measures-all-blank", "live-measure-sample")
+    assert code == 1
+    assert "  ❌ FAIL Measure '[!Revenue]' not blank: Measure '[!Revenue]' returned BLANK (" in out
+    assert "⚠️  Warning: Only 0.0% of measures returned non-blank values" in out
+    assert out.splitlines()[-1] == (
+        "fail   live-measure-sample: Only 0/5 measures returned non-blank (0.0%). "
+        "Expected at least 20%.")
+
+
+# ---------------------------------------------------------------------------
+# PB156: the parameter-table measures
+# ---------------------------------------------------------------------------
+
+def test_the_parameter_table_measures_are_skipped():
+    code, payload = live("measures-one-of-five", "live-parameter-table-measures")
+    result = check_result(payload, "live-parameter-table-measures")
+    assert result["outcome"] == "skip"
+    assert result["message"] == ("Report tables are parameter tables, not measure tables. "
+                                 "Skipping for now.")
+    assert code == 0
+
+
+def test_no_parameter_table_measure_table(tmp_path):
+    from conftest import write_config
+
+    cfg = write_config(tmp_path, {"live": {"parameter_table_measures": True}})
+    code, out, err = run_cli("live", str(MODEL), "--workspace", "ws-coffee", "--dataset",
+                             "ds-coffee", "--replay", str(LIVE / "measures-one-of-five"),
+                             "--checks", "live-parameter-table-measures", "--config", str(cfg))
+    assert code == 1
+    assert "No x-Selector measure tables found" in out
+
+
+# ---------------------------------------------------------------------------
+# PB157: the refresh status
+# ---------------------------------------------------------------------------
+
+def test_the_refresh_status_lines():
+    code, out = live_text("refresh-failed", "live-refresh-status")
+    assert code == 0
+    lines = out.splitlines()
+    assert lines[1].startswith("  ❌ FAIL Latest refresh status: Latest refresh status: Failed (")
+    assert lines[2] == ""
+    assert lines[3] == "⚠️  WARNING: Latest refresh status: Failed"
+    assert lines[4] == ("    Details: {'status': 'Failed', 'end_time': '2026-10-17T05:00:00Z', "
+                        "'request_id': 'r2'}")
+    assert lines[5] == ("warn   live-refresh-status: Refresh status check failed "
+                        "(non-blocking): Latest refresh status: Failed")
+
+
+def test_the_refresh_status_pass_line():
+    code, out = live_text("refresh-completed", "live-refresh-status")
+    assert code == 0
+    assert out.splitlines()[1].startswith(
+        "  ✅ PASS Latest refresh status: Latest refresh completed successfully at "
+        "2026-10-17T05:00:00Z (")
+
+
+def test_no_refresh_history():
+    code, out = live_text("refresh-none", "live-refresh-status")
+    assert "    Details: {'refresh_count': 0}" in out
+
+
+# ---------------------------------------------------------------------------
+# PB158: the data freshness
+# ---------------------------------------------------------------------------
+
+def test_the_freshness_lines():
+    code, out = live_text("stale-48h", "live-freshness")
+    assert code == 0
+    lines = out.splitlines()
+    assert lines[1].startswith("  ❌ FAIL Data freshness (max 24h): Data is 48.0 hours old "
+                               "(exceeds 24h threshold) (")
+    assert lines[3] == "⚠️  WARNING: Data is 48.0 hours old (exceeds 24h threshold)"
+    assert lines[4].startswith("    Details: {'end_time': '2026-10-16T12:00:00Z', 'age_hours': 48.0")
+    assert lines[5] == ("warn   live-freshness: Data freshness check failed (non-blocking): "
+                        "Data is 48.0 hours old (exceeds 24h threshold)")
+
+
+def test_the_freshness_pass_line():
+    code, out = live_text("fresh-10h", "live-freshness")
+    assert code == 0
+    assert out.splitlines()[1].startswith(
+        "  ✅ PASS Data freshness (max 24h): Data refreshed 10.0 hours ago (within 24h threshold) (")
+
+
+# ---------------------------------------------------------------------------
+# PB159: the smoke suite
+# ---------------------------------------------------------------------------
+
+def test_the_smoke_report():
+    code, out = live_text("smoke-degraded", "live-smoke")
+    assert code == 1
+    lines = out.splitlines()
+    assert lines[1:11] == [
+        "",
+        "=" * 80,
+        "COMPREHENSIVE SMOKE TEST SUITE",
+        "=" * 80,
+        "",
+        "-" * 80,
+        "SUMMARY",
+        "-" * 80,
+        "Total tests: 10",
+        "Passed: 5 (50.0%)",
+    ]
+    assert lines[11] == "Failed: 5"
+    assert lines[12] == ""
+    assert lines[13] == "Failed tests:"
+    failed = [line for line in lines if line.startswith("  ❌ ")]
+    assert len(failed) == 5
+    assert lines[-4].startswith("Total execution time: ")
+    assert lines[-4].endswith("ms (0.00s)")
+    assert lines[-3] == "=" * 80
+    assert lines[-2] == ""
+    assert "fail   live-smoke: Smoke test suite failed. Pass rate: 50.0% (expected >= 80%). " \
+           "5 tests failed." in out
+
+
+def test_the_smoke_suite_passes_when_enough_passes():
+    code, out = live_text("smoke-healthy", "live-smoke")
+    assert code == 0
+    # one item fails, but the suite passes on the rate
+    assert "Failed tests:" in out
+    assert "pass   live-smoke: 9 of 10 smoke items passed" in out

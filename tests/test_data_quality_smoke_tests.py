@@ -78,7 +78,7 @@ def test_dimension_tables_have_data(scenario, model, outcome, empty):
     assert result["outcome"] == outcome
     assert code == (1 if outcome == "fail" else 0)
     if empty is None:
-        assert "no dimension tables found" in result["message"]
+        assert result["message"] == "No dimension tables found starting with '_'"
     else:
         assert result["details"]["empty_tables"] == empty
 
@@ -115,7 +115,7 @@ def test_report_measures_not_blank(tmp_path):
     code, payload = live("measures-one-of-five", "live-parameter-table-measures", config=cfg)
     result = check_result(payload, "live-parameter-table-measures")
     assert result["outcome"] == "fail"
-    assert "no parameter measure tables" in result["message"]
+    assert result["message"] == "No x-Selector measure tables found"
     assert code == 1
 
 
@@ -154,7 +154,7 @@ def test_dimension_tables_naming_convention(tmp_path, model, expected_count):
 @pytest.mark.parametrize("scenario, outcome, message", [
     pytest.param("refresh-completed", "pass", None, id="refresh-completed"),
     pytest.param("refresh-failed", "warn", "Failed", id="refresh-failed"),
-    pytest.param("refresh-none", "warn", "no refresh history found", id="refresh-none"),
+    pytest.param("refresh-none", "warn", "No refresh history found", id="refresh-none"),
 ])
 def test_refresh_status(scenario, outcome, message):
     code, payload = live(scenario, "live-refresh-status")
@@ -164,8 +164,8 @@ def test_refresh_status(scenario, outcome, message):
     if message:
         assert message in result["message"]
     else:
-        assert result["details"]["endTime"] == "2026-10-17T05:00:00Z"
-        assert result["details"]["requestId"] == "r1"
+        assert result["details"]["end_time"] == "2026-10-17T05:00:00Z"
+        assert result["details"]["request_id"] == "r1"
     if outcome == "warn":
         code, _ = live(scenario, "live-refresh-status", strict=True)
         assert code == 1
@@ -180,7 +180,8 @@ def test_refresh_status(scenario, outcome, message):
     # the newest record is still running; the newest Completed one is exactly 24 h old
     pytest.param("fresh-24h-behind-running", "pass", 24.0, None, id="fresh-24h-behind-running"),
     pytest.param("stale-48h", "warn", 48.0, "48", id="stale-48h"),
-    pytest.param("only-failed", "warn", None, "no successful refresh found", id="only-failed"),
+    pytest.param("only-failed", "warn", None, "No successful refresh found in history",
+                 id="only-failed"),
 ])
 def test_data_freshness(scenario, outcome, age_hours, message):
     code, payload = live(scenario, "live-freshness")

@@ -117,6 +117,10 @@ class _Client:
     def now(self) -> _dt.datetime:
         return _dt.datetime.now(_dt.timezone.utc)
 
+    def today(self) -> _dt.date:
+        """The local date (a replay answers with its own clock)."""
+        return _dt.date.today()
+
     def health_check(self) -> dict:
         try:
             self.dataset()
@@ -171,6 +175,9 @@ class ReplayClient(_Client):
         if clock.get("now"):
             return _parse_time(clock["now"])
         return super().now()
+
+    def today(self) -> _dt.date:
+        return self.now().date()
 
 
 class RestClient(_Client):
@@ -640,134 +647,236 @@ def check_calendar_vs_parameters(c: LiveContext) -> CheckResult:
 def check_parameter_audit(c: LiveContext) -> CheckResult:
     cid, params = "live-parameter-audit", c.model.parameters
     if params is None:
-        return CheckResult(cid, "skip", "no expressions.tmdl: the model declares no parameters")
+        return CheckResult(cid, "skip",
+                           f"expressions.tmdl not found under {c.model.path / 'definition'}")
     time_params = sorted(n for n in params if any(k in n for k in
                                                   ("date", "Rolling", "rows_limit", "daysAgo")))
-    issues, recs = [], []
-    limit = params.get(c.cfg["row_limit_parameter"], "")
-    if re.search(r"\bLIMIT\s+1\b", limit):
-        issues.append({"severity": "CRITICAL", "parameter": c.cfg["row_limit_parameter"],
-                       "issue": "only one row per table is imported"})
-        recs.append(f"set {c.cfg['row_limit_parameter']} to a blank string and refresh")
+    issues: list[dict] = []
+    limit_name = c.cfg["row_limit_parameter"]
+    limit = params.get(limit_name, "")
+    if re.search(r"LIMIT 1(?!\d)", limit):
+        issues.append({"severity": "CRITICAL", "parameter": limit_name, "value": limit,
+                       "message": "LIMIT 1 applied - only 1 row per table imported",
+                       "recommendation": "Change to ' ' (blank) for production"})
     elif "LIMIT" in limit:
-        issues.append({"severity": "WARNING", "parameter": c.cfg["row_limit_parameter"],
-                       "issue": f"a row limit is set ({limit})"})
-    start = _date_param(params.get(c.cfg["from_date_parameter"]))
-    today = c.client.now().date()
-    if start and _dt.date.fromisoformat(start) > today:
-        ahead = (_dt.date.fromisoformat(start) - today).days
-        issues.append({"severity": "CRITICAL", "parameter": c.cfg["from_date_parameter"],
-                       "issue": f"the start date is {ahead} days in the future"})
-        recs.append(f"set {c.cfg['from_date_parameter']} to a date in the past")
+        issues.append({"severity": "WARNING", "parameter": limit_name, "value": limit,
+                       "message": "Row limit applied - data incomplete",
+                       "recommendation": "Review limit value for environment"})
+    date_name = c.cfg["from_date_parameter"]
+    from_date = _date_param(params.get(date_name))
+    today = c.client.today()
+    if from_date and _dt.date.fromisoformat(from_date) > today:
+        ahead = (_dt.date.fromisoformat(from_date) - today).days
+        issues.append({"severity": "CRITICAL", "parameter": date_name,
+                       "value": params.get(date_name, ""),
+                       "message": f"Future date ({ahead} days ahead) - no historical data",
+                       "recommendation": "Change to past date (e.g., 2023-01-01)"})
     cal = c.cfg["calendar_table"]
     r = c.client.execute(f'EVALUATE ROW( "CalendarRows", COUNTROWS({quote_table(cal)}), '
                          f'"AccountsRows", COUNTROWS({quote_table("_Accounts")}) )')
-    sample, notes = {}, []
-    if r.error:
-        notes.append(f"live sample failed: {r.error}")
+    sample: dict[str, int] = {}
+    report = ["", "=" * 80, "CONNECTION PARAMETER AUDIT REPORT", "=" * 80, "",
+              "1. PARAMETER CONFIGURATION", "-" * 80, "", "  Time/Data Filters:"]
+    report += [f"    {name}: {params[name]}" for name in time_params]
+    report += ["", "2. RISK ASSESSMENT", "-" * 80]
+    if issues:
+        report += ["", "  Issues Found:"]
+        for issue in issues:
+            icon = "🔴" if issue["severity"] == "CRITICAL" else "⚠️ "
+            report += ["", f"    {icon} {issue['severity']}: {issue['parameter']}",
+                       f"       Value: {issue['value']}",
+                       f"       Issue: {issue['message']}",
+                       f"       Recommendation: {issue['recommendation']}"]
     else:
-        sample = {cal: count(r.first, "CalendarRows"), "_Accounts": count(r.first, "AccountsRows")}
-        if sample[cal] == 1 and sample["_Accounts"] == 1:
-            notes.append("both sampled tables hold one row: a row limit is applied")
-        elif sample[cal] < 100:
-            notes.append("the calendar holds fewer than 100 rows")
+        report += ["", "  ✅ No critical issues detected"]
+    report += ["", "3. LIVE DATA VALIDATION", "-" * 80]
+    if r.error:
+        report += ["", f"  ❌ Error validating live data: {r.error[:100]}"]
+    else:
+        calendar_rows = count(r.first, "CalendarRows")
+        accounts_rows = count(r.first, "AccountsRows")
+        sample = {cal: calendar_rows, "_Accounts": accounts_rows}
+        report += ["", "  Sample Row Counts:",
+                   f"    {cal}: {calendar_rows:,} rows",
+                   f"    _Accounts: {accounts_rows:,} rows"]
+        if calendar_rows == 1 and accounts_rows == 1:
+            report += ["", "  🔴 Pattern: All tables have 1 row (confirms LIMIT 1 parameter)"]
+        elif calendar_rows < 100:
+            report += ["", "  ⚠️  Calendar has limited rows - check date filtering"]
+    report += ["", "4. RECOMMENDATIONS", "-" * 80]
+    if issues:
+        report += ["", "  Immediate Actions Required:"]
+        report += [f"    {i}. {issue['recommendation']}"
+                   for i, issue in enumerate(issues, 1) if issue["severity"] == "CRITICAL"]
+    report += ["", "=" * 80, f"Report generated: {_dt.datetime.now()}", "=" * 80, "",
+               "✅ Audit report generated successfully"]
     details = {"time_parameters": time_params, "parameters": params, "issues": issues,
-               "live_sample": sample, "notes": notes, "recommendations": recs}
-    return CheckResult(cid, "pass", f"{len(issues)} parameter issue(s)", details)
+               "live_sample": sample,
+               "recommendations": [i["recommendation"] for i in issues
+                                   if i["severity"] == "CRITICAL"]}
+    return CheckResult(cid, "pass", f"{len(issues)} parameter issue(s)", details, report)
 
 
-def _row_probe(c: LiveContext, table: str) -> tuple[bool, str]:
-    n, err = c.table_count(table, "RowCount")
-    if err:
-        return False, err
-    return (n or 0) > 0, f"{n} rows"
+def _table_probe(c: LiveContext, table: str) -> tuple[bool, str, float]:
+    r = c.client.execute(f'EVALUATE ROW("RowCount", COUNTROWS({quote_table(table)}))')
+    if r.error:
+        return False, f"Error checking table: {r.error}", r.elapsed_ms
+    if not r.rows:
+        return False, f"Error checking table: {NO_ROWS}", r.elapsed_ms
+    n = count(r.first, "RowCount")
+    if n > 0:
+        return True, f"Table '{table}' has {n:,} rows", r.elapsed_ms
+    return False, f"Table '{table}' is empty (0 rows)", r.elapsed_ms
 
 
 def check_table_sample(c: LiveContext) -> CheckResult:
+    cid = "live-table-sample"
     tables = c.model.tables_with_columns[: c.cfg["sample_tables"]]
-    results = {t: _row_probe(c, t) for t in tables}
-    passed = sum(1 for ok, _ in results.values() if ok)
+    report: list[str] = []
+    passed = 0
+    empty: list[str] = []
+    for t in tables:
+        ok, message, ms = _table_probe(c, t)
+        if ok:
+            passed += 1
+        else:
+            empty.append(t)
+        name = "Table '%s' has data" % t
+        report.append("  " + _probe("✅ PASS" if ok else "❌ FAIL", name, message, ms))
+    rate = _rate(passed, len(tables))
     details = {"tables": tables, "probed": len(tables), "passed": passed,
-               "empty_tables": [t for t, (ok, _) in results.items() if not ok]}
-    ok = _rate(passed, len(tables)) >= c.cfg["sample_pass_rate"]
-    return CheckResult("live-table-sample", "pass" if ok else "fail",
-                       f"{passed} of {len(tables)} sampled tables hold rows", details)
+               "empty_tables": empty}
+    if rate >= c.cfg["sample_pass_rate"]:
+        return CheckResult(cid, "pass",
+                           f"{passed} of {len(tables)} sampled tables hold rows", details, report)
+    return CheckResult(cid, "fail",
+                       f"Only {passed}/{len(tables)} tables have data ({rate:.1%}). Expected at "
+                       f"least {c.cfg['sample_pass_rate']:.0%}.", details, report)
 
 
 def check_dimension_rows(c: LiveContext) -> CheckResult:
+    cid = "live-dimension-rows"
     prefix = c.cfg["dimension_prefix"]
     tables = [t for t in c.model.tables_with_columns if t.startswith(prefix)]
     if not tables:
-        return CheckResult("live-dimension-rows", "fail", "no dimension tables found")
-    results = {t: _row_probe(c, t) for t in tables}
-    passed = sum(1 for ok, _ in results.values() if ok)
+        return CheckResult(cid, "fail", f"No dimension tables found starting with '{prefix}'")
+    report: list[str] = []
+    passed = 0
+    failed: list[str] = []
+    for t in tables:
+        ok, message, ms = _table_probe(c, t)
+        if ok:
+            passed += 1
+        else:
+            failed.append(t)
+            name = "Table '%s' has data" % t
+            report.append("  " + _probe("❌ FAIL", name, message, ms))
+    if failed:
+        report += ["", f"⚠️  Warning: {len(failed)} dimension tables are empty: {failed}"]
     details = {"tables": tables, "probed": len(tables), "passed": passed,
-               "empty_tables": [t for t, (ok, _) in results.items() if not ok]}
-    ok = _rate(passed, len(tables)) >= c.cfg["dimension_pass_rate"]
-    return CheckResult("live-dimension-rows", "pass" if ok else "fail",
-                       f"{passed} of {len(tables)} dimension tables hold rows", details)
+               "empty_tables": failed}
+    rate = _rate(passed, len(tables))
+    if rate >= c.cfg["dimension_pass_rate"]:
+        return CheckResult(cid, "pass",
+                           f"{passed} of {len(tables)} dimension tables hold rows", details, report)
+    return CheckResult(cid, "fail",
+                       f"Only {passed}/{len(tables)} dimension tables have data ({rate:.1%}). "
+                       f"Failed tables: {failed}", details, report)
 
 
-def _measure_probe(c: LiveContext, measure: str) -> tuple[bool, str]:
+def _measure_probe(c: LiveContext, measure: str) -> tuple[bool, str, float, Any]:
     ref = "[" + measure.replace("]", "]]") + "]"
     r = c.client.execute(f'EVALUATE ROW( "Value", {ref}, "IsBlank", ISBLANK({ref}) )')
     if r.error:
-        return False, r.error
+        return False, f"Error checking measure: {r.error}", r.elapsed_ms, None
     if not r.rows:
-        return False, "empty result"
-    blank = scalar(r.first, "IsBlank")
-    return (blank is False), "value" if blank is False else "BLANK"
+        return False, f"Error checking measure: {NO_ROWS}", r.elapsed_ms, None
+    value = scalar(r.first, "Value")
+    raw = r.first.get("[IsBlank]", r.first.get("IsBlank"))
+    blank = True if raw is None else bool(raw)
+    if blank:
+        return False, f"Measure '{ref}' returned BLANK", r.elapsed_ms, value
+    return True, f"Measure '{ref}' returned value: {value}", r.elapsed_ms, value
 
 
-def _measure_sample(c: LiveContext, cid: str, measures: list[str], none_message: str) -> CheckResult:
-    if not measures:
-        return CheckResult(cid, "fail", none_message, {"probed": 0, "passed": 0})
-    results = {m: _measure_probe(c, m) for m in measures}
-    passed = sum(1 for ok, _ in results.values() if ok)
-    rate = _rate(passed, len(measures))
-    details: dict = {"probed": len(measures), "passed": passed,
-                     "blank_or_failed": [m for m, (ok, _) in results.items() if not ok]}
+def _measure_sample(c: LiveContext, cid: str, items: list[tuple[str, str]],
+                    none_message: str) -> CheckResult:
+    report: list[str] = []
+    values: dict[str, Any] = {}
+    passed = 0
+    for table, m in items:
+        ok, message, ms, value = _measure_probe(c, m)
+        values[m] = value
+        if ok:
+            passed += 1
+        else:
+            probe = _probe("❌ FAIL", f"Measure '[{m}]' not blank", message, ms)
+            report.append(f"  ❌ [{table}].[{m}]: {probe}" if table else f"  {probe}")
+    rate = _rate(passed, len(items))
+    details: dict = {"probed": len(items), "passed": passed, "values": values,
+                     "blank_or_failed": [m for _t, m in items if values[m] is None]}
     if rate < 0.5:
         details["note"] = "fewer than half of the sampled measures return a value"
-    ok = rate >= c.cfg["measure_pass_rate"]
-    return CheckResult(cid, "pass" if ok else "fail",
-                       f"{passed} of {len(measures)} sampled measures return a value", details)
+        report += ["", f"⚠️  Warning: Only {rate:.1%} of measures returned non-blank values"]
+    if not items:
+        return CheckResult(cid, "fail", none_message, details, report)
+    if rate >= c.cfg["measure_pass_rate"]:
+        return CheckResult(cid, "pass",
+                           f"{passed} of {len(items)} sampled measures return a value",
+                           details, report)
+    return CheckResult(cid, "fail",
+                       f"Only {passed}/{len(items)} measures returned non-blank ({rate:.1%}). "
+                       f"Expected at least {c.cfg['measure_pass_rate']:.0%}.", details, report)
 
 
 def check_measure_sample(c: LiveContext) -> CheckResult:
-    measures = [m for _t, m in c.model.measures][: c.cfg["sample_measures"]]
-    return _measure_sample(c, "live-measure-sample", measures, "the model declares no measures")
+    items = [("", m) for _t, m in c.model.measures][: c.cfg["sample_measures"]]
+    return _measure_sample(c, "live-measure-sample", items,
+                           "the model declares no measures")
 
 
 def check_parameter_table_measures(c: LiveContext) -> CheckResult:
     cid = "live-parameter-table-measures"
     if not c.cfg["parameter_table_measures"]:
-        return CheckResult(cid, "skip", "disabled (live.parameter_table_measures = false): "
-                                        "field-parameter tables normally own no measures")
+        return CheckResult(cid, "skip",
+                           "Report tables are parameter tables, not measure tables. "
+                           "Skipping for now.")
     prefixes = tuple(c.cfg["parameter_table_prefixes"])
     per_table: dict[str, list[str]] = {}
     for t, m in c.model.measures:
         if t.startswith(prefixes):
             per_table.setdefault(t, []).append(m)
-    measures = [m for ms in per_table.values() for m in ms[:5]]
-    return _measure_sample(c, cid, measures, "no parameter measure tables with measures found")
+    if not per_table:
+        return CheckResult(cid, "fail", "No x-Selector measure tables found")
+    items = [(t, m) for t, ms in per_table.items() for m in ms[:5]]
+    return _measure_sample(c, cid, items, "No x-Selector measure tables found")
 
 
-def _refresh_probe(c: LiveContext) -> tuple[str, str, dict]:
+def _refresh_probe(c: LiveContext) -> tuple[str, str, dict, float]:
+    start = time.perf_counter()
     hist = c.client.refreshes(1)
+    ms = (time.perf_counter() - start) * 1000
     if not hist:
-        return "warn", "no refresh history found", {}
+        return "warn", "No refresh history found", {"refresh_count": 0}, ms
     latest = hist[0]
-    status = latest.get("status") or "Unknown"
-    details = {"status": status, "endTime": latest.get("endTime"), "requestId": latest.get("requestId")}
+    status = latest.get("status", "Unknown")
+    details = {"status": status, "end_time": latest.get("endTime"),
+               "request_id": latest.get("requestId")}
     if status == "Completed":
-        return "pass", f"last refresh Completed at {latest.get('endTime')}", details
-    return "warn", f"last refresh status: {status}", details
+        return ("pass", f"Latest refresh completed successfully at {latest.get('endTime')}",
+                details, ms)
+    return "warn", f"Latest refresh status: {status}", details, ms
 
 
 def check_refresh_status(c: LiveContext) -> CheckResult:
-    outcome, msg, details = _refresh_probe(c)
-    return CheckResult("live-refresh-status", outcome, msg, details)
+    cid = "live-refresh-status"
+    outcome, msg, details, ms = _refresh_probe(c)
+    report = ["  " + _probe("✅ PASS" if outcome == "pass" else "❌ FAIL",
+                            "Latest refresh status", msg, ms)]
+    if outcome != "pass":
+        report += ["", f"⚠️  WARNING: {msg}", f"    Details: {details}"]
+    message = msg if outcome == "pass" else f"Refresh status check failed (non-blocking): {msg}"
+    return CheckResult(cid, outcome, message, details, report)
 
 
 def _parse_time(text: str) -> _dt.datetime:
@@ -775,49 +884,79 @@ def _parse_time(text: str) -> _dt.datetime:
     return value if value.tzinfo else value.replace(tzinfo=_dt.timezone.utc)
 
 
-def _freshness_probe(c: LiveContext) -> tuple[str, str, dict]:
+def _freshness_probe(c: LiveContext) -> tuple[str, str, dict, float]:
+    start = time.perf_counter()
+    max_hours = c.cfg["freshness_max_hours"]
     hist = c.client.refreshes(10)
+    ms = (time.perf_counter() - start) * 1000
     if not hist:
-        return "warn", "no refresh history found", {}
+        return "warn", "No refresh history found", {"refresh_count": 0}, ms
     done = next((h for h in hist if h.get("status") == "Completed"), None)
     if done is None:
-        return "warn", "no successful refresh found", {}
+        return "warn", "No successful refresh found in history", {"completed_refresh_count": 0}, ms
+    raw = done.get("endTime")
     try:
-        age = (c.client.now() - _parse_time(str(done.get("endTime")))).total_seconds() / 3600
+        age = (c.client.now() - _parse_time(str(raw))).total_seconds() / 3600
     except (TypeError, ValueError) as exc:
-        return "warn", f"cannot read the refresh end time: {exc}", {}
-    details = {"age_hours": round(age, 3), "endTime": done.get("endTime")}
-    if age <= c.cfg["freshness_max_hours"]:
-        return "pass", f"data is {age:.1f} hours old", details
-    return "warn", f"data is {age:.0f} hours old (limit {c.cfg['freshness_max_hours']})", details
+        return ("warn", f"Error checking data freshness: {exc}", {"error": str(exc)}, ms)
+    fresh = age <= max_hours
+    details = {"end_time": raw, "age_hours": age, "max_hours": max_hours, "is_fresh": fresh}
+    if fresh:
+        return "pass", f"Data refreshed {age:.1f} hours ago (within {max_hours}h threshold)", \
+            details, ms
+    return "warn", f"Data is {age:.1f} hours old (exceeds {max_hours}h threshold)", details, ms
 
 
 def check_freshness(c: LiveContext) -> CheckResult:
-    outcome, msg, details = _freshness_probe(c)
-    return CheckResult("live-freshness", outcome, msg, details)
+    cid = "live-freshness"
+    outcome, msg, details, ms = _freshness_probe(c)
+    name = f"Data freshness (max {c.cfg['freshness_max_hours']}h)"
+    report = ["  " + _probe("✅ PASS" if outcome == "pass" else "❌ FAIL", name, msg, ms)]
+    if outcome != "pass":
+        report += ["", f"⚠️  WARNING: {msg}", f"    Details: {details}"]
+    message = msg if outcome == "pass" else f"Data freshness check failed (non-blocking): {msg}"
+    return CheckResult(cid, outcome, message, details, report)
 
 
 def check_smoke(c: LiveContext) -> CheckResult:
-    start = time.perf_counter()
-    items: list[tuple[str, bool, str]] = []
+    cid = "live-smoke"
+    items: list[tuple[str, bool, str, float]] = []
     prefix = c.cfg["dimension_prefix"]
     for t in [t for t in c.model.tables_with_columns if t.startswith(prefix)]:
-        ok, why = _row_probe(c, t)
-        items.append((f"rows: {t}", ok, why))
+        ok, why, ms = _table_probe(c, t)
+        items.append((f"Table '{t}' has data", ok, why, ms))
     for _t, m in c.model.measures[: c.cfg["suite_measures"]]:
-        ok, why = _measure_probe(c, m)
-        items.append((f"measure: {m}", ok, why))
-    outcome, msg, _d = _refresh_probe(c)
-    items.append(("refresh status", outcome == "pass", msg))
-    outcome, msg, _d = _freshness_probe(c)
-    items.append(("freshness", outcome == "pass", msg))
-    passed = sum(1 for _n, ok, _w in items if ok)
+        ok, why, ms, _value = _measure_probe(c, m)
+        items.append((f"Measure '[{m}]' not blank", ok, why, ms))
+    outcome, msg, _details, ms = _refresh_probe(c)
+    items.append(("Latest refresh status", outcome == "pass", msg, ms))
+    outcome, msg, _details, ms = _freshness_probe(c)
+    items.append((f"Data freshness (max {c.cfg['freshness_max_hours']}h)",
+                   outcome == "pass", msg, ms))
+    passed = sum(1 for _n, ok, _w, _ms in items if ok)
+    failed = len(items) - passed
+    rate = _rate(passed, len(items))
+    total_ms = sum(ms for _n, _ok, _w, ms in items)
+    report = ["", "=" * 80, "COMPREHENSIVE SMOKE TEST SUITE", "=" * 80, "",
+              "-" * 80, "SUMMARY", "-" * 80,
+              f"Total tests: {len(items)}",
+              f"Passed: {passed} ({rate:.1%})",
+              f"Failed: {failed}"]
+    if failed:
+        report += ["", "Failed tests:"]
+        report += ["  ❌ " + _probe("❌ FAIL", name, why, ms)
+                   for name, ok, why, ms in items if not ok]
+    report += ["", f"Total execution time: {total_ms:.2f}ms ({total_ms / 1000:.2f}s)",
+               "=" * 80, ""]
     details = {"passed": passed, "total": len(items),
-               "failed_items": [f"{n}: {w}" for n, ok, w in items if not ok],
-               "elapsed_ms": round((time.perf_counter() - start) * 1000, 3)}
-    ok = _rate(passed, len(items)) >= c.cfg["suite_pass_rate"]
-    return CheckResult("live-smoke", "pass" if ok else "fail",
-                       f"{passed} of {len(items)} smoke items passed", details)
+               "failed_items": [f"{name}: {why}" for name, ok, why, _ms in items if not ok],
+               "elapsed_ms": total_ms}
+    if rate >= c.cfg["suite_pass_rate"]:
+        return CheckResult(cid, "pass",
+                           f"{passed} of {len(items)} smoke items passed", details, report)
+    return CheckResult(cid, "fail",
+                       f"Smoke test suite failed. Pass rate: {rate:.1%} (expected >= "
+                       f"{c.cfg['suite_pass_rate']:.0%}). {failed} tests failed.", details, report)
 
 
 def check_identity(c: LiveContext) -> CheckResult:

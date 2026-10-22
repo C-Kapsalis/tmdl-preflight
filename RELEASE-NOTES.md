@@ -286,6 +286,17 @@ until configured.
 
 ### Changed
 
+- **The live row, measure, refresh and smoke checks print the original's
+  lines.** A probed table prints `✅ PASS Table 'Sales' has data: Table
+  'Sales' has 5,000 rows (12.34ms)` and a failed one `❌ FAIL ...`; the
+  dimension check warns `⚠️  Warning: 1 dimension tables are empty:
+  ['_Days']`; the refresh check prints the warning and the details and says
+  `Refresh status check failed (non-blocking): ...`; the freshness check
+  says `Data is 48.0 hours old (exceeds 24h threshold)`; the smoke suite
+  prints its summary, the failed items and the total execution time, and
+  fails with `Smoke test suite failed. Pass rate: 50.0% (expected >= 80%).
+  5 tests failed.` The parameter audit prints the whole report, and only
+  `LIMIT 1` itself is critical. BUGFIX.
 - **Every live check prints its report block.** In text mode a check prints
   the block the original printed — the row-count pattern, the calendar
   validation, the dimension validation, the date range — before its result
