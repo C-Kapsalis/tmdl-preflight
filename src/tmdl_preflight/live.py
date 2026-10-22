@@ -869,7 +869,7 @@ def _measure_probe(c: LiveContext, measure: str) -> tuple[bool, str, float, Any]
 
 
 def _measure_sample(c: LiveContext, cid: str, items: list[tuple[str, str]],
-                    none_message: str, noun: str = "measures") -> CheckResult:
+                    noun: str = "measures") -> CheckResult:
     report: list[str] = []
     values: dict[str, Any] = {}
     passed = 0
@@ -887,8 +887,6 @@ def _measure_sample(c: LiveContext, cid: str, items: list[tuple[str, str]],
     if rate < 0.5:
         details["note"] = "fewer than half of the sampled measures return a value"
         report += ["", f"⚠️  Warning: Only {rate:.1%} of measures returned non-blank values"]
-    if not items:
-        return CheckResult(cid, "fail", none_message, details, report)
     if rate >= c.cfg["measure_pass_rate"]:
         return CheckResult(cid, "pass",
                            f"{passed} of {len(items)} sampled measures return a value",
@@ -900,8 +898,7 @@ def _measure_sample(c: LiveContext, cid: str, items: list[tuple[str, str]],
 
 def check_measure_sample(c: LiveContext) -> CheckResult:
     items = [("", m) for _t, m in c.model.measures][: c.cfg["sample_measures"]]
-    return _measure_sample(c, "live-measure-sample", items,
-                           "the model declares no measures")
+    return _measure_sample(c, "live-measure-sample", items)
 
 
 def check_parameter_table_measures(c: LiveContext) -> CheckResult:
@@ -918,8 +915,7 @@ def check_parameter_table_measures(c: LiveContext) -> CheckResult:
     if not per_table:
         return CheckResult(cid, "fail", "No x-Selector measure tables found")
     items = [(t, m) for t, ms in per_table.items() for m in ms[:5]]
-    return _measure_sample(c, cid, items, "No x-Selector measure tables found",
-                           noun="Report measures")
+    return _measure_sample(c, cid, items, noun="Report measures")
 
 
 def _refresh_probe(c: LiveContext) -> tuple[str, str, dict, float]:

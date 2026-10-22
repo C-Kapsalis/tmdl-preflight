@@ -401,6 +401,20 @@ def test_the_measure_sample_lines():
         "Expected at least 20%.")
 
 
+def test_a_model_without_measures_fails_the_measure_sample(tmp_path):
+    import shutil
+
+    model = tmp_path / "Coffee.SemanticModel"
+    shutil.copytree(MODEL, model)
+    (model / "definition" / "tables" / "Coffee Measures.tmdl").unlink()
+    code, payload = live("measures-all-blank", "live-measure-sample", model=model)
+    result = check_result(payload, "live-measure-sample")
+    assert result["outcome"] == "fail"
+    assert result["message"] == ("Only 0/0 measures returned non-blank (0.0%). "
+                                 "Expected at least 20%.")
+    assert code == 1
+
+
 # ---------------------------------------------------------------------------
 # PB156: the parameter-table measures
 # ---------------------------------------------------------------------------
