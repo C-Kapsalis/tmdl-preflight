@@ -261,6 +261,14 @@ class Rule:
         return {v.obj or v.path or "" for v in violations
                 if v.rule_id == self.id and v.fixable and v.severity is not Severity.INFO}
 
+    def dry_run_report(self, ctx: Context) -> list[str]:
+        """The lines a dry run prints for this rule, in the rule's own words.
+
+        A rule that has something to say about what a fix would do says it
+        here; the default is nothing.
+        """
+        return []
+
     def disabled_by_policy(self) -> bool:
         """True when a policy option turned this rule off for the run; the
         engine then lists it under ``skipped`` instead of running it."""

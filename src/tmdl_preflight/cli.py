@@ -434,6 +434,7 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
                 n = len(rule.pending_fix_objects(ctx, report.violations))
                 if n:
                     counts[rule.id] = n
+                report.notes.extend(rule.dry_run_report(ctx))
             report.would_fix = [
                 f"{rid}: {n} violation(s)" for rid, n in sorted(counts.items())
             ]

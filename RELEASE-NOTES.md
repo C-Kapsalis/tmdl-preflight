@@ -144,6 +144,15 @@ until configured.
   not, and how many of the calculated tables carry a partition (with the
   partition modes they declare). BUGFIX: the original printed the emoji
   double-encoded; the tool prints the intended characters.
+- **M022** reports the diagram layouts the way the check has always
+  reported them: how many files it found, how many are already blank, and
+  the ones that carry stale node data. The repair says which file it
+  blanked and how many it blanked; a dry run says which file it would
+  blank and writes nothing. Every semantic-model folder under the scanned
+  path is checked, including one the tool does not load as a model, and a
+  blank layout saved with Windows line endings counts as blank.
+  BUGFIX: the layout the repair writes has LF line endings; the original
+  wrote the line endings of the platform it ran on.
 - **M021** reports the orphan bindings of a culture file as a block:
   `ORPHAN BINDINGS (<n>): <path>` and one line per entity. The repair
   prints how many binding nodes it dropped per file, and the run says how
