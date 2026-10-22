@@ -222,6 +222,10 @@ until configured.
   name contains a double quote.
 - Names declared with trailing spaces inside quotes (`'Frame Size   '`) are
   read trimmed.
+- **D012** checks every measure and calculated column by default, not only
+  the configured grain-guard measure: an over-long `||` chain breaks the
+  model on import wherever it sits. `or_chain_measures` narrows the rule to
+  the named measures. STRICTER.
 
 - **B002** reports a bookmark file that is not valid JSON.
 - **B001-B003** skip bookmarks of archived report copies: paths containing
@@ -277,10 +281,18 @@ unchanged.
 - `fix --clear-cache` deletes `<Model>.SemanticModel/.pbi/cache.abf` after
   lineage tags changed; without it the tool prints a hint when the cache
   exists.
-- `grain <path> --cost-fact T --backend-fact T ... [--permit T] [--check
-  --guard-table T --guard-measure M] [--emit-config]` derives conformed and
+- `grain <path> [--cost-fact T] [--backend-fact T ...] [--permit T] [--check
+  --guard-table T [--guard-measure M]] [--emit-config]` derives conformed and
   blocked dimensions from the relationship graph (USERELATIONSHIP to a
-  calendar counts) and checks a grain guard against it.
+  calendar counts) and checks a grain guard against it. The cost fact
+  defaults to `Campaigns`, the backend facts to `_Users` and `Transactions`
+  (naming one replaces the default list) and the guard measure to
+  `-helper Cost Grain Valid`; a guard measure whose name starts with `-`
+  needs the `--guard-measure=...` form. The verdict table is one row per
+  dimension, left-aligned and padded, and `--check` prints the coverage
+  gaps (or the clean line) under it. BUGFIX: a dimension that is also a
+  fact counts as reaching itself, so a backend fact that is a dimension is
+  CONFORMED when it reaches every backend fact.
 - `report complexity|nameof|relationships <path> [--json]`: read-only
   reports (measure length distribution and threshold suggestions, NAMEOF
   inventory, relationship topology).
@@ -471,6 +483,71 @@ unchanged.
   covers every such entry, including the ones of a model that was not
   scanned or does not exist any more. A new dead fact table beyond the
   floor produces a summary that names every one of them.
+
+- **A numeric floor in a guarded ratio is found whatever the spacing.** The
+  floor of a guarded ratio is a closing `]` followed by `<` and digits; the
+  gap between them may be any amount of whitespace, so `[Leads #]  <  5`
+  hides a floor no more than `[Leads #]<5` does. BUGFIX.
+- **The re-check gate of the policy exception matches the whole variable
+  name.** `notrecheck = 1` is not the re-check the rule asks for; the name
+  must stand as a word on both sides. BUGFIX.
+- **The reach guards find their own helpers.** Beside the configured helper
+  names, every measure of the host table whose name starts with
+  `-helper Filter Misses ` or `-helper Slicer Cannot Reach ` is collected and
+  checked like the configured ones (the prefixes are an option,
+  `helper_prefixes`). A helper nobody listed is exactly the one that drifts
+  silently. BUGFIX.
+- **The edge floor counts edges, not relationships.** Two active
+  relationships between the same two tables are one edge, so they count
+  once against `min_active_edges`. The self-test that asks whether some
+  active relationship touches the fact now runs for every reach guard, not
+  only for the ones with a floor. BUGFIX.
+- **A model without a relationships file skips the axis contract.** The
+  contracted edges are not reported as missing; the run notes the skip.
+  BUGFIX.
+- **The below-grain check says when it skips.** A model without the
+  configured host table skips the check, and the run names the skipped
+  check. BUGFIX.
+- **A registered column needs an ordinal.** A row that registers a column
+  but carries no ordinal is reported: the contract cannot check it against
+  the group's free range, and a silent pass reads as permission. BUGFIX.
+- **A group row is a live line that carries an ordinal.** The rows of a
+  group are the live lines that name the group and carry an ordinal, and a
+  row's label is the quoted text right after the opening parenthesis at the
+  start of the line, not a quoted string further down. BUGFIX.
+- **A reference contract can check its own universe.** A contract that names
+  a template model or a minimum universe counts the models that declare its
+  anchor: fewer than the minimum, or the template missing, is reported as
+  broken discovery, the way the arm-scoped filter already does. BUGFIX.
+- **A flag predicate is recognised whatever the spacing.** Any amount of
+  whitespace (spaces or tabs) between the column name and `]`, between `]`
+  and the operator and between the operator and the literal is free, and the
+  predicate counts toward `min_predicates`. BUGFIX.
+- **A canary literal matches a model that writes the function form.** The
+  literal of a found predicate is compared with the canary after a trailing
+  `()` is dropped, so `= TRUE()` satisfies the canary `= TRUE` (the literal
+  itself stays case-sensitive). BUGFIX.
+- **A guarded ratio is recognised whatever the spacing in its brackets.**
+  `DIVIDE ( [ Cost ] , [Accounts #] )` is the same ratio as
+  `DIVIDE([Cost],[Accounts #])`, so it is wrapped like the other ones.
+  BUGFIX.
+- **A mention outside every arm says so.** The finding names the arm
+  `outside any arm` instead of `none`. BUGFIX.
+- **The Daily calculation item is read as a whole block.** The check looks
+  for the required tokens in the item's source, from its
+  `calculationItem Daily` line to the next calculation item or the end of
+  the file, so a property line of the item counts too. BUGFIX.
+- **The contract findings carry the counts, the names and the guard.** A
+  missing-column finding says how many columns of the table are
+  axis-selectable but absent from the guard and names them all, and a
+  blocked-conformed-column finding names the guard too. One finding per
+  object, as before; the facts a reader needs to act on it are the same.
+  BUGFIX.
+- **A commented-out expression is not live DAX.** The reference contracts
+  read the raw text of a measure, so a `-- DIVIDE([Cost], ...)` line in a
+  comment was reported as a live raw-cost ratio. The tool skips comment
+  lines: a commented-out expression is not executed, so it is not a
+  defect. BUGFIX.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the

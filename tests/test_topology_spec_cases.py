@@ -102,8 +102,8 @@ def test_check_finds_gaps(tmp_path):
     model = _delivery(tmp_path, guard, RELS)
     code, data = _grain(model, "--check", "--guard-table", "#Backend Measures", "--guard-measure=-helper Grain")
     assert code == 1
-    assert any("ISFILTERED('_Campaigns')" in g for g in data["gaps"])
-    assert any("_Countries: conformed" in g for g in data["gaps"])
+    assert any("_Campaigns: no table-level ISFILTERED" in g for g in data["gaps"])
+    assert any("_Countries: conformed table is blocked table-wide" in g for g in data["gaps"])
     code, data = _grain(model, "--check", "--guard-table", "#Backend Measures", "--guard-measure", "Nope")
     assert code == 1 and data["error"]
 

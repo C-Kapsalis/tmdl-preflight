@@ -232,9 +232,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_grain = sub.add_parser("grain", help="derive which dimensions can filter a cost fact and "
                                             "its backend facts; check a grain guard against it")
     p_grain.add_argument("path", help=path_help)
-    p_grain.add_argument("--cost-fact", required=True, help="the fact the cost side reads")
-    p_grain.add_argument("--backend-fact", action="append", default=[], required=True,
-                         help="a fact of the population side (repeatable)")
+    p_grain.add_argument("--cost-fact", default="Campaigns",
+                         help="the fact the cost side reads (default: Campaigns)")
+    p_grain.add_argument("--backend-fact", action="append", default=None, metavar="TABLE",
+                         help="a fact of the population side (repeatable; default: _Users and "
+                              "Transactions; naming one replaces the default list)")
     p_grain.add_argument("--permit", action="append", default=[], metavar="TABLE",
                          help="treat this dimension as conformed (repeatable)")
     p_grain.add_argument("--axis-prefix", action="append", default=None, metavar="PREFIX",
@@ -242,7 +244,9 @@ def build_parser() -> argparse.ArgumentParser:
                               "(default: y-Selector and y-Plot Specific)")
     p_grain.add_argument("--check", action="store_true", help="check the guard; exit 1 on a gap")
     p_grain.add_argument("--guard-table", help="with --check: the table holding the guard")
-    p_grain.add_argument("--guard-measure", help="with --check: the guard measure")
+    p_grain.add_argument("--guard-measure", default="-helper Cost Grain Valid",
+                         help="with --check: the guard measure (default: '-helper Cost Grain "
+                              "Valid'; a name starting with '-' needs the --guard-measure=... form)")
     p_grain.add_argument("--emit-config", action="store_true",
                          help="print the blocked/permitted lists as grain-guard-coverage config")
     p_grain.add_argument("--json", action="store_true", help="machine-readable output")
@@ -705,19 +709,24 @@ def _cmd_format_resolve(args) -> int:
 
 
 def _cmd_grain(args) -> int:
-    from .rules.grain import grain_gaps, grain_verdicts
+    from .rules.grain import DEFAULT_BACKEND_FACTS, DEFAULT_COST_FACT, grain_gaps, grain_verdicts
 
     ctx = _context(args.path)
     if not ctx.models:
         raise UsageError("grain needs a semantic model")
     model = ctx.models[0]
-    rows = grain_verdicts(model, args.cost_fact, args.backend_fact, args.permit, args.axis_prefix)
+    cost_fact = args.cost_fact or DEFAULT_COST_FACT
+    backend_facts = list(args.backend_fact or DEFAULT_BACKEND_FACTS)
+    rows = grain_verdicts(model, cost_fact, backend_facts, args.permit, args.axis_prefix)
     payload: dict = {"dimensions": rows}
     code = 0
+    error = None
+    gaps: list[str] = []
     if args.check:
-        if not args.guard_table or not args.guard_measure:
-            raise UsageError("--check needs --guard-table and --guard-measure")
-        error, gaps = grain_gaps(model, rows, args.guard_table, args.guard_measure)
+        if not args.guard_table:
+            error = "--check needs --guard-table"
+        else:
+            error, gaps = grain_gaps(model, rows, args.guard_table, args.guard_measure)
         payload.update({"error": error, "gaps": gaps})
         code = 1 if (error or gaps) else 0
     if args.emit_config:
@@ -729,15 +738,21 @@ def _cmd_grain(args) -> int:
     if args.json:
         print(json.dumps(payload, indent=2))
         return code
+    print(f"{'dimension table':36} {'->cost':6} {'->backend':30} {'verdict':14} y-Selector cols")
     for r in rows:
-        print(f"{r['dimension']:30s} cost={'yes' if r['reaches_cost'] else 'no':3s} "
-              f"backend={','.join(r['backend_reached']) or '-':20s} {r['verdict']:12s} "
-              f"{len(r['exposed_columns'])} exposed column(s)")
+        print(f"{r['dimension']:36} {'Y' if r['reaches_cost'] else '-':6} "
+              f"{','.join(sorted(r['backend_reached'])) or '-':30} {r['verdict']:14} "
+              f"{len(r['exposed_columns'])}")
     if args.check:
-        if payload["error"]:
-            print(f"error: {payload['error']}")
-        for g in payload["gaps"]:
-            print(f"gap: {g}")
+        print()
+        if error:
+            print(error, file=sys.stderr)
+        elif gaps:
+            print(f"{len(gaps)} coverage gap(s) — absence from the deny-list reads as permission:")
+            for g in gaps:
+                print("  ", g)
+        else:
+            print("guard covers every axis-exposed column of every non-conformed dimension table")
     if args.emit_config:
         print(json.dumps(payload["config"], indent=2))
     return code

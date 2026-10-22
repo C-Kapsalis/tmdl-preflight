@@ -4,11 +4,27 @@ D011 calc-item-blind-average, X001 cross-fact-multirow-key-join."""
 from __future__ import annotations
 
 import re
+from typing import Optional
 
 from ..dax import strip_comments
 from .base import Context, Rule, Severity, Violation
 
 _CALC_KINDS = ("partition_source", "calculation_item", "format_string_definition")
+
+
+def _item_block(table, item: str) -> Optional[str]:
+    """The source of a calculation item: from its ``calculationItem <item>``
+    line to the next calculation item or the end of the file. The item's
+    property lines belong to it."""
+    try:
+        text = table.file.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError):
+        return None
+    start = text.find(f"calculationItem {item}")
+    if start == -1:
+        return None
+    nxt = text.find("calculationItem ", start + len(f"calculationItem {item}"))
+    return text[start:] if nxt == -1 else text[start:nxt]
 
 
 class CalcDaxBlocksPresentRule(Rule):
@@ -77,7 +93,7 @@ class CalcItemBlindAverageRule(Rule):
             table = model.get_table(tname)
             if table is None:
                 continue
-            body = next((expr for name, expr, _line in table.calculation_items if name == item), None)
+            body = _item_block(table, item)
             if body is None:
                 out.append(self.violation(
                     f"calculation group '{tname}' has no '{item}' item.",

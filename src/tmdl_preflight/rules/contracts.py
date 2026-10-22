@@ -207,6 +207,13 @@ class ModelContractRelationshipsRule(Rule):
         out: list[Violation] = []
         for axis in self.options.get("axes") or []:
             for model in _models_for(ctx, axis):
+                if not (model.definition_path / "relationships.tmdl").is_file():
+                    ctx.notes.append(
+                        f"C003: {ctx.model_key(model)}: the axis contract for "
+                        f"'{axis.get('dimension')}' was skipped: the model has no "
+                        f"relationships file."
+                    )
+                    continue
                 out.extend(self._axis(model, axis))
         for guard in self.options.get("reach_guards") or []:
             for model in _models_for(ctx, guard):
@@ -267,16 +274,16 @@ class ModelContractRelationshipsRule(Rule):
         where = self._where(model)
         n = g.get("min_active_edges")
         if n is not None:
-            active = sum(1 for r in model.relationships if r.is_active)
+            active = len(pairs)
             if active < int(n):
                 out.append(self.violation(
                     f"reach guard: only {active} active relationship(s) parsed; expected at "
                     f"least {n}. The check would pass vacuously.", file=where,
                 ))
-            if not any(fact in p for p in pairs):
-                out.append(self.violation(
-                    f"reach guard: no active relationship touches '{fact}'.", file=where, obj=fact,
-                ))
+        if not any(fact in p for p in pairs):
+            out.append(self.violation(
+                f"reach guard: no active relationship touches '{fact}'.", file=where, obj=fact,
+            ))
         for t in g.get("guarded") or []:
             if frozenset((t, fact)) in pairs:
                 out.append(self.violation(
@@ -362,7 +369,7 @@ class ModelContractRelationshipsRule(Rule):
 # ---------------------------------------------------------------------------
 
 _ORDINAL_RE = re.compile(r",\s*(\d{3,5})\s*,")
-_LABEL_RE = re.compile(r'\(\s*"([^"]*)"')
+_LABEL_RE = re.compile(r'^\s*\(\s*"([^"]*)"')
 
 
 def _table_lines(table: Table) -> list[str]:
@@ -379,6 +386,13 @@ def _live(lines: list[str]) -> list[tuple[int, str]]:
 def _ordinal(line: str) -> Optional[int]:
     found = _ORDINAL_RE.findall(line)
     return int(found[-1]) if found else None
+
+
+def _is_group_row(line: str, group: Optional[str]) -> bool:
+    """A live line that names the group and carries an ordinal."""
+    if not group or f'"{group}"' not in line:
+        return False
+    return _ordinal(line) is not None
 
 
 class FieldParamRegistrationContractRule(Rule):
@@ -414,7 +428,7 @@ class FieldParamRegistrationContractRule(Rule):
             )]
         lines = _live(_table_lines(table))
         group = e.get("group")
-        rows = [(n, ln) for n, ln in lines if group and f'"{group}"' in ln]
+        rows = [(n, ln) for n, ln in lines if _is_group_row(ln, group)]
         obj = f"{tname}/{group}" if group else tname
         lo, hi = (e.get("range") or [None, None])[:2]
 
@@ -476,5 +490,9 @@ class FieldParamRegistrationContractRule(Rule):
                     if lo is not None and not (lo <= o <= hi):
                         out.append(v(f"contract: column '{col}' has ordinal {o}, outside the "
                                      f"free range {lo}-{hi}.", n))
+            if not any(_ORDINAL_RE.findall(ln) for _n, ln in hits):
+                out.append(v(f"contract: column '{col}' is registered, but no ordinal "
+                             f"parsed from its row; it cannot be checked against the free "
+                             f"range {lo}-{hi}.", hits[0][0]))
             return out
         return [v(f"unknown field-parameter contract kind {kind!r}.")]
