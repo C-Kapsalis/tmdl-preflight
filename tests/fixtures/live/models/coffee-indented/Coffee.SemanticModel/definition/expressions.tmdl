@@ -1,0 +1,11 @@
+expression v-fromdate = #date(2024, 1, 1) meta [IsParameterQuery=true, Type="Date", IsParameterQueryRequired=true]
+	lineageTag: 28f37a10-c291-53b7-852d-87cca0fed42e
+
+expression v-isRolling = 0 meta [IsParameterQuery=true, Type="Number", IsParameterQueryRequired=true]
+	lineageTag: 67c34d8f-3102-5b89-b0fe-ad8ac2ae231a
+
+	expression v-daysAgo = 30 meta [IsParameterQuery=true, Type="Number", IsParameterQueryRequired=true]
+		lineageTag: 2c848929-226f-5a06-96c5-f7dce91394b0
+
+expression v-rows_limit = " " meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+	lineageTag: a4316560-7f1f-5854-816c-b70726133ea5

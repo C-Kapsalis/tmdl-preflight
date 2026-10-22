@@ -286,6 +286,14 @@ until configured.
 
 ### Changed
 
+- **Every live check prints its report block.** In text mode a check prints
+  the block the original printed — the row-count pattern, the calendar
+  validation, the dimension validation, the date range — before its result
+  line, and the checks run in the original's order. The result line now
+  carries the original's wording: `🔴 CRITICAL: All 5 tables have exactly 1
+  row. ...`, `⚠️  WARNING: Calendar has only 50 rows (expected 365+). ...`,
+  `⚠️  WARNING: 4/5 dimension tables have only 1 row. ...`. A query that
+  answers with no rows reads as unknown, not as zero rows. BUGFIX.
 - **The live coupling guard compares the dataset with the local model.** The
   original paired a client id with a workspace name and failed with two
   different texts; this tool has no client id, so it compares the dataset

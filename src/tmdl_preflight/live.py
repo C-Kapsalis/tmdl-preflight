@@ -30,6 +30,7 @@ from typing import Any, Callable, Optional
 
 API = "https://api.powerbi.com/v1.0/myorg"
 SCOPE = "https://analysis.windows.net/powerbi/api/.default"
+NO_ROWS = "no rows returned"
 
 CREDENTIAL_NAMES = (("PBI_TENANT_ID", "FABRIC_TENANT_ID"),
                     ("PBI_CLIENT_ID", "FABRIC_CLIENT_ID"),
@@ -435,6 +436,7 @@ class CheckResult:
     outcome: str  # pass | warn | fail | skip | error
     message: str
     details: dict = field(default_factory=dict)
+    report: list[str] = field(default_factory=list)
 
 
 class LiveContext:
@@ -451,6 +453,8 @@ class LiveContext:
         r = self.client.execute(f'EVALUATE ROW("{label}", COUNTROWS({quote_table(table)}))')
         if r.error:
             return None, r.error
+        if not r.rows:
+            return None, NO_ROWS
         return count(r.first, label), None
 
 
@@ -458,23 +462,39 @@ def _rate(passed: int, probed: int) -> float:
     return passed / probed if probed else 0.0
 
 
+def _probe(icon: str, name: str, message: str, ms: float) -> str:
+    return f"{icon} {name}: {message} ({ms:.2f}ms)"
+
+
 def check_uniform_row_limit(c: LiveContext) -> CheckResult:
-    counts = {t: c.table_count(t)[0] for t in c.cfg["probe_tables"]}
+    cid = "live-uniform-row-limit"
+    counts: dict[str, Optional[int]] = {}
+    report = ["", "=== Row Count Pattern Detection ===", ""]
+    for t in c.cfg["probe_tables"]:
+        n, err = c.table_count(t)
+        counts[t] = n
+        report.append(f"  {t}: ERROR - {err[:50]}" if err else f"  {t}: {n:,} rows")
     known = [v for v in counts.values() if v is not None]
-    details = {"counts": counts}
+    details: dict = {"counts": counts}
     if not known:
-        return CheckResult("live-uniform-row-limit", "warn",
-                           "could not retrieve any row counts", details)
+        return CheckResult(cid, "warn", "Could not retrieve any row counts", details, report)
+    details["min"], details["max"] = min(known), max(known)
+    report += ["", "📊 Analysis:", f"  Unique row counts: {sorted(set(known))}"]
     if set(known) == {1}:
-        return CheckResult("live-uniform-row-limit", "fail",
-                           "every table has exactly one row; a LIMIT 1 parameter is set", details)
+        return CheckResult(cid, "fail",
+                           f"🔴 CRITICAL: All {len(known)} tables have exactly 1 row. This "
+                           "indicates v-rows_limit='LIMIT 1' is set. Change parameter to ' ' "
+                           "(blank) for full data.", details, report)
     if len(set(known)) == 1 and known[0] in c.cfg["uniform_limits"]:
-        return CheckResult("live-uniform-row-limit", "warn",
-                           f"uniform limit {known[0]}; acceptable for testing, not production",
-                           details)
-    details.update({"min": min(known), "max": max(known)})
-    return CheckResult("live-uniform-row-limit", "pass",
-                       f"row counts vary ({min(known)} to {max(known)})", details)
+        limit = known[0]
+        return CheckResult(cid, "warn",
+                           f"⚠️  WARNING: All tables have exactly {limit} rows. This suggests "
+                           f"v-rows_limit='LIMIT {limit}' is set. This is acceptable for testing "
+                           "but not production.", details, report)
+    report.append(f"  ✅ Row counts vary ({details['min']} to {details['max']}) - "
+                  "no uniform limit detected")
+    return CheckResult(cid, "pass",
+                       f"row counts vary ({details['min']} to {details['max']})", details, report)
 
 
 def _calendar_query(c: LiveContext, order: str) -> str:
@@ -487,35 +507,63 @@ def _calendar_query(c: LiveContext, order: str) -> str:
 
 
 def check_calendar_rows(c: LiveContext) -> CheckResult:
-    r = c.client.execute(_calendar_query(c, "count-first"))
     cid = "live-calendar-rows"
+    r = c.client.execute(_calendar_query(c, "count-first"))
     if r.error:
         return CheckResult(cid, "error", f"calendar query failed: {r.error}")
+    if not r.rows:
+        return CheckResult(cid, "error", "the calendar query returned no rows")
     n = count(r.first, "RowCount")
     details = {"row_count": n, "min_date": scalar(r.first, "MinDate"),
                "max_date": scalar(r.first, "MaxDate")}
+    report = ["", "=== Calendar Table Validation ===", "",
+              f"  Row count: {n:,}",
+              f"  Min date: {details['min_date']}",
+              f"  Max date: {details['max_date']}"]
     if n == 1:
-        return CheckResult(cid, "fail", "the calendar holds one row; a row limit or filter is "
-                                        "applied", details)
+        return CheckResult(cid, "fail",
+                           "🔴 CRITICAL: Calendar has only 1 row (expected 365+). This indicates "
+                           "v-rows_limit='LIMIT 1' is set. Change to ' ' (blank) for full data.",
+                           details, report)
     if n < 100:
-        return CheckResult(cid, "warn", f"the calendar holds only {n} rows", details)
+        return CheckResult(cid, "warn",
+                           f"⚠️  WARNING: Calendar has only {n} rows (expected 365+). Check "
+                           "v-rows_limit and v-fromdate parameters.", details, report)
     if n < 365:
-        return CheckResult(cid, "pass", f"{n} calendar rows: less than one year", details)
-    return CheckResult(cid, "pass", f"{n} calendar rows", details)
+        report.append(f"  ⚠️  Calendar has {n} rows (less than 1 year)")
+        report.append("     This may indicate date filtering or limited data range")
+    else:
+        report.append("  ✅ Calendar has realistic row count")
+    return CheckResult(cid, "pass", f"{n} calendar rows", details, report)
 
 
 def check_dimension_multirow(c: LiveContext) -> CheckResult:
-    tables = list(c.cfg["dimension_probe_tables"])
-    counts = {t: c.table_count(t)[0] for t in tables}
-    single = [t for t, v in counts.items() if v == 1]
-    details = {"counts": counts, "single_row_tables": single}
     cid = "live-dimension-multirow"
+    tables = list(c.cfg["dimension_probe_tables"])
+    counts: dict[str, Optional[int]] = {}
+    report = ["", "=== Dimension Table Validation ===", ""]
+    for t in tables:
+        n, err = c.table_count(t)
+        counts[t] = n
+        if err:
+            report.append(f"  ❌ {t}: ERROR - {err[:50]}")
+        else:
+            report.append(f"  {'✅' if n > 1 else '🔴'} {t}: {n:,} rows")
+    details: dict = {"counts": counts}
     if not any(v is not None and v > 1 for v in counts.values()):
-        return CheckResult(cid, "fail", "no dimension table holds more than one row", details)
+        return CheckResult(cid, "fail",
+                           "🔴 CRITICAL: All dimension tables have ≤1 row. This indicates "
+                           f"v-rows_limit='LIMIT 1' or empty source data. Results: {counts}",
+                           details, report)
+    single = [t for t, v in counts.items() if v == 1]
+    details["single_row_tables"] = single
     if len(single) > len(tables) // 2:
-        return CheckResult(cid, "warn", f"{len(single)} of {len(tables)} dimension tables hold "
-                                        f"one row: {', '.join(single)}", details)
-    return CheckResult(cid, "pass", "dimension tables hold several rows", details)
+        return CheckResult(cid, "warn",
+                           f"⚠️  WARNING: {len(single)}/{len(tables)} dimension tables have only "
+                           f"1 row. Check v-rows_limit parameter. Single-row tables: {single}",
+                           details, report)
+    report += ["", "  ✅ Dimension tables have realistic row counts"]
+    return CheckResult(cid, "pass", "dimension tables hold several rows", details, report)
 
 
 def check_calendar_scan(c: LiveContext) -> CheckResult:
@@ -525,7 +573,7 @@ def check_calendar_scan(c: LiveContext) -> CheckResult:
         return CheckResult(cid, "error", f"calendar count failed: {r.error}")
     raw = scalar(r.first, "RowCount")
     if raw is None:
-        return CheckResult(cid, "error", "the calendar count came back BLANK")
+        return CheckResult(cid, "error", "the calendar count came back BLANK or 0")
     n = int(raw)
     top = c.client.execute(f"EVALUATE TOPN(50, {quote_table(cal)})")
     rows = top.rows if not top.error else []
@@ -544,30 +592,49 @@ def check_calendar_scan(c: LiveContext) -> CheckResult:
 
 
 def _date_param(value: Optional[str]) -> Optional[str]:
-    m = re.search(r"#date\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", value or "")
+    m = re.search(r"#date\((\d+),\s*(\d+),\s*(\d+)\)", value or "")
     return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}" if m else None
 
 
 def check_calendar_vs_parameters(c: LiveContext) -> CheckResult:
     cid, params = "live-calendar-vs-parameters", c.model.parameters
     if params is None:
-        return CheckResult(cid, "skip", "no expressions.tmdl: the model declares no parameters")
+        return CheckResult(cid, "skip",
+                           f"expressions.tmdl not found under {c.model.path / 'definition'}")
     r = c.client.execute(_calendar_query(c, "dates-first"))
     if r.error:
         return CheckResult(cid, "error", f"calendar query failed: {r.error}")
+    if not r.rows:
+        return CheckResult(cid, "error", "the calendar query returned no rows")
     n = count(r.first, "RowCount")
+    from_date = _date_param(params.get(c.cfg["from_date_parameter"]))
+    is_rolling = params.get("v-isRolling", "0").strip()
+    days_ago = params.get("v-daysAgo", "90").strip()
     details = {
-        "v-fromdate": _date_param(params.get(c.cfg["from_date_parameter"])),
-        "v-isRolling": params.get("v-isRolling", "0"),
-        "v-daysAgo": params.get("v-daysAgo", "90"),
+        "v-fromdate": from_date,
+        "v-isRolling": is_rolling,
+        "v-daysAgo": days_ago,
         "min_date": scalar(r.first, "MinDate"), "max_date": scalar(r.first, "MaxDate"),
         "row_count": n,
     }
+    report = ["", "=== Date Range Validation ===", "",
+              "  Parameter Configuration:",
+              f"    v-fromdate: {from_date}",
+              f"    v-isRolling: {is_rolling}",
+              f"    v-daysAgo: {days_ago}",
+              "",
+              "  Actual Data:",
+              f"    Min date: {details['min_date']}",
+              f"    Max date: {details['max_date']}",
+              f"    Row count: {n:,}"]
     if n == 1:
-        return CheckResult(cid, "warn", "the calendar holds one row: cannot validate the range; "
-                                        "a row limit is applied", details)
-    return CheckResult(cid, "pass", f"calendar {details['min_date']} to {details['max_date']} "
-                                    f"({n} rows)", details)
+        return CheckResult(cid, "warn",
+                           "Only 1 row in calendar - cannot validate date range "
+                           "(LIMIT 1 applied)", details, report)
+    report += ["", "  ✅ Date range retrieved (validation informational)"]
+    return CheckResult(cid, "pass",
+                       f"calendar {details['min_date']} to {details['max_date']} ({n} rows)",
+                       details, report)
 
 
 def check_parameter_audit(c: LiveContext) -> CheckResult:
@@ -994,23 +1061,23 @@ def check_bpa(c: LiveContext) -> CheckResult:
 
 
 CHECKS: dict[str, Callable[[LiveContext], CheckResult]] = {
-    "live-refresh-status": check_refresh_status,
-    "live-freshness": check_freshness,
+    "live-uniform-row-limit": check_uniform_row_limit,
+    "live-calendar-rows": check_calendar_rows,
+    "live-dimension-multirow": check_dimension_multirow,
+    "live-calendar-vs-parameters": check_calendar_vs_parameters,
+    "live-parameter-audit": check_parameter_audit,
     "live-table-sample": check_table_sample,
     "live-dimension-rows": check_dimension_rows,
     "live-measure-sample": check_measure_sample,
     "live-parameter-table-measures": check_parameter_table_measures,
-    "live-uniform-row-limit": check_uniform_row_limit,
-    "live-calendar-rows": check_calendar_rows,
-    "live-dimension-multirow": check_dimension_multirow,
-    "live-calendar-scan": check_calendar_scan,
-    "live-calendar-vs-parameters": check_calendar_vs_parameters,
-    "live-parameter-audit": check_parameter_audit,
+    "live-refresh-status": check_refresh_status,
+    "live-freshness": check_freshness,
+    "live-smoke": check_smoke,
     "live-identity": check_identity,
     "live-filter-compare": check_filter_compare,
+    "live-calendar-scan": check_calendar_scan,
     "live-metadata": check_metadata,
     "live-filter-diagnostic": check_filter_diagnostic,
-    "live-smoke": check_smoke,
     "live-bpa": check_bpa,
 }
 

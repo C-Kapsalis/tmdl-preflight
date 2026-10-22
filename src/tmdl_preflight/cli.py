@@ -905,6 +905,8 @@ def _cmd_live(args) -> int:
     else:
         print(f"dataset: {dataset.get('name')} (workspace {dataset.get('workspaceName')})")
         for r in results:
+            for line in r.report:
+                print(line)
             print(f"{r.outcome:5s}  {r.id}: {r.message}")
     return live.exit_code(results, args.strict)
 
