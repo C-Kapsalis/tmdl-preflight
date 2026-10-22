@@ -144,6 +144,21 @@ until configured.
   not, and how many of the calculated tables carry a partition (with the
   partition modes they declare). BUGFIX: the original printed the emoji
   double-encoded; the tool prints the intended characters.
+- **L001-L005** name the file and the problem in the wording the check
+  has always used: `<file>: missing `modelPermission: read``,
+  `<file>: `tablePermission <table>` has no `= <DAX>``,
+  `<file>: `<table>` filter uses USERNAME() — replace with
+  USERPRINCIPALNAME()`, the silent-bypass trap for a filter that reads a
+  mapping table with `IN VALUES(...)`, the mapping table that is not
+  `isHidden`, and the mapping table that is a relationship endpoint.
+  `modelPermission:` may be written with any spacing (`modelPermission:read`
+  is read). The mapping table is reported once, however many
+  relationships point at it.
+- **L006** prints the inventory and the posture in the layout a reviewer
+  reads: the roles directory, the role files with their model permission
+  and the tables each may read, the user-mapping tables, and the posture
+  (no RLS, static, dynamic via a mapping table, or incomplete) with the
+  service-side concerns a file check cannot settle.
 - **M002** pairs ``` fences by structure (a fence opens after `=` and closes
   on the next line that starts with backticks), so backticks inside a fenced
   string literal are no longer an "unpaired fence". It also reports a
@@ -337,6 +352,12 @@ until configured.
 
 ### Bug fixes
 
+- **A permission line is read even when the line before it is a bare
+  permission.** The original never examined a `tablePermission` line that
+  followed a bare `tablePermission <T>` line, so its `USERNAME()` or
+  `IN VALUES` problem went unreported; and it read
+  `tablePermission T=<expr>` (no spaces) as a bare permission on a table
+  named `T=<expr>`. BUGFIX: both are read as written.
 - **The refresh repair replaces only the loader call.** The windowed query
   takes the place of the loader call itself, so the rest of the partition's
   M source (the surrounding `let ... in ...`, the other steps, the

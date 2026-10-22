@@ -14,6 +14,7 @@ from .base import Context, Rule, Severity, Violation
 
 _PERM_RE = re.compile(r"^\s*tablePermission\s+(?P<table>'(?:[^']|'')+'|[^\s=]+)\s*(?P<eq>=)?(?P<rest>.*)$")
 _ROLE_RE = re.compile(r"^role\s+(?P<name>'(?:[^']|'')+'|.+?)\s*$")
+_MODEL_PERMISSION_RE = re.compile(r"^\s*modelPermission:\s*read\s*$")
 _USERNAME_RE = re.compile(r"\bUSERNAME\s*\(", re.IGNORECASE)
 _IN_VALUES_RE = re.compile(r"\bIN\s+VALUES\s*\(", re.IGNORECASE)
 _CALCTABLE_RE = re.compile(r"\bCALCULATETABLE\s*\(", re.IGNORECASE)
@@ -53,7 +54,7 @@ def read_role(path: Path) -> RoleFile:
         if m:
             name = _unquote(m.group("name"))
             break
-    role = RoleFile(path, name, any(ln.strip() == "modelPermission: read" for ln in lines))
+    role = RoleFile(path, name, any(_MODEL_PERMISSION_RE.match(ln) for ln in lines))
     for idx, ln in enumerate(lines):
         m = _PERM_RE.match(ln)
         if not m:
@@ -108,13 +109,15 @@ class RoleGrammarRule(Rule):
             for role in role_files(model):
                 if not role.read:
                     out.append(self.violation(
-                        f"role {role.name} has no 'modelPermission: read'; add it.",
+                        f"{role.path.name}: missing `modelPermission: read`",
                         file=role.path, obj=role.name))
                 for p in role.permissions:
                     if p.filter is None:
                         out.append(self.violation(
-                            f"role {role.name}: tablePermission {p.table} has no filter "
-                            f"expression; write '= <DAX filter>' or delete the line.",
+                            f"{role.path.name}: `tablePermission {p.table}` has no `= <DAX>` "
+                            f"(every tablePermission line needs a filter expression; if the role "
+                            f"should grant full access on this table, omit the line entirely — "
+                            f"see FullAccess pattern)",
                             file=role.path, line=p.line, obj=f"{role.name}:{p.table}"))
         return out
 
@@ -137,8 +140,8 @@ class UsernameFunctionRule(Rule):
                 for p in role.permissions:
                     if p.filter and _USERNAME_RE.search(p.filter):
                         out.append(self.violation(
-                            f"role {role.name}: the filter on {p.table} calls USERNAME(); use "
-                            f"USERPRINCIPALNAME().",
+                            f"{role.path.name}: `{p.table}` filter uses USERNAME() — replace "
+                            f"with USERPRINCIPALNAME()",
                             file=role.path, line=p.line, obj=f"{role.name}:{p.table}"))
         return out
 
@@ -166,9 +169,10 @@ class InValuesBypassRule(Rule):
                     if _CALCTABLE_RE.search(f) and _UPN_RE.search(f):
                         continue
                     out.append(self.violation(
-                        f"role {role.name}: the filter on {p.table} uses IN VALUES(...) without "
-                        f"CALCULATETABLE(..., [UserPrincipalName] = USERPRINCIPALNAME()), so it "
-                        f"does not restrict rows to the signed-in user.",
+                        f"{role.path.name}: `{p.table}` filter uses `IN VALUES(...)` without "
+                        f"wrapping in `CALCULATETABLE(VALUES(MappingTable[col]), "
+                        f"MappingTable[UserPrincipalName] = USERPRINCIPALNAME())` — this is the "
+                        f"silent-bypass trap (every user sees every row, no error raised)",
                         file=role.path, line=p.line, obj=f"{role.name}:{p.table}"))
         return out
 
@@ -189,7 +193,8 @@ class MappingTableHiddenRule(Rule):
             for t in mapping_tables(model):
                 if not t.is_hidden:
                     out.append(self.violation(
-                        f"user-mapping table {t.name} is visible; add isHidden to the table.",
+                        f"{t.file.name}: mapping table `{t.name}` (has UserPrincipalName "
+                        f"column) is not `isHidden`",
                         file=t.file, line=t.line, obj=t.name))
         return out
 
@@ -212,14 +217,19 @@ class MappingTableNoRelationshipRule(Rule):
             names = {t.name for t in mapping_tables(model)}
             if not names:
                 continue
-            for r in model.relationships:
-                hit = names & {r.from_table, r.to_table}
-                for name in sorted(hit):
-                    out.append(self.violation(
-                        f"a relationship ({r.from_table}.{r.from_column} -> {r.to_table}."
-                        f"{r.to_column}) touches the user-mapping table {name}; delete it and "
-                        f"read the mapping only in the role filter.",
-                        file=model.definition_path / "relationships.tmdl", obj=name))
+            rel_file = model.definition_path / "relationships.tmdl"
+            try:
+                text = rel_file.read_text(encoding="utf-8-sig")
+            except (OSError, UnicodeDecodeError):
+                continue
+            for name in sorted(names):
+                if not re.search(rf"(?:fromColumn|toColumn):\s*'?{re.escape(name)}'?\.", text):
+                    continue
+                out.append(self.violation(
+                    f"mapping table `{name}` is referenced in relationships.tmdl as a from/to "
+                    f"endpoint (must be standalone — the CALCULATETABLE pattern handles the "
+                    f"user lookup at query time)",
+                    file=rel_file, obj=name))
         return out
 
 
@@ -240,26 +250,49 @@ class RlsInventoryRule(Rule):
             roles = role_files(model)
             maps = [t.name for t in mapping_tables(model)]
             where = model.definition_path / "roles"
-            if not roles:
-                out.append(self.violation("roles/ absent: the model defines no roles.",
-                                          file=model.definition_path, obj="roles"))
-            for role in roles:
-                perms = ", ".join(f"{p.table}{' (no filter)' if p.filter is None else ''}"
-                                  for p in role.permissions) or "none (full access)"
-                out.append(self.violation(
-                    f"role {role.name}: modelPermission {'read' if role.read else 'MISSING'}; "
-                    f"table permissions: {perms}",
-                    file=role.path, obj=role.name))
-            if maps:
-                out.append(self.violation(f"user-mapping tables: {', '.join(maps)}",
-                                          file=where, obj="mapping"))
-            if not roles and not maps:
-                posture = "no RLS"
-            elif roles and not maps:
-                posture = "static (roles without a user-mapping table)"
-            elif roles:
-                posture = f"dynamic via mapping table {', '.join(maps)}"
-            else:
-                posture = "incomplete (a user-mapping table but no roles)"
-            out.append(self.violation(f"RLS posture: {posture}", file=where, obj="posture"))
+            name = model.definition_path.parent.name
+            out.append(self.violation("\n".join(self._inventory(name, roles, maps)),
+                                      file=where, obj="inventory"))
+            out.append(self.violation("\n".join(self._posture(name, roles, maps)),
+                                      file=where, obj="posture"))
         return out
+
+    @staticmethod
+    def _inventory(name: str, roles: list[RoleFile], maps: list[str]) -> list[str]:
+        """The inventory lines: the roles, what they may read, and the
+        user-mapping tables."""
+        out = [
+            f"RLS inventory for {name}:",
+            f"  roles/ directory:    {'present' if roles else 'absent (no RLS in use)'}",
+            f"  role files:          {len(roles)}",
+        ]
+        for role in roles:
+            perms = ", ".join(
+                f"{p.table}{' (no filter)' if p.filter is None else ''}"
+                for p in role.permissions
+            ) or "(no tablePermission lines — full-access pattern)"
+            out.append(
+                f"    - {role.path.name}: role `{role.name}`, "
+                f"modelPermission: {'read' if role.read else 'MISSING'}, tables: {perms}")
+        out.append(f"  mapping tables:      {len(maps)} {maps if maps else ''}")
+        return out
+
+    @staticmethod
+    def _posture(name: str, roles: list[RoleFile], maps: list[str]) -> list[str]:
+        """The posture line and the concerns a file check cannot settle."""
+        if not roles and not maps:
+            pattern = "no RLS"
+        elif roles and not maps:
+            pattern = "static (multi-role split, hardcoded filter values)"
+        elif roles:
+            pattern = "dynamic via mapping table"
+        else:
+            pattern = "mapping table present but no role files (incomplete)"
+        return [
+            f"RLS posture for {name}: {pattern}",
+            "  Service-side concerns NOT validated here:",
+            "    - User-to-role assignment lives on the Power BI Service Security page",
+            "    - Roles are additive (union, not intersection) — verify no user is in",
+            "      both a restricted and a full-access role",
+            "    - Workspace contributors bypass RLS — test with a Viewer account",
+        ]
