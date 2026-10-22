@@ -171,6 +171,7 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
 
     dirty_rule_ids = {v.rule_id for v in first.violations}
     chosen = {e.lower() for e in (explicit or set())}
+    notes_before = len(ctx.notes)
     for rule in ruleset.rules:
         if not rule.fixable or (rule.id not in dirty_rule_ids and not rule.pending_repairs(ctx)):
             continue
@@ -186,11 +187,14 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
         # new state, not the parse cache.
         ctx.reload()
 
+    # what a fixer had to say survives the re-check, which starts with an
+    # empty note list
+    fixer_notes = list(ctx.notes[notes_before:])
     second = check(ctx, ruleset)
     report.refused_fixes = list(ctx.refused_fixes)
     report.violations = second.violations
     report.scanned = second.scanned
-    report.notes = second.notes
+    report.notes = list(dict.fromkeys(fixer_notes + second.notes))
     report.skipped = second.skipped
     return report
 

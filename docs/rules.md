@@ -3,7 +3,7 @@
 
 # tmdl-preflight rule catalog
 
-Rules: **114** · auto-fixable: **22** · baselinable: **109**.
+Rules: **115** · auto-fixable: **23** · baselinable: **110**.
 
 | Rule | Name | Severity | Fix | Description |
 |---|---|---|---|---|
@@ -18,6 +18,7 @@ Rules: **114** · auto-fixable: **22** · baselinable: **109**.
 | B004 | report-definition-integrity | error | no | The report definition must hold together: definition.pbir's byPath reference must point at an existing *.SemanticModel folder, every page listed in pages/pages.json (pageOrder, activePageName) must have its folder, and every page.json and visual.json must be valid JSON. Any of these breaks the report on open. |
 | B005 | pages-metadata-schema | error | no | Opt-in pin of the PBIR pages metadata: definition/pages/pages.json must exist, declare an accepted $schema (default: the 1.1.0 URL; accepted_schemas lists the versions your tooling expects) and a pageOrder array. A missing file or a pageOrder that is not a list breaks page navigation; an unexpected schema version means the file was written by a different tool version than the one you validate against. Unparseable JSON is B004's finding. |
 | B006 | hierarchy-level-binding-shape | error | no | A visual field bound to a hierarchy level must be written as HierarchyLevel: {Expression: {Hierarchy: ...}, Level: <name>}: the Level sits next to the Expression, never inside it. Any other shape does not match the report definition schema, so the report can fail to load. Unparseable visual.json files are reported too. |
+| B007 | report-format-schema | error | yes | A PBIR report must carry the files Fabric imports and the schemas they declare: definition.pbir with a version and a dataset reference, exactly one report.json, a version.json that declares the version-metadata schema, and a $schema on every content file. A missing or wrong value is rejected at import time. The auto-fix adds and corrects the schema URLs and the version format. |
 | C001 | required-model-objects | error | no | Infrastructure every report assumes (a format calculation group, a time-intelligence selector, a helper table) must exist. Configure 'tables' (exact names) and 'measures' (rules: a measure whose name contains all of 'contains', in a table whose name starts with 'table_prefix'; 'advisory' makes a miss a warning). A missing table is an error. With no configuration the rule reports nothing. |
 | C002 | model-contract-objects | error | no | Declared object contracts (contracts.objects): a table, column, calculated column or measure must exist; a column must keep its dataType; a calculated column's or measure's DAX must contain every listed token. Kinds: table_exists, column_exists, column_datatype, calculated_column_exists, calculated_column_contains, measures_exist, measure_contains. |
 | C003 | model-contract-relationships | error | no | Declared relationship contracts. 'axes': every edge touching a dimension is one of the sanctioned (table, column, active) edges, none comes from a forbidden table, and none is reversed. 'reach_guards': guarded tables have no active edge to a fact, control tables do, the graph has at least min_active_edges active edges, and the guard measure names every guarded table. contracts.relationships: 'table_edges' pins how many active edges leave a table and which one; 'edge_to' pins the edges into an endpoint and their state. |
@@ -131,6 +132,7 @@ Run `tmdl-preflight fix <path>` to repair these; a fixer marked unsafe runs only
 | A003 | mapping-category-required-keys | yes |
 | B001 | bookmark-int-types | yes |
 | B003 | bookmark-options-schema | yes |
+| B007 | report-format-schema | yes |
 | D004 | dax-reference-resolution | no |
 | F001 | fieldparam-comma-runs | yes |
 | F002 | fieldparam-missing-separator | yes |

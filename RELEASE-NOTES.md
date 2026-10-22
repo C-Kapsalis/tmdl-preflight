@@ -90,6 +90,7 @@ the example model with one defect each. Where that evidence and the
 | M022 | diagram-layout-blank (opt-in) | warning | yes |
 | B005 | pages-metadata-schema (opt-in) | error | no |
 | B006 | hierarchy-level-binding-shape | error | no |
+| B007 | report-format-schema | error | yes |
 | L001 | rls-role-grammar | error | no |
 | L002 | rls-username-function | error | no |
 | L003 | rls-in-values-bypass | error | no |
@@ -111,6 +112,16 @@ until configured.
 
 ### Changed rules
 
+- **B007** is the report-format validator folded into `check`: one finding per
+  defect, each carrying the validator's own message, and the banner the script
+  printed is not reproduced.
+- BUGFIX: a "MISSING $schema" finding of B007 names the path relative to the
+  `.Report` folder (`definition/pages/p1/visuals/v1/visual.json`, `.platform`);
+  the original computed the path three folders up, which was wrong for every
+  file but `page.json`.
+- BUGFIX: a `definition.pbir` whose `version` is not a string is an invalid
+  version format, and a file that is not a JSON object is skipped; the original
+  crashed on both. A byte-order mark is tolerated.
 - **M002** pairs ``` fences by structure (a fence opens after `=` and closes
   on the next line that starts with backticks), so backticks inside a fenced
   string literal are no longer an "unpaired fence". It also reports a
