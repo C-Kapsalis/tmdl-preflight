@@ -10,10 +10,10 @@ Rules: **115** · auto-fixable: **22** · baselinable: **110**.
 These rules encode one team's conventions, so they run only when they are named. To run the whole set, put this line in the configuration file (`.tmdl-preflight.toml`, `.tmdl-preflight.json` or the `[tool.tmdl-preflight]` table of `pyproject.toml`):
 
 ```toml
-select = ["A001", "A002", "A003", "A004", "A005", "B005", "C012", "D010", "F010", "F011", "F012", "F015", "L006", "M022", "N020", "O001", "O002", "O003", "O004", "O005", "O006", "O007", "O008", "O009", "O010", "O011", "O012", "O013", "O014", "O015", "P002", "R009", "R013", "R014", "S003", "S004"]
+select = ["A001", "A002", "A003", "A004", "A005", "B005", "C012", "D010", "F010", "F011", "F012", "F015", "L006", "M022", "M023", "N020", "O001", "O002", "O003", "O004", "O005", "O006", "O007", "O008", "O009", "O010", "O011", "O012", "O013", "O014", "O015", "P002", "R009", "R013", "R014", "S003", "S004"]
 ```
 
-Opt-in rules: **36**.
+Opt-in rules: **37**.
 
 | Rule | Name | Severity | Fix | Description |
 |---|---|---|---|---|
