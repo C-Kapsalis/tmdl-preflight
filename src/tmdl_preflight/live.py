@@ -31,6 +31,17 @@ from typing import Any, Callable, Optional
 API = "https://api.powerbi.com/v1.0/myorg"
 SCOPE = "https://analysis.windows.net/powerbi/api/.default"
 
+CREDENTIAL_NAMES = (("PBI_TENANT_ID", "FABRIC_TENANT_ID"),
+                    ("PBI_CLIENT_ID", "FABRIC_CLIENT_ID"),
+                    ("PBI_CLIENT_SECRET", "FABRIC_CLIENT_SECRET"))
+
+
+def missing_credentials() -> str:
+    """The names of the credentials that are not set, as one sentence."""
+    missing = [pbi for pbi, fabric in CREDENTIAL_NAMES
+               if not (os.environ.get(pbi) or os.environ.get(fabric))]
+    return f"Missing required environment variables: {', '.join(missing)}."
+
 
 class LiveError(RuntimeError):
     """A live request failed (or a replay has no recording for it)."""
@@ -201,8 +212,7 @@ class RestClient(_Client):
         for attempt in range(3):
             try:
                 body = self._request("POST", self._url("/executeQueries"),
-                                     {"queries": [{"query": query}],
-                                      "serializerSettings": {"includeNulls": True}})
+                                     {"queries": [{"query": query}]})
                 return QueryResult(rows_of(body), (time.perf_counter() - start) * 1000, stamp)
             except urllib.error.HTTPError as exc:
                 detail = exc.read().decode("utf-8", "replace")[:500]
@@ -210,7 +220,8 @@ class RestClient(_Client):
                                    f"HTTP {exc.code}: {detail}")
             except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
                 last = exc
-                time.sleep(min(2 ** (attempt + 1), 10))
+                if attempt < 2:
+                    time.sleep(2)
         return QueryResult([], (time.perf_counter() - start) * 1000, stamp, f"request failed: {last}")
 
     def refreshes(self, top: int = 10) -> list[dict]:
@@ -285,9 +296,12 @@ class RecordingClient(_Client):
 def token_provider(interactive: bool = True) -> Callable[[], str]:
     """Bearer tokens: service principal from the environment, else an
     interactive sign-in (needs the optional ``msal`` package). Tokens are
-    kept in memory only and renewed when less than 5 minutes remain."""
-    tenant, client, secret = (os.environ.get(k) for k in
-                              ("PBI_TENANT_ID", "PBI_CLIENT_ID", "PBI_CLIENT_SECRET"))
+    kept in memory only and renewed when less than 5 minutes remain.
+
+    The returned callable carries ``remaining_seconds()``: the life left on
+    the token it last fetched."""
+    tenant, client, secret = (os.environ.get(pbi) or os.environ.get(fabric)
+                              for pbi, fabric in CREDENTIAL_NAMES)
     state: dict[str, Any] = {"token": None, "expires": 0.0}
     if tenant and client and secret:
         def fetch() -> tuple[str, float]:
@@ -302,36 +316,47 @@ def token_provider(interactive: bool = True) -> Callable[[], str]:
                 try:
                     with urllib.request.urlopen(url, data=body, timeout=60) as resp:  # noqa: S310
                         data = json.loads(resp.read().decode("utf-8"))
-                    return data["access_token"], time.time() + float(data.get("expires_in", 3600))
                 except Exception as exc:  # noqa: BLE001
                     last = exc
-                    time.sleep(min(2 * 2 ** attempt, 10))
+                    if attempt < 2:
+                        time.sleep(2)
+                    continue
+                if "access_token" not in data:
+                    raise LiveError(f"Authentication failed: "
+                                    f"{data.get('error_description', 'Unknown error')}")
+                return data["access_token"], time.time() + float(data.get("expires_in", 3599))
             raise LiveError(f"could not obtain a token: {last}")
     elif interactive:
         try:
             import msal  # type: ignore[import-not-found]
         except ImportError:
             raise LiveUsageError(
-                "no credentials: set PBI_TENANT_ID, PBI_CLIENT_ID and PBI_CLIENT_SECRET for a "
-                "service principal, or install msal for an interactive sign-in") from None
+                f"{missing_credentials()}. no credentials: set PBI_TENANT_ID, PBI_CLIENT_ID and "
+                "PBI_CLIENT_SECRET for a service principal, or install msal for an interactive "
+                "sign-in") from None
         app = msal.PublicClientApplication("04b07795-8ddb-461a-bbee-02f9e1bf7b46",
                                            authority="https://login.microsoftonline.com/organizations")
 
         def fetch() -> tuple[str, float]:
             result = app.acquire_token_interactive(scopes=[SCOPE])
             if "access_token" not in result:
-                raise LiveError(f"sign-in failed: {result.get('error_description')}")
-            return result["access_token"], time.time() + float(result.get("expires_in", 3600))
+                raise LiveError(f"Authentication failed: "
+                                f"{result.get('error_description', 'Unknown error')}")
+            return result["access_token"], time.time() + float(result.get("expires_in", 3599))
     else:
         raise LiveUsageError(
-            "no credentials: set PBI_TENANT_ID, PBI_CLIENT_ID and PBI_CLIENT_SECRET "
-            "(--non-interactive allows no sign-in prompt)")
+            f"{missing_credentials()}. no credentials: set PBI_TENANT_ID, PBI_CLIENT_ID and "
+            "PBI_CLIENT_SECRET (--non-interactive allows no sign-in prompt)")
 
     def token() -> str:
         if state["token"] is None or state["expires"] - time.time() < 300:
             state["token"], state["expires"] = fetch()
         return state["token"]
 
+    def remaining_seconds() -> float:
+        return max(0.0, state["expires"] - time.time())
+
+    token.remaining_seconds = remaining_seconds  # type: ignore[attr-defined]
     return token
 
 
@@ -349,27 +374,28 @@ class LocalModel:
     parameters: Optional[dict[str, str]]  # None: no expressions.tmdl
 
 
+COLUMN_PATTERN = re.compile(r"^\s*column\s+['\"]?([^'\";\s\[=]+)['\"]?", re.MULTILINE)
+MEASURE_PATTERN = re.compile(r"^\s*measure\s+(?:'((?:[^']|'')+)'|([^'\"\n=]+?))\s*=", re.MULTILINE)
+EXPRESSION_PATTERN = re.compile(r"expression (v-[^\s=]+)\s*=\s*([^\n]+?)(?:\s+meta|\n)")
+
+
 def read_local_model(model_dir: Path) -> LocalModel:
     tables_dir = Path(model_dir) / "definition" / "tables"
     with_cols, names, measures = [], [], []
     for f in sorted(tables_dir.glob("*.tmdl")) if tables_dir.is_dir() else []:
         text = f.read_text(encoding="utf-8-sig")
         names.append(f.stem)
-        if re.search(r"(?m)^\tcolumn ", text):
+        if COLUMN_PATTERN.search(text):
             with_cols.append(f.stem)
-        for m in re.finditer(r"(?m)^\tmeasure\s+('(?:[^']|'')+'|[^\s=]+)", text):
-            name = m.group(1)
-            if name.startswith("'"):
-                name = name[1:-1].replace("''", "'")
+        for m in MEASURE_PATTERN.finditer(text):
+            quoted, plain = m.group(1), m.group(2)
+            name = quoted.replace("''", "'") if quoted is not None else plain.strip()
             measures.append((f.stem, name))
     expr = Path(model_dir) / "definition" / "expressions.tmdl"
     params = None
     if expr.is_file():
-        params = {}
-        for line in expr.read_text(encoding="utf-8-sig").splitlines():
-            m = re.match(r"^expression\s+(v-[^\s=]+)\s*=\s*(.*?)(?:\s+meta\b.*)?$", line)
-            if m:
-                params[m.group(1)] = m.group(2).strip()
+        params = {m.group(1): m.group(2).strip()
+                  for m in EXPRESSION_PATTERN.finditer(expr.read_text(encoding="utf-8-sig"))}
     return LocalModel(Path(model_dir), sorted(with_cols), sorted(names),
                       sorted(measures), params)
 

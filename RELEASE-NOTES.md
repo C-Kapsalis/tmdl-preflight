@@ -263,7 +263,10 @@ until configured.
   `--strict`). The dataset name must match the local model folder unless
   `--expect-name` or `--no-coupling-check` is given. Recordings are keyed
   on the whitespace-normalised query text. Settings: config section `live`.
-  Python API: `tmdl_preflight.live` (`ReplayClient`, `LiveBPA`, ...).
+  The command signs in with a service principal, and with an interactive
+  sign-in when the optional `msal` package is installed; the interactive
+  sign-in is an addition the original did not have. Python API:
+  `tmdl_preflight.live` (`ReplayClient`, `LiveBPA`, ...).
 - The pytest plugin demotes test-body failures on the models listed in the
   configuration's `advisory` list to expected failures; passes stay passes
   and setup failures stay failures.
@@ -283,6 +286,12 @@ until configured.
 
 ### Changed
 
+- **The live coupling guard compares the dataset with the local model.** The
+  original paired a client id with a workspace name and failed with two
+  different texts; this tool has no client id, so it compares the dataset
+  name with the model folder and says what does not match. The check is
+  stricter: a dataset that is not the local model is refused, which the
+  original's pairing could not see. STRICTER.
 - **`stats --measures` prints one summary per model.** A folder with two
   models prints two summaries, each with its own totals, in the layout a
   reviewer reads: the totals, the user-facing and helper split, the
@@ -304,6 +313,26 @@ until configured.
 
 ### Bug fixes
 
+- **The live client sends the query and nothing else.** The executeQueries
+  body carried a `serializerSettings` block that the service does not need;
+  it is gone, so a null column no longer arrives as a key. A failed query is
+  retried three times with two waits of two seconds and no wait after the
+  last attempt (before: two, four and eight seconds, the last one after the
+  third attempt had already failed). A token that comes back without
+  `expires_in` lasts 3599 seconds, and a sign-in that comes back without a
+  token says `Authentication failed: <reason>`. BUGFIX.
+- **The live usage error names the credentials that are missing.** It said
+  only that no credentials were set; it now starts with `Missing required
+  environment variables: <names>.` The names `FABRIC_TENANT_ID`,
+  `FABRIC_CLIENT_ID`, `FABRIC_CLIENT_SECRET`, `FABRIC_WORKSPACE_ID` and
+  `FABRIC_MODEL_ID` are read as fallbacks for the `PBI_*` variables and for
+  `--workspace` and `--dataset`; no `.env` file is loaded. BUGFIX.
+- **The live command finds a table's columns and measures at any
+  indentation.** A column line indented with two tabs was not seen, so the
+  table was never probed; a measure line is now only a measure when it
+  carries the `=`. A name that holds a doubled quote is still decoded
+  (`It''s` is `It's`) and a `]` inside a measure reference is still
+  doubled. BUGFIX.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the
