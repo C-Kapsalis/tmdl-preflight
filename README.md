@@ -230,6 +230,16 @@ tool: `tmdl-preflight rules` (or `--json`, or `--format markdown --out
 FILE`, with `--check` to fail when a committed copy is stale). Opt-in rules
 run only when named in `--select` or the configuration's `select`.
 
+The analysis-category checks (A001, A003, A004, A005) carry the priority
+of the gate they came from. A P0 check — an unpaired gate chain, a gate
+that names a measure the model does not declare, a gate literal that
+matches no category — is an error. A P1 check — a category that owns a
+filter measure but is not gated, a category with no filter measure to
+gate on, a gate literal that spans two categories, a mapping table without
+its key columns, a filter measure that fits no known shape — is a
+warning. So a plain run fails on the P0 checks only, and `--strict` is
+the full run: it fails on the P1 checks too.
+
 ## Selecting rules and other flags
 
 `check` and `fix` take the same options:

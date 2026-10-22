@@ -495,19 +495,29 @@ class CategoryGateCoverageRule(Rule):
 
 _F_REF = r"\[f-[^\]]*\]"
 
+#: The kinds a filter measure can have, and what each one means.
+F_KINDS = (
+    ("STANDARD", "0/1 filter flag — ISEMPTY/ISINSCOPE/ISFILTERED check on a fact table"),
+    ("AGGREGATOR", "rolls up two or more f-measures via + or * into a parent integration filter"),
+    ("SWITCH-ROUTER", "SWITCH(TRUE(), ...) dispatching across integrations by analysis category"),
+    ("DISPLAY-STRING", "returns a label string for visual titles/headers (lives in w-* tables)"),
+    ("EXEMPTED", "named carve-out; legitimate exception to the f-measure pattern rules"),
+    ("UNCLASSIFIED", "doesn't fit any bucket — review for bugs, or extend the taxonomy"),
+)
+
 
 def classify_f_measure(expression: str, table: str, display_prefix: str = "w-") -> str:
     expr = expression or ""
     upper = expr.upper()
     if any(k in upper for k in ("ISEMPTY", "ISINSCOPE", "ISFILTERED")):
-        return "standard"
+        return "STANDARD"
     if len(re.findall(_F_REF, expr)) >= 2 and re.search(_F_REF + r"\s*[-+*]\s*\[f-", expr):
-        return "aggregator"
+        return "AGGREGATOR"
     if "SWITCH(TRUE()" in re.sub(r"\s+", "", expr).upper():
-        return "switch-router"
+        return "SWITCH-ROUTER"
     if table.startswith(display_prefix) or "CONCATENATEX" in upper:
-        return "display-string"
-    return "unclassified"
+        return "DISPLAY-STRING"
+    return "UNCLASSIFIED"
 
 
 class FMeasurePatternRule(Rule):
@@ -522,7 +532,10 @@ class FMeasurePatternRule(Rule):
         "two or more f- measures joined by + - or *, a SWITCH(TRUE(), ...) "
         "router, or a display string (hosted in a w- table, or built with "
         "CONCATENATEX). Anything else usually lacks the existence check, so "
-        "the visual filter keeps every row or none."
+        "the visual filter keeps every row or none. This is a P1 check: it is "
+        "a warning, and --strict makes it fail the run. The rule also reports "
+        "the inventory of the filter measures (how many there are, how they "
+        "are classified, where they live) as info findings."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -530,15 +543,67 @@ class FMeasurePatternRule(Rule):
         prefix = self.options["prefix"]
         exempt = set(self.options["exempt"])
         for model in ctx.models:
+            counts = {kind: 0 for kind, _description in F_KINDS}
+            elsewhere: list[tuple[str, str]] = []
+            in_filters = visible = hidden = 0
             for m in model.all_measures():
-                if not m.name.startswith(prefix) or m.name in exempt:
+                if not m.name.startswith(prefix):
                     continue
-                if classify_f_measure(m.expression, m.table, self.options["display_table_prefix"]) != "unclassified":
-                    continue
-                out.append(self.violation(
-                    f"{m.table}[{m.name}] fits no known filter-measure shape (existence "
-                    f"check, aggregate of f- measures, SWITCH(TRUE()) router or display "
-                    f"string); add the existence check, or list it under exempt.",
-                    file=m.file, line=m.line, obj=m.full_name,
-                ))
+                if m.name in exempt:
+                    kind = "EXEMPTED"
+                else:
+                    kind = classify_f_measure(m.expression, m.table,
+                                              self.options["display_table_prefix"])
+                counts[kind] = counts.get(kind, 0) + 1
+                if "f-Filter" in m.table:
+                    in_filters += 1
+                else:
+                    elsewhere.append((m.name, m.table))
+                if m.is_hidden:
+                    hidden += 1
+                else:
+                    visible += 1
+                if kind == "UNCLASSIFIED":
+                    out.append(self.violation(
+                        f"{m.table}[{m.name}] fits no known filter-measure shape "
+                        f"(existence check, aggregate of f- measures, SWITCH(TRUE()) "
+                        f"router or display string); add the existence check, or list "
+                        f"it under exempt.",
+                        file=m.file, line=m.line, obj=m.full_name,
+                    ))
+            out.extend(self._inventory(ctx, model, counts, in_filters, elsewhere,
+                                       visible, hidden))
+        return out
+
+    def _inventory(self, ctx: Context, model: SemanticModel, counts: dict,
+                   in_filters: int, elsewhere: list[tuple[str, str]],
+                   visible: int, hidden: int) -> list[Violation]:
+        """The filter-measure inventory, as info findings."""
+        total = sum(counts.values())
+        key = ctx.model_key(model)
+        out = [self.violation(
+            f"F-Measure Pattern Classification: Total f-measures: {total}",
+            obj=key, severity=Severity.INFO)]
+        for kind, description in F_KINDS:
+            out.append(self.violation(
+                f"{kind:14s}: {counts.get(kind, 0):4d}  {description}",
+                obj=key, severity=Severity.INFO))
+        if total:
+            coverage = (f"F-Measure Coverage Analytics: Total f- measures: {total}; "
+                        f"In f-Filters table: {in_filters} "
+                        f"({in_filters / total * 100:.1f}%); "
+                        f"In other tables: {len(elsewhere)}; "
+                        f"Visible: {visible} ({visible / total * 100:.1f}%); "
+                        f"Hidden: {hidden}")
+        else:
+            coverage = (f"F-Measure Coverage Analytics: Total f- measures: 0; "
+                        f"In f-Filters table: 0; In other tables: 0; "
+                        f"Visible: 0; Hidden: 0")
+        out.append(self.violation(coverage, obj=key, severity=Severity.INFO))
+        for name, table in elsewhere[:5]:
+            out.append(self.violation(f"{name} (in {table})", obj=key,
+                                      severity=Severity.INFO))
+        if elsewhere:
+            out.append(self.violation("Recommendation: Move to f-Filters table for "
+                                      "consistency", obj=key, severity=Severity.INFO))
         return out

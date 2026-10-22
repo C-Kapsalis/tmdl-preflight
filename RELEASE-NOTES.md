@@ -357,6 +357,24 @@ until configured.
   inventory reports `Unique x-Selector categories found: <n>` with the
   group ids and `Relationships involving z-Map: <n>`. A001 is a P1 check:
   it is a warning, and `--strict` makes it fail the run.
+- **The filter-measure rule reports the inventory of the filter
+  measures.** Per model it reports `F-Measure Pattern Classification:
+  Total f-measures: <n>` with a line per kind (STANDARD, AGGREGATOR,
+  SWITCH-ROUTER, DISPLAY-STRING, EXEMPTED, UNCLASSIFIED), and `F-Measure
+  Coverage Analytics: Total f- measures: <n>; In f-Filters table: <a>
+  (<pct>%); In other tables: <b>; Visible: <v> (<pct>%); Hidden: <h>`,
+  with the filter measures that live elsewhere and the recommendation to
+  move them. A model with no filter measures reports the counts and no
+  percentages.
+- **The priority of the analysis-category checks is written down.** A P0
+  check (an unpaired gate chain, a gate that names a measure the model
+  does not declare, a gate literal that matches no category) is an error;
+  a P1 check (a category that owns a filter measure but is not gated, a
+  category with no filter measure to gate on, a gate literal that spans
+  two categories, a mapping table without its key columns, a filter
+  measure that fits no known shape) is a warning. A plain run fails on the
+  P0 checks, `--strict` is the full run and fails on the P1 checks too.
+  The mapping is in the rule descriptions and in the README.
 
 ### Bug fixes
 
