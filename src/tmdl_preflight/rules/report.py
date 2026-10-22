@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
-from ..edits import EditRefused, read_text_file, verified_write
+from ..edits import EditRefused, read_text_file, verified_write, write_json
 from .base import Context, Rule, Severity, Violation
 
 # Bookmark JSON fields the report loader requires to be JSON integers.
@@ -38,9 +38,28 @@ def _bookmark_files(report_dir: Path, ctx: Optional[Context] = None) -> list[Pat
     return out
 
 
+def _is_archived(ctx: Context, path: Path) -> bool:
+    """Is this bookmark a copy of a report that was archived?"""
+    markers = (ctx.options.get("bookmarks") or {}).get("archive_markers", ARCHIVE_MARKERS)
+    if not markers:
+        return False
+    rel = ctx.scan_relative(path) or path.as_posix()
+    return any(m in rel for m in markers)
+
+
 def bookmark_files(ctx: Context) -> list[Path]:
     """Every bookmark file in scope (archived copies skipped)."""
-    return [f for r in ctx.report_dirs for f in _bookmark_files(r, ctx)]
+    files = [f for r in ctx.report_dirs for f in _bookmark_files(r, ctx)]
+    files.extend(f for f in ctx.bookmark_targets if not _is_archived(ctx, f))
+    return sorted(set(files))
+
+
+def report_of(path: Path) -> Optional[Path]:
+    """The report folder a bookmark belongs to, when there is one."""
+    for parent in path.parents:
+        if parent.name.endswith(".Report"):
+            return parent
+    return None
 
 
 def _walk_string_ints(obj: Any, path: str = "") -> Iterator[tuple[str, str, str]]:
@@ -87,38 +106,6 @@ def _coerce_value(key: str, value: str) -> Optional[int]:
     return None
 
 
-def surgical_coerce_string_ints(text: str) -> tuple[str, list[str]]:
-    """Rewrite string-typed int fields in the JSON *text* itself.
-
-    Only the offending values change (``"howCreated": "0"`` becomes
-    ``"howCreated": 0``); key order, spacing and every other byte stay as
-    they were. The edit is proven by parsing both sides: the new document
-    must equal the old one with exactly those values coerced. Raises
-    ``EditRefused`` otherwise.
-    """
-    before = json.loads(text)
-    expected = copy.deepcopy(before)
-    fixes = _coerce_string_ints(expected)
-    if not fixes:
-        return text, []
-    new = text
-    for key in INT_FIELDS:
-        pattern = re.compile(r'("' + re.escape(key) + r'"\s*:\s*)"([^"\\]*)"')
-
-        def repl(m: "re.Match[str]", key: str = key) -> str:
-            target = _coerce_value(key, m.group(2))
-            return m.group(0) if target is None else f"{m.group(1)}{target}"
-
-        new = pattern.sub(repl, new)
-    try:
-        after = json.loads(new)
-    except json.JSONDecodeError as exc:
-        raise EditRefused(f"edit produced invalid JSON: {exc}") from exc
-    if after != expected:
-        raise EditRefused("edit changed something beyond the string-typed integers")
-    return new, fixes
-
-
 class BookmarkIntegerTypesRule(Rule):
     id = "B001"
     name = "bookmark-int-types"
@@ -128,41 +115,68 @@ class BookmarkIntegerTypesRule(Rule):
         "Bookmark JSON requires howCreated, ComparisonKind and Version to be "
         "JSON integers. String values ('0', 'User', '2') make the report "
         "loader reject the bookmark with 'Expected Number but got String'. "
-        "Auto-fix rewrites only the offending values in place, then proves the "
-        "edit by parsing both versions of the file."
+        "The auto-fix rewrites the file with the integers in place."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
-        for report_dir in ctx.report_dirs:
-            for bf in _bookmark_files(report_dir, ctx):
-                try:
-                    data = json.loads(bf.read_text(encoding="utf-8-sig"))
-                except (json.JSONDecodeError, OSError) as exc:
-                    out.append(self.violation(f"unreadable bookmark JSON: {exc}", file=bf))
-                    continue
-                for json_path, field, value in _walk_string_ints(data):
-                    out.append(
-                        self.violation(
-                            f"{field} at {json_path} is the string '{value}' "
-                            f"(must be a JSON integer)",
-                            file=bf,
-                            obj=bf.stem,
-                        )
-                    )
+        files = bookmark_files(ctx)
+        if not files:
+            ctx.notes.append(f"No .bookmark.json files found under {ctx.root}")
+            return out
+        total = 0
+        dirty = 0
+        for bf in files:
+            try:
+                data = json.loads(bf.read_text(encoding="utf-8-sig"))
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+                out.append(self.violation(
+                    f"ERROR reading {bf}: {exc}", file=bf, fixable=False))
+                total += 1
+                dirty += 1
+                continue
+            found = 0
+            for json_path, field, value in _walk_string_ints(data):
+                out.append(self.violation(
+                    f"[{field}] at {json_path} = '{value}' (string, must be int)",
+                    file=bf,
+                    obj=bf.stem,
+                    fixable=_coerce_value(field, value) is not None,
+                ))
+                found += 1
+            total += found
+            dirty += 1 if found else 0
+        if total:
+            ctx.notes.append(
+                f"Total: {total} violation(s) across {dirty} file(s).")
         return out
 
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
-        for report_dir in ctx.report_dirs:
-            for bf in _bookmark_files(report_dir, ctx):
-                try:
-                    original = read_text_file(bf)
-                    new_text, fixes = surgical_coerce_string_ints(original.text)
-                    if fixes and verified_write(original, new_text):
-                        applied.extend(f"{bf.name}: {fx}" for fx in fixes)
-                except (json.JSONDecodeError, OSError, UnicodeDecodeError, EditRefused):
-                    continue  # unreadable or unprovable: stays a check failure
+        files_changed = 0
+        total = 0
+        for bf in bookmark_files(ctx):
+            try:
+                original = read_text_file(bf)
+                data = json.loads(original.text)
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                continue  # unreadable: stays a check failure
+            fixes = _coerce_string_ints(data)
+            if not fixes:
+                continue
+            try:
+                written = write_json(original, data)
+            except EditRefused:
+                continue
+            if written:
+                files_changed += 1
+                total += len(fixes)
+                applied.extend(f"fix: {fx}" for fx in fixes)
+        if files_changed:
+            ctx.notes.append(
+                f"Applied {total} fix(es) across {files_changed} file(s).")
+        else:
+            ctx.notes.append("No fixes needed.")
         return applied
 
 

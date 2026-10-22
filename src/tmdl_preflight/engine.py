@@ -39,6 +39,7 @@ def scan_summary(ctx: Context) -> dict[str, int]:
         bookmarks += sum(1 for _ in report_dir.rglob("*.bookmark.json"))
         pages += sum(1 for _ in report_dir.rglob("page.json"))
         visuals += sum(1 for _ in report_dir.rglob("visual.json"))
+    bookmarks += len(ctx.bookmark_targets)
     return {
         "files": ctx.files_scanned(),
         "models": len(models),

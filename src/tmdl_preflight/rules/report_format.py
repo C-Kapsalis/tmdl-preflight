@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 from typing import Any, Optional
 
-from ..edits import EditRefused, TextFile, read_text_file, verified_write
+from ..edits import EditRefused, read_text_file, write_json
 from .base import Context, Rule, Severity, Violation
 
 # The published Microsoft Fabric schemas a PBIR report declares.
@@ -41,32 +41,6 @@ def load_json(path: Path) -> tuple[Optional[Any], Optional[str]]:
         return json.loads(path.read_text(encoding="utf-8-sig")), None
     except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
         return None, str(exc)
-
-
-def dump_json(data: Any, newline: str = "\n") -> str:
-    """The document as 2-space JSON with one trailing newline."""
-    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
-    if newline != "\n":
-        text = text.replace("\n", newline)
-    return text
-
-
-def write_json(original: TextFile, data: Any) -> bool:
-    """Rewrite the file as 2-space JSON, keeping its byte-order mark.
-
-    The rewrite is proven: the new text must parse to the repaired document.
-    """
-    expected = data
-
-    def verify(_old: str, new: str) -> None:
-        try:
-            written = json.loads(new)
-        except json.JSONDecodeError as exc:
-            raise EditRefused(f"the rewritten file is not valid JSON: {exc}") from exc
-        if written != expected:
-            raise EditRefused("the rewritten file does not hold the repaired document")
-
-    return verified_write(original, dump_json(data, original.newline), verify)
 
 
 class ReportFormatSchemaRule(Rule):

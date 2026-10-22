@@ -101,7 +101,11 @@ class Context:
         # file they hold matches an ``exclude`` glob
         self.excluded_files: int = 0
         self.definition_dirs: list[Path] = self._keep(find_definition_dirs(self.root))
-        self.report_dirs: list[Path] = self._keep(find_report_dirs(self.root))
+        found_reports = find_report_dirs(self.root)
+        self.report_dirs: list[Path] = self._keep(found_reports)
+        #: bookmark files the scan root names itself: a *.bookmark.json file,
+        #: or a folder that holds bookmark files but names no report
+        self.bookmark_targets: list[Path] = self._bookmark_targets(self.root, found_reports)
         self._models: Optional[list[SemanticModel]] = None
         # project-level sections of the configuration (for example
         # ``contracts``), set by the CLI after the config is loaded
@@ -171,6 +175,20 @@ class Context:
             kept.append(folder)
         return kept
 
+    @staticmethod
+    def _bookmark_targets(root: Path, found_reports: list[Path]) -> list[Path]:
+        """The bookmark files the scan root names itself.
+
+        A target that is a ``*.bookmark.json`` file, or a folder that holds
+        bookmark files but names no report, is scanned for bookmarks even
+        though it is not a ``*.Report`` folder.
+        """
+        if root.is_file():
+            return [root] if root.name.endswith(".bookmark.json") else []
+        if found_reports or not root.is_dir():
+            return []
+        return sorted(p for p in root.rglob("*.bookmark.json") if p.is_file())
+
     def files_scanned(self) -> int:
         """TMDL and report JSON files the run looked at (excluded ones not
         counted)."""
@@ -194,7 +212,7 @@ class Context:
         self._models = None
 
     def is_empty(self) -> bool:
-        return not self.definition_dirs and not self.report_dirs
+        return not self.definition_dirs and not self.report_dirs and not self.bookmark_targets
 
 
 def _archived_folder(relative: str) -> bool:
@@ -274,6 +292,7 @@ class Rule:
         line: Optional[int] = None,
         obj: Optional[str] = None,
         severity: Optional[Severity] = None,
+        fixable: Optional[bool] = None,
     ) -> Violation:
         return Violation(
             rule_id=self.id,
@@ -282,7 +301,7 @@ class Rule:
             file=file,
             line=line,
             obj=obj,
-            fixable=self.fixable,
+            fixable=self.fixable if fixable is None else fixable,
         )
 
 

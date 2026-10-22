@@ -126,6 +126,18 @@ until configured.
 - `.pbi/localSettings.json` is not a required file: one script wanted it, the
   report-format validator warns when it is there (B007), and the rule follows
   the validator.
+- **B001** writes the bookmark file whole again (2-space indent, the key order
+  kept, one trailing newline), so the file it leaves behind is the one the
+  bookmark type checker wrote. Its findings carry the checker's wording
+  (`[howCreated] at howCreated = 'User' (string, must be int)`), and a value
+  the fixer cannot convert is no longer tagged as auto-fixable.
+- BUGFIX: a `howCreated` of `"-1"` becomes the integer -1; the original left
+  the string alone and failed its own re-check.
+- BUGFIX: a bookmark that starts with a byte-order mark is read; the original
+  counted it as an unreadable file.
+- `check` and `fix` accept a `*.bookmark.json` file, or a folder that holds
+  bookmark files, as a target: the bookmark rules no longer need a report
+  folder around them.
 - BUGFIX: a "MISSING $schema" finding of B007 names the path relative to the
   `.Report` folder (`definition/pages/p1/visuals/v1/visual.json`, `.platform`);
   the original computed the path three folders up, which was wrong for every
@@ -219,6 +231,9 @@ until configured.
 - A bare `definition/` folder is accepted as a model when it holds
   `tables/`, `model.tmdl` or `expressions.tmdl`.
 - `fix --dry-run` reports what would be repaired and writes nothing.
+- `fix` exits 1 when findings remain after the re-check; the original's
+  fixers always exited 0 and left the verdict to the gate that ran them. The
+  re-check is the fix contract of every rule, so the run says what is left.
 - `fix --clear-cache` deletes `<Model>.SemanticModel/.pbi/cache.abf` after
   lineage tags changed; without it the tool prints a hint when the cache
   exists.

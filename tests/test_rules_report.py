@@ -36,7 +36,7 @@ class TestBookmarkIntegerTypes:
     def test_string_ints_detected(self, project, report_dir):
         self._stringify_ints(report_dir)
         violations = BookmarkIntegerTypesRule().check(Context(project))
-        fields = {v.message.split(" ")[0] for v in violations}
+        fields = {v.message.split("]")[0].lstrip("[") for v in violations}
         assert fields == {"howCreated", "Version", "ComparisonKind"}
         assert all(v.fixable for v in violations)
 
@@ -96,37 +96,31 @@ from tmdl_preflight.rules.report import (  # noqa: E402
     BookmarkOptionsSchemaRule,
     ReportDefinitionIntegrityRule,
     strip_illegal_options,
-    surgical_coerce_string_ints,
 )
 
 import pytest  # noqa: E402
 
 
-class TestBookmarkIntegerSurgicalFix:
-    def test_only_offending_values_change(self, project, report_dir):
+class TestBookmarkIntegerRewrite:
+    def test_the_fixed_file_is_rewritten_whole(self, project, report_dir):
         bf = _bookmark(report_dir)
-        original = bf.read_text(encoding="utf-8")
-        planted = original.replace('"howCreated": 0', '"howCreated": "0"').replace(
-            '"Version": 2', '"Version": "2"'
-        )
-        bf.write_text(planted, encoding="utf-8")
+        original = json.loads(bf.read_text(encoding="utf-8"))
+        original["howCreated"] = "0"
+        bf.write_text(json.dumps(original, separators=(",", ":")), encoding="utf-8")
         assert BookmarkIntegerTypesRule().fix(Context(project))
-        # byte-for-byte the original: key order, spacing, everything
-        assert bf.read_text(encoding="utf-8") == original
+        text = bf.read_text(encoding="utf-8")
+        assert text.endswith("}\n")
+        assert '"howCreated": 0' in text
+        assert json.loads(text)["howCreated"] == 0
 
-    def test_compact_json_stays_compact(self):
-        text = '{"howCreated":"User","x":{"Version":"3","keep":"3"}}'
-        new, fixes = surgical_coerce_string_ints(text)
-        assert new == '{"howCreated":0,"x":{"Version":3,"keep":"3"}}'
-        assert len(fixes) == 2
-
-    def test_lookalike_text_inside_a_string_is_untouched(self):
-        # the same "key": "value" text appears (escaped) inside a string
-        # value; only the real member may change
-        text = '{"howCreated": "0", "note": "\\"howCreated\\": \\"0\\""}'
-        new, fixes = surgical_coerce_string_ints(text)
-        assert json.loads(new)["note"] == '"howCreated": "0"'
-        assert json.loads(new)["howCreated"] == 0
+    def test_a_lookalike_inside_a_string_is_untouched(self, project, report_dir):
+        bf = _bookmark(report_dir)
+        data = json.loads(bf.read_text(encoding="utf-8"))
+        data["howCreated"] = "0"
+        data["note"] = '"howCreated": "0"'
+        bf.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        assert BookmarkIntegerTypesRule().fix(Context(project))
+        assert json.loads(bf.read_text(encoding="utf-8"))["note"] == '"howCreated": "0"'
 
 
 class TestBookmarkOptionsSchema:
