@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from ..edits import EditRefused, TextFile, read_text_file, verified_write
 from ..model import SemanticModel
-from .base import Context, Rule, Severity, Violation
+from .base import Context, Rule, Severity, Violation, item_relative_path
 
 _PREFIX = "\t\t\t"
 
@@ -47,17 +47,25 @@ def _bound_entity(node: Any) -> Optional[str]:
 
 
 def bound_entities(data: Any) -> set[str]:
+    """The entities the nodes of the document bind to.
+
+    Only a member value or an array item binds: the document's own top
+    level is not a node, so a binding that sits there binds to nothing.
+    """
     out: set[str] = set()
 
     def walk(node: Any) -> None:
-        ent = _bound_entity(node)
-        if ent is not None:
-            out.add(ent)
         if isinstance(node, dict):
             for v in node.values():
+                ent = _bound_entity(v)
+                if ent is not None:
+                    out.add(ent)
                 walk(v)
         elif isinstance(node, list):
             for v in node:
+                ent = _bound_entity(v)
+                if ent is not None:
+                    out.add(ent)
                 walk(v)
 
     walk(data)
@@ -136,16 +144,20 @@ class CultureOrphanBindingsRule(Rule):
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
+        files = 0
         for model in ctx.models:
             for path, _tf, span, _d, orphans in self._orphans(model):
-                out.append(self.violation(
-                    f"{path.name} binds linguistic metadata to missing table(s): "
-                    f"{', '.join(sorted(orphans))}; remove those nodes (the auto-fix does).",
-                    file=path, line=span[0], obj=path.stem))
+                files += 1
+                out.append(self.violation(_report(path, orphans), file=path, line=span[0],
+                                          obj=path.stem))
+        if files:
+            ctx.notes.append(f"{files} file(s) with orphan culture bindings.")
         return out
 
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
+        files = 0
+        nodes = 0
         for model in ctx.models:
             for path, tf, span, data, orphans in list(self._orphans(model)):
                 new_data, removed = prune(data, orphans)
@@ -167,6 +179,19 @@ class CultureOrphanBindingsRule(Rule):
                     verified_write(tf, tf.join(new_lines), verify)
                 except EditRefused:
                     continue
-                applied.append(f"{path.name}: removed {removed} binding node(s) for "
-                               f"{', '.join(sorted(orphans))}")
+                files += 1
+                nodes += removed
+                applied.append(_report(path, orphans)
+                               + f"\n    -> dropped {removed} binding node(s)")
+        if files:
+            ctx.fix_notes.append(
+                f"\nFixed {files} file(s); {nodes} binding node(s) removed.")
         return applied
+
+
+def _report(path: Path, orphans: set[str]) -> str:
+    """The report of one culture file: the orphan entities it binds to."""
+    lines = [f"ORPHAN BINDINGS ({len(orphans)}): {item_relative_path(path)}"]
+    for entity in sorted(orphans):
+        lines.append(f"    entity -> {entity!r}")
+    return "\n".join(lines)

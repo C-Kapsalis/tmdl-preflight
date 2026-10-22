@@ -144,6 +144,14 @@ until configured.
   not, and how many of the calculated tables carry a partition (with the
   partition modes they declare). BUGFIX: the original printed the emoji
   double-encoded; the tool prints the intended characters.
+- **M021** reports the orphan bindings of a culture file as a block:
+  `ORPHAN BINDINGS (<n>): <path>` and one line per entity. The repair
+  prints how many binding nodes it dropped per file, and the run says how
+  many files it fixed and how many nodes it removed. Only a member value
+  or an array item binds: a binding that sits on the document's own top
+  level binds to nothing and is not reported. BUGFIX: a repaired culture
+  file keeps its line endings; the original rewrote the whole file with
+  LF.
 - **L001-L005** name the file and the problem in the wording the check
   has always used: `<file>: missing `modelPermission: read``,
   `<file>: `tablePermission <table>` has no `= <DAX>``,
