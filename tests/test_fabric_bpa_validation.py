@@ -173,6 +173,8 @@ class TestBPACatalogue:
         assert [r["id"] for r in live.BPA_RULES] == [
             "DAX_DIVISION_USAGE", "DAX_FULLY_QUALIFIED_COLUMNS", "PERF_CALCULATED_COLUMNS",
             "META_HIDDEN_FOREIGN_KEYS", "NAME_MEASURE_DESCRIPTIONS"]
+        for rule in live.BPA_RULES:
+            assert set(rule) == {"id", "name", "category", "severity", "scope", "description"}
         first = live.BPA_RULES[0]
         assert first["name"] == "Avoid division operator (use DIVIDE function)"
         assert first["category"] == "DAX Expressions"

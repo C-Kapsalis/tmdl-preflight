@@ -1270,31 +1270,36 @@ def check_filter_diagnostic(c: LiveContext) -> CheckResult:
 BPA_RULES = [
     {"id": "DAX_DIVISION_USAGE", "name": "Avoid division operator (use DIVIDE function)",
      "category": "DAX Expressions", "severity": 3, "scope": "Measure",
-     "description": "Measures should use DIVIDE() instead of / for better error handling",
-     "fix": "Replace / with DIVIDE(numerator, denominator) for better error handling"},
+     "description": "Measures should use DIVIDE() instead of / for better error handling"},
     {"id": "DAX_FULLY_QUALIFIED_COLUMNS", "name": "Column references should be fully qualified",
      "category": "DAX Expressions", "severity": 2, "scope": "Measure",
-     "description": "Use Table[Column] instead of [Column] for clarity",
-     "fix": "Qualify every column reference with its table"},
+     "description": "Use Table[Column] instead of [Column] for clarity"},
     {"id": "PERF_CALCULATED_COLUMNS", "name": "Avoid calculated columns where possible",
      "category": "Performance", "severity": 2, "scope": "Column",
-     "description": "Calculated columns can impact refresh performance",
-     "fix": "Consider moving logic to M (Power Query) or creating a measure instead"},
+     "description": "Calculated columns can impact refresh performance"},
     {"id": "META_HIDDEN_FOREIGN_KEYS", "name": "Hide foreign key columns from report view",
      "category": "Metadata", "severity": 2, "scope": "Column",
-     "description": "Foreign keys should be hidden from end users",
-     "fix": "Hide the key column used only by a relationship"},
+     "description": "Foreign keys should be hidden from end users"},
     {"id": "NAME_MEASURE_DESCRIPTIONS", "name": "User-facing measures should have descriptions",
      "category": "Naming Conventions", "severity": 2, "scope": "Measure",
-     "description": "Measures visible to users should include descriptions",
-     "fix": "Add a description explaining what this measure calculates"},
+     "description": "Measures visible to users should include descriptions"},
 ]
+
+BPA_FIXES = {
+    "DAX_DIVISION_USAGE":
+        "Replace / with DIVIDE(numerator, denominator) for better error handling",
+    "DAX_FULLY_QUALIFIED_COLUMNS": "Qualify every column reference with its table",
+    "PERF_CALCULATED_COLUMNS":
+        "Consider moving logic to M (Power Query) or creating a measure instead",
+    "META_HIDDEN_FOREIGN_KEYS": "Hide the key column used only by a relationship",
+    "NAME_MEASURE_DESCRIPTIONS":
+        "Add a description explaining what this measure calculates",
+}
 
 BPA_ANALYSIS_FAILED = {
     "id": "BPA_ANALYSIS_FAILED", "name": "BPA Analysis Failed", "category": "System",
     "severity": 5, "scope": "Model",
     "description": "The analysis could not read the model's metadata",
-    "fix": "Check model connectivity and permissions",
 }
 
 
@@ -1365,7 +1370,7 @@ class LiveBPA:
                    fix: Optional[str] = None) -> BPAViolation:
         r = self._rule(rid) if rid != "BPA_ANALYSIS_FAILED" else BPA_ANALYSIS_FAILED
         return BPAViolation(rid, r["name"], r["category"], r["severity"], obj, otype, message,
-                            fix if fix is not None else r["fix"],
+                            fix if fix is not None else BPA_FIXES.get(rid, ""),
                             _dt.datetime.now().isoformat())
 
     def analyze_model(self) -> BPAReport:
@@ -1409,7 +1414,8 @@ class LiveBPA:
                 objects = count(mc.first, "MeasureCount") + count(cc.first, "ColumnCount")
         except Exception as exc:  # noqa: BLE001 - one system finding instead of a crash
             out.append(self._violation("BPA_ANALYSIS_FAILED", "ModelAnalysis", "System",
-                                       f"BPA analysis encountered an error: {exc}"))
+                                       f"BPA analysis encountered an error: {exc}",
+                                       fix="Check model connectivity and permissions"))
         ms = max((time.perf_counter() - clock) * 1000, 0.001)
         return BPAReport(out, objects, ms, start)
 
