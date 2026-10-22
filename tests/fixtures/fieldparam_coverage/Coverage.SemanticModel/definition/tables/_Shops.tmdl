@@ -1,0 +1,15 @@
+/// One row per shop.
+table _Shops
+	lineageTag: ad9548d6-b2c1-43d4-15f6-1728394a5b6c
+
+	column shop_name
+		dataType: string
+		lineageTag: bea659e7-c3d2-44e5-2607-28394a5b6c7d
+
+	partition _Shops = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source

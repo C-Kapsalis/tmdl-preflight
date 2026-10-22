@@ -120,6 +120,10 @@ class TestCategoryRequired:
 
 class TestFieldParameterCoverage:
     RULE = "fieldparam-coverage"
+    STANDIN = "fieldparam_coverage"
+
+    def _coverage_model(self, stand_in):
+        return stand_in(self.STANDIN) / "Coverage.SemanticModel"
 
     def test_field_parameter_coverage(self, stand_in):
         code, payload = run_check(_model(stand_in), self.RULE, strict=True)
@@ -139,3 +143,44 @@ class TestFieldParameterCoverage:
         code, payload = run_check(model, self.RULE)
         assert code == 0
         assert any("_Kiosks" in v["message"] for v in violations(payload))
+
+    def test_the_summary_counts_the_audit(self, stand_in):
+        code, payload = run_check(self._coverage_model(stand_in), self.RULE)
+        assert code == 0, payload
+        summary = violations(payload)[0]["message"]
+        assert summary == (
+            "x-Selector — measure level:\n"
+            "  x-Selector measure count:                  1\n"
+            "  User-facing measures (total):          6\n"
+            "  Covered in x-Selector:                     1 (16.7%)\n"
+            "  Uncovered (not in any x-Selector):         5\n"
+            "\n"
+            "y-Selector — dim-table level:\n"
+            "  y-Selector dim tables referenced:          1\n"
+            "  `_` dim tables in model (total):       2\n"
+            "  Dim tables in model not in y-Selector:     1\n"
+            "  y-Selector refs to missing tables:         0")
+
+    def test_the_lists_name_what_they_found(self, stand_in):
+        code, payload = run_check(self._coverage_model(stand_in), self.RULE)
+        found = [v["message"] for v in violations(payload)]
+        assert found[1] == (
+            "User-facing measures not in x-Selector (5):\n"
+            "  - #Report Measures[Cups]\n"
+            "  - #Report Measures[Margin]\n"
+            "  - #Report Measures[Orders]\n"
+            "  - #Report Measures[Refunds]\n"
+            "  - #Report Measures[Revenue]")
+        assert found[2] == (
+            "`_` dim tables in model not exposed on y-Selector:\n"
+            "  - _Hidden")
+
+    def test_a_quoted_table_name_counts_as_covered(self, stand_in, replace_in):
+        """A row that names its measure with a quoted table is on the axis."""
+        model = self._coverage_model(stand_in)
+        replace_in(model / "definition" / "tables" / "x-Selector 1.tmdl",
+                   "NAMEOF('#Report Measures'[Cost])", "NAMEOF('Other'[Cost])")
+        code, payload = run_check(model, self.RULE)
+        assert code == 0, payload
+        summary = violations(payload)[0]["message"]
+        assert "Covered in x-Selector:                     1 (16.7%)" in summary

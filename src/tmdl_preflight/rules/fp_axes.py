@@ -398,6 +398,22 @@ class FieldParameterCategoryRequiredRule(Rule):
 # F012 axis coverage (info)
 # ---------------------------------------------------------------------------
 
+# The coverage summary, one line per count, in the columns the audit report
+# has always used.
+_COVERAGE_SUMMARY = (
+    "x-Selector — measure level:\n"
+    "  x-Selector measure count:                  {axis}\n"
+    "  User-facing measures (total):          {user_facing}\n"
+    "  Covered in x-Selector:                     {covered} ({percent}%)\n"
+    "  Uncovered (not in any x-Selector):         {uncovered}\n"
+    "\n"
+    "y-Selector — dim-table level:\n"
+    "  y-Selector dim tables referenced:          {dim_refs}\n"
+    "  `_` dim tables in model (total):       {dim_total}\n"
+    "  Dim tables in model not in y-Selector:     {dim_hidden}\n"
+    "  y-Selector refs to missing tables:         {dim_missing}"
+)
+
 
 class FieldParameterCoverageRule(Rule):
     id = "F012"
@@ -411,7 +427,8 @@ class FieldParameterCoverageRule(Rule):
         "Advisory audit of what the axis field parameters expose: user-facing "
         "measures on no metric axis, helper measures that are on one, "
         "dimension tables on no dimension axis, and axis rows that name a "
-        "table that does not exist."
+        "table that does not exist. The report opens with the counts of the "
+        "audit and then lists what it found."
     )
 
     @staticmethod
@@ -426,28 +443,49 @@ class FieldParameterCoverageRule(Rule):
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for model in ctx.models:
-            where = model.definition_path / "tables"
-            on_axis = {m for _t, _q, m in self._refs(model, self.options["metric_axis_globs"])}
-            measures = sorted({m.name for m in model.all_measures()})
-            lists = [
-                ("user-facing measures on no metric axis",
-                 [m for m in measures if not is_helper_name(m) and m not in on_axis]),
-                ("helper measures on a metric axis",
-                 [m for m in measures if is_helper_name(m) and m in on_axis]),
-            ]
-            dim_refs = self._refs(model, self.options["dimension_axis_globs"])
-            dim_tables = {q for _t, q, _m in dim_refs if q}
-            prefix = self.options["dimension_prefix"]
-            lists.append(("dimension tables on no dimension axis",
-                          sorted(t.name for t in model.table_list
-                                 if t.name.startswith(prefix) and t.name not in dim_tables)))
-            missing = sorted({f"{t.name} -> {q}" for t, q, _m in dim_refs
-                              if q and model.find_table(q) is None})
-            lists.append(("axis rows referencing a missing table", missing))
-            for title, items in lists:
-                if items:
-                    out.append(self.violation(f"{title} ({len(items)}): {', '.join(items)}",
-                                              file=where, obj=title))
+            out.extend(self._model(model))
+        return out
+
+    def _model(self, model: SemanticModel) -> list[Violation]:
+        where = model.definition_path / "tables"
+        on_axis = {m for _t, _q, m in self._refs(model, self.options["metric_axis_globs"])}
+        measures = list(model.all_measures())
+        user_facing = [m for m in measures if not is_helper_name(m.name)]
+        uncovered = [m for m in user_facing if m.name not in on_axis]
+        hidden = [m for m in measures if is_helper_name(m.name) and m.name in on_axis]
+        dim_refs = self._refs(model, self.options["dimension_axis_globs"])
+        dim_tables = {q for _t, q, _m in dim_refs if q}
+        prefix = self.options["dimension_prefix"]
+        dim_hidden = sorted(t.name for t in model.table_list
+                            if t.name.startswith(prefix) and t.name not in dim_tables)
+        known = {t.name for t in model.table_list}
+        dim_missing = sorted(dim_tables - known)
+        covered = len(user_facing) - len(uncovered)
+        percent = (covered / len(user_facing) * 100) if user_facing else 100.0
+        summary = _COVERAGE_SUMMARY.format(
+            axis=len(on_axis), user_facing=len(user_facing), covered=covered,
+            percent=f"{percent:.1f}", uncovered=len(uncovered),
+            dim_refs=len(dim_tables), dim_total=sum(1 for t in model.table_list
+                                                    if t.name.startswith(prefix)),
+            dim_hidden=len(dim_hidden), dim_missing=len(dim_missing),
+        )
+        lists = [
+            (f"User-facing measures not in x-Selector ({len(uncovered)}):",
+             sorted(uncovered, key=lambda m: m.name),
+             lambda m: f"{m.table}[{m.name}]"),
+            (f"Helper-named measures present in x-Selector ({len(hidden)}):", hidden,
+             lambda m: f"{m.table}[{m.name}]"),
+            ("`_` dim tables in model not exposed on y-Selector:", dim_hidden,
+             lambda t: t),
+            ("y-Selector references tables that don't exist:", dim_missing,
+             lambda t: t),
+        ]
+        out = [self.violation(summary, file=where)]
+        for heading, items, render in lists:
+            if not items:
+                continue
+            body = "\n".join([heading] + [f"  - {render(i)}" for i in items])
+            out.append(self.violation(body, file=where))
         return out
 
 

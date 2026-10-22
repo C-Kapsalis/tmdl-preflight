@@ -207,6 +207,20 @@ until configured.
   A row behind a `--` or `//` marker is parked, not live, and is never
   judged. BUGFIX: before, a parked row was reported as a row without a
   category.
+- **F012** opens its report with the counts of the audit — how many measures
+  the metric axis names, how many user-facing measures there are, how many
+  of them the axis covers (with the share) and how many it does not, then
+  the dimension side: how many dimension tables the axis names, how many
+  the model holds, how many of them the axis does not expose and how many
+  the axis names that do not exist. The lists follow, each under its own
+  heading:
+  ```
+  User-facing measures not in x-Selector (5):
+    - #Report Measures[Cups]
+  ```
+  BUGFIX: a row that names its measure with a quoted table name
+  (`NAMEOF('#Report Measures'[Cost])`) counts as on the metric axis; the
+  measure is on the axis, whatever way the row spells it.
 
 ### Commands and options
 

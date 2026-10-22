@@ -1,0 +1,15 @@
+/// A dimension the report never slices by.
+table _Hidden
+	lineageTag: cfb76af8-d4e3-45f6-3718-394a5b6c7d8e
+
+	column hidden_key
+		dataType: string
+		lineageTag: d0c87b09-e5f4-4607-4829-4a5b6c7d8e9f
+
+	partition _Hidden = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source

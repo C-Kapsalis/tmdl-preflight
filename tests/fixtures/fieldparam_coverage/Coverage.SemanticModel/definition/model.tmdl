@@ -1,0 +1,10 @@
+model Coverage
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+
+ref table '#Report Measures'
+ref table 'Helper Measures'
+ref table '_Shops'
+ref table '_Hidden'
+ref table 'x-Selector 1'
+ref table 'y-Selector 1'
