@@ -10,7 +10,6 @@ from typing import Optional
 
 from ..categories import (
     MAPPING_TABLE,
-    METRIC_AXIS_GLOBS,
     NUMBERED_X_AXIS_GLOBS,
     NON_ATTRIBUTING_GROUPS,
     FactTracer,

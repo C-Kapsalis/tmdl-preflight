@@ -190,7 +190,7 @@ commit.
 | F015 | an axis table that is not an import-mode `("label", NAMEOF(...))` field parameter (opt-in) | info | no |
 | F016 | a field-parameter row that carries `//` (the repair is opt-in) | info | yes |
 | F017 | a fenced field-parameter source that drifted from its canonical form | info | yes |
-| A001 | the category-mapping table or one of its key columns is missing (opt-in) | error | no |
+| A001 | the category-mapping table or one of its key columns is missing (opt-in) | warning | no |
 | A002 | inventory of axis group ids and mapping-table relationships (opt-in) | info | no |
 | A003 | an account-filterable category whose mapping rows lack the account groups (opt-in) | error | yes |
 | A004 | `f-All` gate chains that disagree, name missing measures, miss a category, or use inert or over-broad literals (opt-in; baseline) | error | no |
@@ -237,6 +237,21 @@ FILE`, with `--check` to fail when a committed copy is stale). Opt-in rules
 run only when named in `--select` or the configuration's `select`; the
 generated catalog lists the whole opt-in set as a `select` line you can
 paste into your configuration file.
+
+The analysis-category checks (A001, A003, A004, A005) carry the priority
+of the gate they came from. A P0 check — an unpaired gate chain, a gate
+that names a measure the model does not declare, a gate literal that
+matches no category — is an error. A P1 check — a category that owns a
+filter measure but is not gated, a category with no filter measure to
+gate on, a gate literal that spans two categories, a mapping table without
+its key columns, a filter measure that fits no known shape — is a
+warning. So a plain run fails on the P0 checks only, and `--strict` is
+the full run: it fails on the P1 checks too.
+
+A check that cannot run (a model without an `f-Filters` table, an `f-All`
+that is absent or non-canonical, a mapping table that yields no category)
+is listed under `skipped` in the JSON output, with the model and the
+reason, and it never fails the run.
 
 ## Selecting rules and other flags
 

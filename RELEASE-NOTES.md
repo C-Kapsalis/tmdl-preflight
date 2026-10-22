@@ -829,7 +829,8 @@ unchanged.
   declaration and leaves the rest of the file exactly as it was, blank
   lines included. STRICTER: R007 can never be baselined (zero tolerance).
 - **A relationship declaration may be followed by any whitespace.** A tab
-  after the keyword starts the block, as a space does.- **`stats --measures` prints one summary per model.** A folder with two
+  after the keyword starts the block, as a space does.
+- **`stats --measures** prints one summary per model.** A folder with two
   models prints two summaries, each with its own totals, in the layout a
   reviewer reads: the totals, the user-facing and helper split, the
   field-parameter surfacing, the helper subcategories, the top tables and
@@ -847,6 +848,81 @@ unchanged.
   are unused — and the lists that say which fact is which. An exempt fact
   and an unused fact never fail; they are reported so that a reader can
   see why nothing was said about them.
+- **The mapping table's rows are read the way the source tool reads them.**
+  Only a row with three or more values attributes a category: the category
+  is the first value, the group id the third. A two-column table therefore
+  attributes nothing, and a null cell counts as empty (it is no longer the
+  text `None`).
+- **The category attribution reads the numbered x-axis tables only.** By
+  default it reads its axis rows from `x-Selector 1` to `x-Selector 9`; a
+  plot-specific table is added only by configuration.
+- **An axis row must have the source tool's shape to attribute.** A row is
+  `("label", NAMEOF('Table'[Measure]) or NAMEOF([Measure]), <order>,
+  "group")`: the label may not be empty, the order is a whole number, and
+  a row may span several lines. A row behind a `//` or `--` marker is not
+  a row.
+- **The measure trace follows every bracketed reference.** A reference is
+  the text between the brackets, trimmed of surrounding spaces, and it may
+  not span a line break. When two measures share a name, the later one in
+  model order is the one traced.
+- **The mapping fixer writes the payload in the layout the table stores.**
+  The rows are serialized with a comma and a space between items, a colon
+  and a space between keys, and every non-ASCII character escaped as
+  `\uXXXX`; only the first payload in the file is replaced.
+- **The account-key finding reads the way the source tool reads it.** A
+  category that misses an account group is reported as
+  `[<Category>] missing ['<Key>'] Each must assign both Account_y and
+  Service_y.`, and a category whose backing facts cannot carry the key is
+  reported as `[<Category>] account-UNSUPPORTED — backing fact table(s)
+  lack 'account_x_id': ['<Fact>']` (or `account-filterable, but these
+  backing fact tables still lack ...`). The key column is matched by its
+  exact name, so a fact that spells it differently does not carry it. A
+  warning is never tagged auto-fixable.
+- **A mapping table whose payload cannot be read is an error.** A table
+  with no `Binary.FromText(...)` payload is reported as `No binary data
+  found in <file path>`, a payload that does not decode as `mapping
+  payload does not decode: <reason>`, and the fixer writes nothing there.
+- **The gate-coverage rule reports one finding per check, worded as the
+  source tool words it.** A check that fires once says so once, and the
+  message names the model, the list it holds and the repair to run. The
+  gate patterns are strict again: `CONTAINSSTRING(all_cats, "<literal>")`
+  and `IF([f-X] > 0` are spelled the way the source tool spells them, and
+  the two chains are looked for in the whole `f-Filters` table file.
+- **A check that cannot run is listed as skipped, with the reason.** A
+  model without an `f-Filters` table, an `f-All` that is absent or
+  non-canonical (no `temp_basic`/`temp_alt`), and a mapping table that
+  yields no category are each reported under `skipped` (with the model
+  and the reason) instead of passing silently. A mapping table with no
+  categories skips the four checks that need them, so no literal is
+  reported inert and no baseline entry is reported stale.
+- **The mapping-table checks read the way the source tool reads them.** A
+  missing table is reported as `P1 WARNING: <table> table not found`, a
+  table that lacks a required column as `Z-Map Table Structure: table
+  found: <name>; total columns: <n>; required columns present: <k>/<m>;
+  present required columns: <list>; missing required columns: <list>.
+  These columns are critical for dimension-measure grouping`, and the
+  inventory reports `Unique x-Selector categories found: <n>` with the
+  group ids and `Relationships involving z-Map: <n>`. BUGFIX: A001 is a P1
+  check, so it is a warning (the spec says warning) and `--strict`, the
+  full run, fails it.
+- **The filter-measure rule reports the inventory of the filter
+  measures.** Per model it reports `F-Measure Pattern Classification:
+  Total f-measures: <n>` with a line per kind (STANDARD, AGGREGATOR,
+  SWITCH-ROUTER, DISPLAY-STRING, EXEMPTED, UNCLASSIFIED), and `F-Measure
+  Coverage Analytics: Total f- measures: <n>; In f-Filters table: <a>
+  (<pct>%); In other tables: <b>; Visible: <v> (<pct>%); Hidden: <h>`,
+  with the filter measures that live elsewhere and the recommendation to
+  move them. A model with no filter measures reports the counts and no
+  percentages.
+- **The priority of the analysis-category checks is written down.** A P0
+  check (an unpaired gate chain, a gate that names a measure the model
+  does not declare, a gate literal that matches no category) is an error;
+  a P1 check (a category that owns a filter measure but is not gated, a
+  category with no filter measure to gate on, a gate literal that spans
+  two categories, a mapping table without its key columns, a filter
+  measure that fits no known shape) is a warning. A plain run fails on the
+  P0 checks, `--strict` is the full run and fails on the P1 checks too.
+  The mapping is in the rule descriptions and in the README.
 
 ### Bug fixes
 
@@ -973,11 +1049,17 @@ unchanged.
 - **The axis tables are reference-checked in full.** Every expression of an
   axis table is checked, not only the measures: a calculated column or a
   partition source that names a table that does not exist is reported as
-  well. BUGFIX.- **A fact is matched only when the reference names it.** The reference
+  well. BUGFIX.
+- **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the
   name, so a measure reading `MySales[amount]` does not consume `Sales`.
   BUGFIX.
+- **A fact is matched by plain text, as the source tool matches it.** A
+  fact counts as read when the expression holds `'Fact'`, `[Fact]` or
+  `Fact[`, anywhere in the text. The earlier word-boundary rule was
+  stricter than the source tool, so the two could disagree about which
+  facts a measure reads.
 - **The filter-coverage finding names the command that writes the missing
   filter measure.** The repair lives in pbip-model-forge, not here, so the
   finding names the exact `pbip-forge f-filters --model <model>` command

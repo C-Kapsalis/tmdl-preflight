@@ -117,6 +117,8 @@ class Context:
         self.blocks: list[str] = []
         # fixes a fixer had to refuse (the proof failed; the file is untouched)
         self.refused_fixes: list[str] = []
+        # checks a rule could not run, with the reason
+        self.skips: list[dict] = []
 
     def model_key(self, model: SemanticModel) -> str:
         """The model's ``*.SemanticModel`` folder relative to the scan root
@@ -265,6 +267,10 @@ class Rule:
         """Why the rule did not run (shown beside its name in the report)."""
         return "turned off by its policy option"
 
+    def skip(self, ctx: "Context", reason: str, model: Optional[str] = None) -> None:
+        """Record that a check could not run for a model, and why."""
+        ctx.skips.append({"rule": self.id, "model": model, "reason": reason})
+
     def configure(self, options: dict[str, Any]) -> None:
         """Apply per-rule options (already validated by the config loader)."""
         self.options.update(options)
@@ -308,6 +314,7 @@ class Rule:
         obj: Optional[str] = None,
         severity: Optional[Severity] = None,
         grouped: bool = False,
+        fixable: Optional[bool] = None,
     ) -> Violation:
         return Violation(
             rule_id=self.id,
@@ -316,7 +323,7 @@ class Rule:
             file=file,
             line=line,
             obj=obj,
-            fixable=self.fixable,
+            fixable=self.fixable if fixable is None else fixable,
             grouped=grouped,
         )
 

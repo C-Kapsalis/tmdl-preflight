@@ -24,15 +24,14 @@ from fnmatch import fnmatchcase
 from typing import Iterable, Optional
 
 from .edits import TextFile, read_text_file
-from .fieldparams import mask_line, nameof_parts, read_rows
+from .fieldparams import mask_line, source_span
 from .model import Measure, SemanticModel, Table
 from .roles import fact_tables
 
 MAPPING_TABLE = "z-Map Dimension-Measure Groupings"
 MAPPING_PREFIX = "z-Map"
-METRIC_AXIS_GLOBS = ["x-Selector [1-9]", "x-Plot Specific*"]
-#: The numbered x-axis tables alone: the category-mechanism exemption reads
-#: its axis rows from these by default.
+#: The numbered x-axis tables alone: the category attribution and the
+#: category-mechanism exemption read their axis rows from these by default.
 NUMBERED_X_AXIS_GLOBS = ["x-Selector [1-9]"]
 ALL_AXIS_GLOBS = ["x-Selector*", "x-Plot Specific*", "y-Selector*", "y-Plot Specific*"]
 # axis spacers and the standard calendar groups attribute nothing
@@ -47,7 +46,11 @@ _BLOB_RE = re.compile(r'Binary\.FromText\(\s*"(?P<blob>[A-Za-z0-9+/=\s]*)"')
 
 
 class MappingDecodeError(ValueError):
-    """The table holds no single readable encoded payload."""
+    """The table holds no readable encoded payload."""
+
+    def __init__(self, message: str, *, no_payload: bool = False):
+        super().__init__(message)
+        self.no_payload = no_payload
 
 
 def decode_rows(blob: str) -> list[list]:
@@ -59,7 +62,9 @@ def decode_rows(blob: str) -> list[list]:
 
 
 def encode_rows(rows: list[list]) -> str:
-    payload = json.dumps(rows, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    """The payload as the table stores it: JSON with a comma and a space
+    between items, a colon and a space between keys, non-ASCII escaped."""
+    payload = json.dumps(rows, ensure_ascii=True, separators=(", ", ": ")).encode("utf-8")
     packer = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
     return base64.b64encode(packer.compress(payload) + packer.flush()).decode("ascii")
 
@@ -85,7 +90,8 @@ class MappingTable:
         return out
 
     def groups_of(self, category: str) -> set[str]:
-        return {str(r[-1]) for r in self.rows if len(r) >= 2 and r[0] == category}
+        return {g for r in self.rows if len(r) >= 2 and _cell(r[0]) == category
+                for g in [_cell(r[-1])] if g}
 
     def with_rows(self, rows: list[list]) -> str:
         text = self.file.text
@@ -93,14 +99,17 @@ class MappingTable:
 
 
 def read_mapping(table: Table) -> MappingTable:
-    """Decode the table's single encoded payload (raises MappingDecodeError)."""
+    """Decode the table's encoded payload (raises MappingDecodeError).
+
+    The first payload in the file is the one that counts.
+    """
     try:
         tf = read_text_file(table.file)
     except (OSError, UnicodeDecodeError) as exc:
         raise MappingDecodeError(str(exc)) from exc
     blobs = list(_BLOB_RE.finditer(tf.text))
-    if len(blobs) != 1:
-        raise MappingDecodeError(f"expected one encoded payload, found {len(blobs)}")
+    if not blobs:
+        raise MappingDecodeError("no binary data found", no_payload=True)
     m = blobs[0]
     try:
         rows = decode_rows(m.group("blob"))
@@ -131,14 +140,25 @@ def load_mapping(model: SemanticModel, name: Optional[str] = None,
         return None
 
 
+def _cell(value) -> str:
+    """A cell's text; a null cell counts as empty."""
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
 def category_map(rows: Iterable[list], excluded: Iterable[str] = NON_ATTRIBUTING_GROUPS) -> dict[str, set[str]]:
-    """group id -> categories, skipping blank values and excluded groups."""
+    """group id -> categories, skipping blank values and excluded groups.
+
+    Only rows with three or more values count: the category is the first
+    value and the group id the third.
+    """
     skip = set(excluded)
     out: dict[str, set[str]] = {}
     for row in rows:
-        if len(row) < 2:
+        if len(row) < 3:
             continue
-        cat, group = str(row[0]).strip(), str(row[-1]).strip()
+        cat, group = _cell(row[0]), _cell(row[2])
         if not cat or not group or group in skip:
             continue
         out.setdefault(group, set()).add(cat)
@@ -162,18 +182,33 @@ class AxisRow:
     width: int
 
 
-def _unquote(value: str) -> Optional[str]:
-    value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] == '"':
-        return value[1:-1].replace('""', '"')
-    return None
+#: A row the attribution reader accepts:
+#: ``("label", NAMEOF('Table'[Measure]) or NAMEOF([Measure]), order, "group")``.
+_AXIS_ENTRY_RE = re.compile(
+    r'\(\s*"(?P<label>[^"]+)"\s*,\s*(?P<ref>NAMEOF\s*\(\s*(?:'
+    r"'(?P<qual>[^']+)'\[(?P<qname>[^\]]+)\]"
+    r'|\[(?P<name>[^\]]+)\]'
+    r')\s*\))\s*,\s*(?P<order>-?\d+)\s*,\s*"(?P<group>[^"]+)"')
+
+#: A row of four or five values whose fourth (and fifth) value is a quoted
+#: string: the shape the group inventory counts.
+_AXIS_GROUP_RE = re.compile(
+    r'\(\s*"[^"]+"\s*,\s*NAMEOF\s*\([^)]+\)\s*,\s*-?\d+\s*,\s*"(?P<group>[^"]+)"'
+    r'(?:\s*,\s*"[^"]+")?\s*\)')
 
 
-def axis_rows(model: SemanticModel, globs: Iterable[str]) -> list[AxisRow]:
-    """Live rows ``("label", NAMEOF(...), order, "group", ...)`` of every table
-    a glob names (first calculated partition, comment lines skipped)."""
+def _live_at(text: str, offset: int) -> bool:
+    """Is the character at ``offset`` outside a comment marker?"""
+    start = text.rfind("\n", 0, offset) + 1
+    end = text.find("\n", offset)
+    line = text[start:] if end < 0 else text[start:end]
+    col = offset - start
+    return mask_line(line)[col:col + 1] == "("
+
+
+def _axis_sources(model: SemanticModel, globs: Iterable[str]):
+    """(table, source text, first source line) for every table a glob names."""
     pats = list(globs)
-    out: list[AxisRow] = []
     for t in model.table_list:
         if not any(fnmatchcase(t.name, p) for p in pats):
             continue
@@ -181,16 +216,40 @@ def axis_rows(model: SemanticModel, globs: Iterable[str]) -> list[AxisRow]:
             lines = read_text_file(t.file).lines()
         except (OSError, UnicodeDecodeError):
             continue
-        for row in read_rows(lines):
-            if not mask_line(row.text)[row.open_at:row.open_at + 1] == "(":
-                continue  # the row sits behind a comment marker
-            f = row.fields
-            label = _unquote(f[0])
-            if label is None or not re.match(r"(?i)^NAMEOF\s*\(", f[1]):
+        span = source_span(lines)
+        if span is None:
+            continue
+        yield t, "\n".join(lines[span[0]:span[1]]), span[0]
+
+
+def axis_rows(model: SemanticModel, globs: Iterable[str]) -> list[AxisRow]:
+    """The live axis rows of every table a glob names.
+
+    A row is ``("label", NAMEOF('Table'[Measure]) or NAMEOF([Measure]),
+    <order>, "group")``; a row behind a ``//`` or ``--`` marker is not a row.
+    """
+    out: list[AxisRow] = []
+    for t, source, first_line in _axis_sources(model, globs):
+        for m in _AXIS_ENTRY_RE.finditer(source):
+            if not _live_at(source, m.start()):
                 continue
-            qual, target = nameof_parts(f[1])
-            group = _unquote(f[3]) if len(f) >= 4 else None
-            out.append(AxisRow(t.name, row.index + 1, label, f[1], qual, target, group, len(f)))
+            qual = m.group("qual")
+            target = m.group("qname") if qual is not None else m.group("name")
+            line = first_line + source.count("\n", 0, m.start()) + 1
+            out.append(AxisRow(t.name, line, m.group("label"), m.group("ref"),
+                               qual, target.strip(), m.group("group"), 4))
+    return out
+
+
+def axis_group_ids(model: SemanticModel, globs: Iterable[str]) -> list[str]:
+    """The group ids the axis rows carry: the fourth value of a row with
+    four or five values."""
+    out: list[str] = []
+    for t, source, _first in _axis_sources(model, globs):
+        for m in _AXIS_GROUP_RE.finditer(source):
+            if not _live_at(source, m.start()):
+                continue
+            out.append(m.group("group"))
     return out
 
 
@@ -198,10 +257,8 @@ def axis_rows(model: SemanticModel, globs: Iterable[str]) -> list[AxisRow]:
 # Measure -> fact trace
 # ---------------------------------------------------------------------------
 
-_BARE_REF_RE = re.compile(r"(?<![\w'\]])\[([^\]]+)\]")
-#: A reference with a table qualifier: `'Table'[Name]` or `Table[Name]`.
-_QUALIFIED_REF_RE = re.compile(
-    r"(?:'((?:[^'\n]|'')+)'|([A-Za-z_][\w ]*?))\s*\[([^\]\n]+)\]")
+#: A bracketed reference; the text may not span a line break.
+_MEASURE_REF_RE = re.compile(r"\[([^\]\n]+)\]")
 
 
 def _measure_refs(expr: str) -> set[str]:
@@ -212,12 +269,7 @@ def _measure_refs(expr: str) -> set[str]:
     model declares. The qualifier is how a model says which table owns the
     measure; it does not change what the reference means.
     """
-    out: set[str] = set()
-    for m in _BARE_REF_RE.finditer(expr):
-        out.add(m.group(1))
-    for m in _QUALIFIED_REF_RE.finditer(expr):
-        out.add(m.group(3).strip())
-    return out
+    return {m.group(1).strip() for m in _MEASURE_REF_RE.finditer(expr)}
 
 
 def _direct_facts(expr: str, facts: list[str]) -> set[str]:
@@ -226,7 +278,7 @@ def _direct_facts(expr: str, facts: list[str]) -> set[str]:
         quoted = "'" + name.replace("'", "''") + "'"
         if quoted in expr or f"[{name}]" in expr:
             hits.add(name)
-        elif " " not in name and re.search(r"(?<![\w'])" + re.escape(name) + r"\[", expr):
+        elif " " not in name and f"{name}[" in expr:
             hits.add(name)
     return hits
 
@@ -240,7 +292,7 @@ class FactTracer:
         self.facts = facts if facts is not None else fact_tables(model)
         self.by_name: dict[str, Measure] = {}
         for m in model.all_measures():
-            self.by_name.setdefault(m.name, m)
+            self.by_name[m.name] = m
         self._direct: dict[str, set[str]] = {}
         self._edges: dict[str, set[str]] = {}
 
@@ -268,7 +320,7 @@ class FactTracer:
 
 
 def fact_table_categories(model: SemanticModel, mapping: Optional[MappingTable],
-                          axis_globs: Iterable[str] = METRIC_AXIS_GLOBS,
+                          axis_globs: Iterable[str] = NUMBERED_X_AXIS_GLOBS,
                           excluded: Iterable[str] = NON_ATTRIBUTING_GROUPS) -> dict[str, set[str]]:
     """Every fact table -> the categories its measures are offered under."""
     tracer = FactTracer(model)
@@ -286,7 +338,7 @@ def fact_table_categories(model: SemanticModel, mapping: Optional[MappingTable],
 
 
 def category_backing(model: SemanticModel, mapping: MappingTable,
-                     axis_globs: Iterable[str] = METRIC_AXIS_GLOBS,
+                     axis_globs: Iterable[str] = NUMBERED_X_AXIS_GLOBS,
                      excluded: Iterable[str] = NON_ATTRIBUTING_GROUPS,
                      tracer: Optional[FactTracer] = None) -> dict[str, set[str]]:
     """category -> fact tables reached by the measures of its groups (only
@@ -308,24 +360,31 @@ def category_backing(model: SemanticModel, mapping: MappingTable,
 # f-All gate chains
 # ---------------------------------------------------------------------------
 
-_GATE_LITERAL_RE = re.compile(r'CONTAINSSTRING\s*\(\s*all_cats\s*,\s*"((?:[^"]|"")*)"', re.IGNORECASE)
-_GATE_MEASURE_RE = re.compile(r"IF\s*\(\s*\[(f-[^\]]+)\]\s*>\s*0", re.IGNORECASE)
-_DECL_RE = re.compile(r"^\tmeasure\s+('(?:[^']|'')+'|[^\s=]+)")
+#: A gate literal: ``CONTAINSSTRING(all_cats, "<literal>")``, spelled the way
+#: the source tool spells it.
+_GATE_LITERAL_RE = re.compile(r'CONTAINSSTRING\(all_cats,\s*"([^"]+)"\)')
+#: A gate call: ``IF([f-X] > 0``.
+_GATE_MEASURE_RE = re.compile(r"IF\(\[(f-[^\]]+)\]\s*>\s*0")
+#: A declared filter measure: one tab of indentation, then the name.
+_DECL_RE = re.compile(r"^\tmeasure\s+(?:'(f-[^']+)'|(f-[^\s=]+))\s*=")
 
 
 def _live(line: str) -> bool:
     return not line.strip().startswith(("//", "--"))
 
 
-def chain_body(expr: str, var: str, stops: Iterable[str]) -> Optional[str]:
+def chain_body(text: str, var: str, stop: str) -> Optional[str]:
     """Text of ``VAR <var> =`` up to the next line that starts (after
-    indentation) with one of ``stops``."""
-    m = re.search(r"\bVAR\s+" + re.escape(var) + r"\s*=", expr, re.IGNORECASE)
+    indentation) with ``stop`` (a regular expression).
+
+    The source tool spells the chain in upper case and stops it at a line
+    break; a lower-case ``var`` or a different spelling is not a chain.
+    """
+    m = re.search(r"VAR\s+" + re.escape(var) + r"\s*=\s*", text)
     if not m:
         return None
-    rest = expr[m.end():]
-    alts = "|".join(re.escape(s) for s in stops)
-    end = re.search(r"\n[ \t]*(?:" + alts + r")", rest, re.IGNORECASE)
+    rest = text[m.end():]
+    end = re.search(r"\n\s*(?:" + stop + r")", rest)
     return rest[: end.start()] if end else rest
 
 
@@ -335,7 +394,7 @@ def gate_literals(body: str) -> list[str]:
         if not _live(line):
             continue
         for m in _GATE_LITERAL_RE.finditer(line):
-            lit = m.group(1).replace('""', '"')
+            lit = m.group(1)
             if lit not in out:
                 out.append(lit)
     return out
@@ -358,9 +417,7 @@ def declared_gate_measures(text: str, prefix: str = "f-") -> list[str]:
         m = _DECL_RE.match(line.rstrip("\r"))
         if not m:
             continue
-        name = m.group(1)
-        if name.startswith("'"):
-            name = name[1:-1].replace("''", "'")
+        name = m.group(1) or m.group(2)
         if name.startswith(prefix):
             out.append(name)
     return out

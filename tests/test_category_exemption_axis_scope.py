@@ -92,3 +92,63 @@ def test_a_numbered_x_axis_row_does_exempt_a_fact(tmp_path):
     code, payload = run_check(model, "fact-table-filter-coverage")
     found = violations(payload, "O015")
     assert found == [], found
+
+
+# ---------------------------------------------------------------------------
+# The exemption itself: a user-facing measure on an x row that reads the
+# fact directly means the fact is already gated.
+# ---------------------------------------------------------------------------
+
+
+def _fact_with_measures(name: str, tag: int, *measures: tuple[str, str]) -> str:
+    body = (f"table '{name}'\n\tlineageTag: " + TAG.format(tag) + "\n\n"
+            "\tcolumn amount\n\t\tdataType: double\n\t\tlineageTag: "
+            + TAG.format(tag + 50) + "\n\t\tsourceColumn: amount\n\n")
+    for i, (measure, expression) in enumerate(measures):
+        body += (f"\tmeasure '{measure}' = {expression}\n\t\tlineageTag: "
+                 + TAG.format(tag + 100 + i) + "\n\n")
+    return body + f"\tpartition {name} = m\n\t\tmode: import\n\t\tsource = x\n"
+
+
+def _axis_on(name: str, tag: int, measure: str = "Revenue") -> str:
+    return (f"table '{name}'\n\tlineageTag: " + TAG.format(tag) + "\n\n"
+            f"\tpartition '{name}' = calculated\n\t\tmode: import\n\t\tsource = ```\n"
+            f'\t\t\t\t{{ ("Revenue", NAMEOF(\'Refunds\'[{measure}]), 0, "Sales_x") }}\n'
+            "\t\t\t```\n")
+
+
+def test_a_direct_reader_on_the_x_row_exempts_the_fact(tmp_path):
+    """The x-row measure reads the fact's data, so the fact is already gated."""
+    model = _with_mapping(tmp_path, {
+        "Refunds": _fact_with_measures("Refunds", 1, ("Revenue", "SUM(Refunds[amount])")),
+        "x-Selector 1": _axis_on("x-Selector 1", 2),
+    })
+    code, payload = run_check(model, "fact-table-filter-coverage")
+    assert violations(payload, "O015") == [], violations(payload, "O015")
+
+
+def test_a_sensor_only_reader_on_the_x_row_does_not_exempt_the_fact(tmp_path):
+    """A filter-context probe reads no data, so the fact is not gated."""
+    model = _with_mapping(tmp_path, {
+        "Refunds": _fact_with_measures("Refunds", 1,
+                                       ("Revenue", "IF(ISEMPTY('Refunds'), 0, 1)")),
+        "x-Selector 1": _axis_on("x-Selector 1", 2),
+    })
+    code, payload = run_check(model, "fact-table-filter-coverage")
+    found = violations(payload, "O015")
+    assert found, "the fact was exempt through a sensor-only reader"
+    assert "Refunds" in found[0]["message"], found[0]
+
+
+def test_reaching_the_fact_through_another_measure_does_not_exempt_it(tmp_path):
+    """The x-row measure reads no data of its own."""
+    model = _with_mapping(tmp_path, {
+        "Refunds": _fact_with_measures("Refunds", 1,
+                                       ("Store Refund", "SUM(Refunds[amount])"),
+                                       ("Revenue", "[Store Refund]")),
+        "x-Selector 1": _axis_on("x-Selector 1", 2),
+    })
+    code, payload = run_check(model, "fact-table-filter-coverage")
+    found = violations(payload, "O015")
+    assert found, "the fact was exempt through an indirect read"
+    assert "Refunds" in found[0]["message"], found[0]

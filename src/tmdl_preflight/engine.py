@@ -164,12 +164,14 @@ def check(ctx: Context, ruleset: RuleSet) -> PreflightReport:
     """Pure-read pass: run every rule, collect violations, mutate nothing."""
     report = PreflightReport()
     ctx.notes = []
+    ctx.skips = []
     for rule in ruleset.rules:
         if rule.disabled_by_policy():
             report.skipped.append(rule.name)
             report.skip_reasons[rule.name] = rule.skip_reason()
             continue
         report.violations.extend(rule.check(ctx))
+    report.skipped.extend(ctx.skips)
     report.scanned = scan_summary(ctx)
     report.notes = list(dict.fromkeys(ctx.notes))
     report.blocks = list(ctx.blocks)
