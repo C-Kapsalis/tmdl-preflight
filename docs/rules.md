@@ -3,7 +3,7 @@
 
 # tmdl-preflight rule catalog
 
-Rules: **114** · auto-fixable: **22** · baselinable: **109**.
+Rules: **116** · auto-fixable: **24** · baselinable: **111**.
 
 | Rule | Name | Severity | Fix | Description |
 |---|---|---|---|---|
@@ -53,6 +53,8 @@ Rules: **114** · auto-fixable: **22** · baselinable: **109**.
 | F013 | field-parameter-table-no-measures | error | no | Field-parameter (axis selector) tables are regenerated from their row list; a measure parked on one is lost the next time the table is rebuilt from the template, breaking everything that calls it. Move the measure to a measures table (and update qualified references). |
 | F014 | selector-branch-resolution | error | yes | A selector measure maps the selected field-parameter key ("'Table'[object]") to a measure call, as a SWITCH branch. When a measure is deleted its axis rows go but the branch keeps calling it; the containing measure then fails when the model is processed, so refresh and deployment are rejected. Every bare [X] in the result part of a branch must name an existing measure; keys and commented (parked) branches are never judged. Auto-fix deletes the dangling branch lines (and a comma left before a closing parenthesis). |
 | F015 | field-parameter-partition-shape | info | no | Advisory shape check of the numbered axis tables: an import-mode calculated partition whose fenced source lists ("label", NAMEOF(...), ...) tuples. A DirectQuery or unknown mode, or a source without such tuples, means the table is not the field parameter the axis visuals expect. validate_field_parameter_pattern = false skips the rule. |
+| F016 | fieldparam-double-slash-rows | info | yes | A field-parameter row that carries '//' is either a row that was commented out (dead residue that makes later merges and row counts lie) or a label with a double slash in it, which some editors read as the start of a comment and truncate the row. The rule reads the first fenced source of every axis table. The repair deletes the offending rows, keeps a backup of the file and is opt-in, because it removes text from a picker a user sees. |
+| F017 | fieldparam-blank-lines | info | yes | A fenced field-parameter source that scripts keep rewriting accumulates blank lines and a drifted indentation, so the file grows, the diff noise hides real changes and two copies of the same table stop comparing equal. The rule reports a source that is not in its canonical form - a blank line, the indented brace, the rows with their blank runs collapsed, the indented closing brace - and the repair rewrites the block to that form. |
 | L001 | rls-role-grammar | error | no | Every role needs 'modelPermission: read', and every tablePermission needs a filter expression ('tablePermission T = <DAX>'). A bare tablePermission is not a valid row filter; delete the line to grant the role full access to the table instead. |
 | L002 | rls-username-function | error | no | Row filters must identify the user with USERPRINCIPALNAME(). USERNAME() returns DOMAIN\user in Desktop and the UPN in the Service, so a filter written against one silently matches nothing in the other. |
 | L003 | rls-in-values-bypass | error | no | A row filter of the form '[col] IN VALUES(Mapping[col])' reads the mapping table without restricting it to the signed-in user, so every user sees every mapped value. Restrict it: CALCULATETABLE(VALUES(Mapping[col]), Mapping[UserPrincipalName] = USERPRINCIPALNAME()). |
@@ -139,6 +141,8 @@ Run `tmdl-preflight fix <path>` to repair these; a fixer marked unsafe runs only
 | F006 | fieldparam-duplicate-rows | yes |
 | F007 | fieldparam-family-consistency | yes |
 | F014 | selector-branch-resolution | yes |
+| F016 | fieldparam-double-slash-rows | no |
+| F017 | fieldparam-blank-lines | yes |
 | M003 | lineage-duplicates | yes |
 | M004 | lineage-format | yes |
 | M006 | model-table-refs | yes |

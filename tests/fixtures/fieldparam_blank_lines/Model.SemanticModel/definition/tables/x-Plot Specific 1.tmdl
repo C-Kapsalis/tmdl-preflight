@@ -1,0 +1,14 @@
+table 'x-Plot Specific 1'
+	lineageTag: 1111111100-2222-3333-4444-555555555501
+
+	partition 'x-Plot Specific 1' = calculated
+		mode: import
+		source = ```
+				
+				{
+				("Revenue", NAMEOF('Sales'[Revenue]), 0, "sales_x")
+
+
+
+				}
+				```

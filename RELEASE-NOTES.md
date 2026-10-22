@@ -85,6 +85,8 @@ the example model with one defect each. Where that evidence and the
 | F013 | field-parameter-table-no-measures | error | no |
 | F014 | selector-branch-resolution | error | yes |
 | F015 | field-parameter-partition-shape (opt-in) | info | no |
+| F016 | fieldparam-double-slash-rows | info | yes (opt-in) |
+| F017 | fieldparam-blank-lines | info | yes |
 | P001 | refresh-policy-repair | error | yes (unsafe; also adds P002's missing policies) |
 | M021 | culture-orphan-bindings | error | yes |
 | M022 | diagram-layout-blank (opt-in) | warning | yes |
@@ -217,6 +219,19 @@ until configured.
   reports one row at a time as `<table>: "<label>"`. The rule text is "All
   x-Selector field parameters must have 4th parameter (category_x_id)".
   Configure `category_column_tables` to read other tables instead.
+- **F016** reports a field-parameter row that carries `//`: a row that was
+  commented out, or a label with a double slash in it that some editor
+  truncates. The rule reads the first fenced source of every axis table
+  (`*-Selector*`, `*-Plot Specific*`). The repair deletes the offending
+  rows, keeps a copy of the file in `tables/backups/<file
+  .double_slash_backup>` and is opt-in, because it removes text from a
+  picker a user sees: a blanket `fix` skips it, `fix --select F016` runs
+  it.
+- **F017** reports a fenced field-parameter source that is not in its
+  canonical form - a blank line, the indented brace, the rows with their
+  blank runs collapsed, the indented closing brace - and the repair rewrites
+  the block to that form. The canonical indentation is the indentation of
+  the `source = ` line plus two tabs.
 
 - **B002** reports a bookmark file that is not valid JSON.
 - **B001-B003** skip bookmarks of archived report copies: paths containing

@@ -20,6 +20,10 @@ from .field_parameters import (
     MissingRowSeparatorRule,
     TrailingRowCommaRule,
 )
+from .fp_layout import (
+    FieldParameterBlankLinesRule,
+    FieldParameterDoubleSlashRowsRule,
+)
 from .fp_rows import (
     FieldParameterCommaRunsRule,
     FieldParameterDuplicateRowsRule,
@@ -207,6 +211,8 @@ ALL_RULES: list[type[Rule]] = [
     FieldParameterCategoryColumnRule,
     FieldParameterDuplicateRowsRule,
     FieldParameterFamilyConsistencyRule,
+    FieldParameterDoubleSlashRowsRule,
+    FieldParameterBlankLinesRule,
     FieldParameterArityRule,
     FieldParameterLevelConsistencyRule,
     FieldParameterRetagRule,
