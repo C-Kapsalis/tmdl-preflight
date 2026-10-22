@@ -311,11 +311,14 @@ dash-prefixed helpers carry a description.
 
 `tmdl-preflight report complexity|nameof|relationships <path>` prints the
 measure-length distribution with threshold suggestions, the NAMEOF inventory
-(with the broken references and per-table counts), or the relationship
-topology (cardinalities, both-direction filters, hubs, unrelated tables).
+(the validation block, the two families of field-parameter tables and the
+broken references), or the relationship topology (cardinalities,
+both-direction filters, hubs, unrelated tables). The reports never write a
+file.
 `tmdl-preflight format-resolve <path> --name NAME [--compare NAME2]` shows
-the format a measure name gets from a format calculation group on every
-axis the group branches on, before a rename ships.
+the format a measure name gets from a format calculation group, for every
+model under the path and on every axis the group branches on, before a
+rename ships.
 
 `tmdl-preflight grain <path> --cost-fact T --backend-fact T ...` works out
 from the relationship graph which dimensions can filter both sides of a
@@ -358,9 +361,13 @@ folder without any network access.
 column or measure name appears, model side and report side, before a rename
 or delete.
 
-`tmdl-preflight comment-refs <path>` counts ticket references (`#365`) in
-comments per model; `--floors FILE --tighten` lowers a ratchet file to
-today's counts and never raises it (rule S004 gates on the same file).
+`tmdl-preflight comment-refs <path> [--floors FILE]` counts ticket
+references (`#365`) in comments per model and per comment class, and gates
+on the floor file: a rise above the floor fails, a fall is reported for
+tightening. `--list` prints every reference, `--list PREFIX` only the
+models whose key starts with it, and `--floors FILE --tighten` lowers a
+ratchet file to today's counts and never raises it (rule S004 gates on the
+same file).
 
 `tmdl-preflight dead-facts <path>` lists the fact tables no measure reads.
 `--capture FILE` records them as the floor the dead-fact gate compares

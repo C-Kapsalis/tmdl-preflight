@@ -161,9 +161,11 @@ def test_dax_expression_statistics(stand_in):
     """Report statistics about DAX expressions (informational, always passes
     in the earlier check; the keys it printed must exist)."""
     model_dir = _materialize(stand_in, None)
-    code, out, err = run_cli("report", "complexity", model_dir, "--json")
+    code, out, err = run_cli("report", "complexity", model_dir)
     assert code == 0, err
-    stats = json.loads(out)
-    for key in ("total_expressions", "measures", "calculated_columns", "avg_length",
-                "min_length", "max_length", "total_characters"):
-        assert key in stats, key
+    lines = out.splitlines()
+    start = lines.index("📊 DAX Expression Statistics:")
+    block = lines[start:]
+    assert block[1] == "   Total expressions: 11"
+    assert block[2] == "   - Measures: 10"
+    assert block[3] == "   - Calculated columns: 1"

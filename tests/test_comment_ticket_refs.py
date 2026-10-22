@@ -53,7 +53,7 @@ def _floors(tmp_path, data) -> Path:
 
 def test_counts_by_class(tmp_path):
     root = _model(tmp_path)
-    code, out, _err = run_cli("comment-refs", str(root), "--list", "--json")
+    code, out, _err = run_cli("comment-refs", str(root), "--json")
     assert code == 0
     counts = json.loads(out)["counts"][KEY]
     # description: '#365'; inline: 'DBT#12' and the block-comment '#7'.

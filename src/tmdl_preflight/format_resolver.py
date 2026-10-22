@@ -33,6 +33,11 @@ class _Unreadable(Exception):
     pass
 
 
+class _Silent(Exception):
+    """A condition the resolver cannot place: the answer is unknown, but the
+    condition names nothing the reader can act on."""
+
+
 # ---------------------------------------------------------------------------
 # Extraction
 # ---------------------------------------------------------------------------
@@ -180,6 +185,29 @@ def _literal(text: str) -> Optional[str]:
     return None
 
 
+_COMPARE_RE = re.compile(r"^(?P<left>[^=!<>]+?)\s*(?P<op>=|<>)\s*(?P<right>.+)$")
+
+
+def _split_comparison(text: str) -> Optional[tuple[str, str]]:
+    """``(left, right)`` of a ``=`` comparison, or None when there is none."""
+    m = _COMPARE_RE.match(text.strip())
+    if not m:
+        return None
+    return m.group("left"), m.group("right")
+
+
+def _comparable(text: str) -> Optional[object]:
+    """A comparable value: a string literal or a ``{a, b}`` list."""
+    text = text.strip()
+    lit = _literal(text)
+    if lit is not None:
+        return lit
+    if text.startswith("{") and text.endswith("}"):
+        inner = text[1:-1]
+        return tuple(_literal(p.strip()) or p.strip() for p in _split_top(inner, ","))
+    return None
+
+
 def _table_of(ref: str) -> Optional[str]:
     m = re.match(r"^'((?:[^']|'')+)'\s*\[", ref)
     return m.group(1).replace("''", "'") if m else None
@@ -205,23 +233,52 @@ def _haystack(text: str, c: _Context) -> Optional[str]:
     if args:
         table = _table_of(args[0])
         if table is None:
-            return None
+            # An unquoted table name is a column of a table the resolver
+            # cannot place; the value is whatever the user sliced, and the
+            # base case is "nothing selected".
+            return ""
         return c.label if c.axis is not None and table == c.axis else ""
     return None
 
 
 def _condition(text: str, c: _Context) -> Optional[bool]:
+    """The truth of a condition, or None when it cannot be read.
+
+    Every unreadable condition of an ``&&`` / ``||`` chain is recorded, not
+    only the first: the reader wants to know which arms of the chain the
+    resolver could not place.
+    """
     text = text.strip()
     if text.startswith("(") and _closing(text, 0) == len(text) - 1:
         return _condition(text[1:-1], c)
     ors = _split_top(text, "||")
     if len(ors) > 1:
-        vals = [_condition(p, c) for p in ors]
-        return True if True in vals else (None if None in vals else False)
+        return _chain(ors, c, True)
     ands = _split_top(text, "&&")
     if len(ands) > 1:
-        vals = [_condition(p, c) for p in ands]
-        return False if False in vals else (None if None in vals else True)
+        return _chain(ands, c, False)
+    return _leaf(text, c)
+
+
+def _chain(parts: list[str], c: _Context, is_or: bool) -> Optional[bool]:
+    """The truth of a chain of conditions, recording every unreadable one."""
+    vals: list[Optional[bool]] = []
+    for part in parts:
+        try:
+            vals.append(_condition(part, c))
+        except _Silent:
+            vals.append(None)
+        except _Unreadable as exc:
+            c.unresolved.append(str(exc)[:80])
+            vals.append(None)
+    if is_or:
+        return True if True in vals else (None if None in vals else False)
+    return False if False in vals else (None if None in vals else True)
+
+
+def _leaf(text: str, c: _Context) -> Optional[bool]:
+    """The truth of a single condition (no ``||`` or ``&&``)."""
+    text = text.strip()
     if _call(text, "TRUE") == []:
         return True
     if _call(text, "FALSE") == []:
@@ -234,13 +291,13 @@ def _condition(text: str, c: _Context) -> Optional[bool]:
     if args is not None and len(args) == 1:
         table = _table_of(args[0])
         if table is None:
-            raise _Unreadable(text)
+            raise _Silent(text)
         return c.axis is not None and table == c.axis
     args = _call(text, "CONTAINSSTRING")
     if args is not None:
         needle = _literal(args[1]) if len(args) == 2 else None
         if needle is None:
-            raise _Unreadable(text)
+            raise _Silent(text)
         hay = _haystack(args[0], c)
         return None if hay is None else needle.lower() in hay.lower()
     args = _call(text, "ISSELECTEDMEASURE")
@@ -256,6 +313,12 @@ def _condition(text: str, c: _Context) -> Optional[bool]:
     if args is not None and len(args) == 1:
         hay = _haystack(args[0], c)
         return None if hay is None else hay == ""
+    sides = _split_comparison(text)
+    if sides is not None:
+        left, right = (_comparable(s) for s in sides)
+        if left is None or right is None:
+            raise _Unreadable(text)
+        return left == right
     raise _Unreadable(text)
 
 
@@ -278,13 +341,15 @@ def _value(text: str, c: _Context) -> str:
 
 def _switch(args: list[str], c: _Context) -> str:
     if not args or re.sub(r"\s+", "", args[0]).upper() != "TRUE()":
-        c.unresolved.append(f"SWITCH selector is not TRUE(): {args[0][:60] if args else ''}")
+        c.unresolved.append("SWITCH on a non-TRUE() selector")
         return UNKNOWN
     rest = args[1:]
     pairs, default = rest[: len(rest) // 2 * 2], (rest[-1] if len(rest) % 2 else None)
     for i in range(0, len(pairs), 2):
         try:
             hit = _condition(pairs[i], c)
+        except _Silent:
+            return UNKNOWN
         except _Unreadable as exc:
             c.unresolved.append(str(exc)[:80])
             return UNKNOWN
@@ -306,6 +371,8 @@ def evaluate_definition(source, measure_name, axis=None, label=None):
     c = _Context(measure_name, label, axis)
     try:
         result = _value(expr, c)
+    except _Silent:
+        result = UNKNOWN
     except _Unreadable as exc:
         c.unresolved.append(str(exc)[:80])
         result = UNKNOWN

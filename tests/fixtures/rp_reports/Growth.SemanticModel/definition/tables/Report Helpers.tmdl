@@ -1,0 +1,14 @@
+table 'Report Helpers'
+	lineageTag: 00000000-0000-0000-0000-860199421592
+
+	measure Revenue = 1
+
+	column a
+		dataType: string
+		sourceColumn: a
+
+	partition 'Report Helpers' = m
+		mode: import
+		source = ```
+			let x = 1 in x
+			```

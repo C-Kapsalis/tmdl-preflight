@@ -171,10 +171,14 @@ def build_parser() -> argparse.ArgumentParser:
                         help="shrink an existing baseline to what still fails; "
                              "never adds entries")
     p_base.add_argument("--accept-new", action="store_true",
-                        help="with --update, also add today's new violations")
+                         help="with --update, also add today's new violations")
+    p_base.add_argument("--capture-floors", metavar="RULE",
+                         help="record the floor file of a ratcheted rule (O007, "
+                              "R008 or R016) from today's findings and write it out")
     p_base.add_argument("--select", help=argparse.SUPPRESS)
     p_base.add_argument("--ignore", help=argparse.SUPPRESS)
     _add_config_options(p_base)
+
 
     p_stats = sub.add_parser("stats", help="print an inventory of the project (counts only)")
     p_stats.add_argument("path", help=path_help)
@@ -206,6 +210,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_refs.add_argument("--floors", metavar="FILE", help="the ratchet file to compare with")
     p_refs.add_argument("--tighten", action="store_true",
                         help="lower the floors in FILE to today's counts (never raises)")
+    _add_config_options(p_refs)
 
     p_report = sub.add_parser("report", help="read-only reports (complexity, nameof, relationships)")
     p_report.add_argument("kind", choices=("complexity", "nameof", "relationships"),
@@ -214,7 +219,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_report.add_argument("--json", action="store_true", help="machine-readable output")
     p_report.add_argument("--top", type=int, default=10, help="complexity: longest N measures")
     p_report.add_argument("--group-prefix", action="append", metavar="PREFIX",
-                          help="nameof: table-name prefix to group by (repeatable)")
+                          help="nameof: the table-name prefix of the x family "
+                               "(default: x-Selector and x-Plot Specific)")
 
     p_fmt = sub.add_parser("format-resolve",
                            help="resolve the format a measure name gets from a format "
@@ -392,6 +398,28 @@ def _validate_ids(full: RuleSet, select: Optional[set[str]], ignore: Optional[se
             )
 
 
+#: The rule options that name a file. A relative path in one of them is
+#: resolved against the folder of the configuration file that set it, so a
+#: run from anywhere finds the same file.
+_PATH_OPTIONS = ("floors", "baseline")
+
+
+def _resolve_option_paths(options: dict, cfg: Config) -> dict:
+    """Resolve the relative file paths of a rule's options."""
+    if not cfg.source:
+        return options
+    out = dict(options)
+    for name in _PATH_OPTIONS:
+        value = out.get(name)
+        if not isinstance(value, str) or not value:
+            continue
+        path = Path(value)
+        if not path.is_absolute():
+            path = Path(cfg.source).parent / path
+        out[name] = str(path)
+    return out
+
+
 def _effective_ruleset(full: RuleSet, cfg: Config, args) -> RuleSet:
     cli_select = _parse_id_list(args.select)
     cli_ignore = _parse_id_list(args.ignore)
@@ -402,7 +430,7 @@ def _effective_ruleset(full: RuleSet, cfg: Config, args) -> RuleSet:
     ignore = (cli_ignore or set()) | {s.lower() for s in cfg.ignore}
     for rule in full.rules:
         if rule.id in cfg.rule_options:
-            rule.configure(cfg.rule_options[rule.id])
+            rule.configure(_resolve_option_paths(cfg.rule_options[rule.id], cfg))
     ruleset = full.select(select, ignore or None)
     if not ruleset.rules:
         raise UsageError(
@@ -562,7 +590,42 @@ def _after_fix_cache(args, report: PreflightReport, ctx: Context) -> None:
             )
 
 
+def _cmd_capture_floors(args) -> int:
+    """Record the floor file of a ratcheted rule from today's findings."""
+    from .ratchet import CAPTURED_RULES, capture_floors, write_floors
+
+    wanted = args.capture_floors.strip()
+    full = full_ruleset()
+    names = {r.id.lower(): r.id for r in full.rules}
+    names.update({r.name.lower(): r.id for r in full.rules})
+    rule_id = names.get(wanted.lower(), wanted.upper())
+    if rule_id not in CAPTURED_RULES:
+        raise UsageError(
+            f"--capture-floors names a rule whose floor file cannot be captured: "
+            f"{args.capture_floors!r}. The rules that can: {', '.join(CAPTURED_RULES)}."
+        )
+    cfg = _load_config(args, full)
+    ctx = _context(args.path, cfg.exclude, cfg.exclude_configured)
+    options = cfg.rule_options.get(rule_id, {})
+    root = Path(args.path)
+    target = Path(args.output) if args.output else (
+        (root if root.is_dir() else root.parent) / f"{rule_id.lower()}_floors.json"
+    )
+    existing: dict = {}
+    if rule_id == "R008" and target.exists():
+        from .ratchet import load_floors
+
+        existing = load_floors(target, missing_ok=True)
+    floors, entries, message = capture_floors(rule_id, ctx, options, existing)
+    indent = 1 if rule_id == "R008" else 2
+    write_floors(target, floors, indent=indent)
+    print(f"{message} -> {target}")
+    return 0
+
+
 def _cmd_baseline(args) -> int:
+    if args.capture_floors:
+        return _cmd_capture_floors(args)
     if args.select or args.ignore:
         raise UsageError(
             "a baseline must be recorded from a full run; drop --select/--ignore "
@@ -658,6 +721,14 @@ def _cmd_report(args) -> int:
     if args.kind == "complexity":
         data = reports.complexity(models, top=args.top)
         text = reports.render_complexity
+        if args.json:
+            print(json.dumps({
+                "total_measures": data["total_measures"],
+                "statistics": data["statistics"],
+                "top_10_complex": data["top_10_complex"],
+                "all_measures": data["all_measures"],
+            }, indent=2))
+            return 0
     elif args.kind == "nameof":
         data = nameof.build_report(models[0], args.group_prefix)
         for extra in models[1:]:
@@ -666,45 +737,75 @@ def _cmd_report(args) -> int:
             for k, v in other["statistics"].items():
                 data["statistics"][k] += v
         text = nameof.render_report
+        if args.json:
+            def _tables(name):
+                return {table: {k: v for k, v in row.items() if k != "samples"}
+                        for table, row in data["families"].get(name, {}).items()}
+
+            x, y = _tables("x"), _tables("y")
+            print(json.dumps({
+                "x_selector": x,
+                "y_selector": y,
+                "summary": {
+                    "x_selector_refs": sum(r["nameof_refs"] for r in x.values()),
+                    "x_selector_broken": sum(r["broken_refs"] for r in x.values()),
+                    "y_selector_refs": sum(r["nameof_refs"] for r in y.values()),
+                    "y_selector_broken": sum(r["broken_refs"] for r in y.values()),
+                    "total_refs": sum(r["nameof_refs"] for r in x.values())
+                    + sum(r["nameof_refs"] for r in y.values()),
+                    "total_broken": sum(r["broken_refs"] for r in x.values())
+                    + sum(r["broken_refs"] for r in y.values()),
+                },
+            }, indent=2))
+            return 0
     else:
         data = reports.relationships(models[0])
+        data["relationships_file"] = str(models[0].definition_path / "relationships.tmdl")
+        data["tables_folder"] = str(models[0].definition_path / "tables")
         text = reports.render_relationships
+        if args.json:
+            print(json.dumps({k: v for k, v in data.items()
+                              if k not in ("relationships_file", "tables_folder")},
+                             indent=2, ensure_ascii=False))
+            return 0
     print(json.dumps(data, indent=2) if args.json else text(data))
     return 0
 
 
 def _cmd_format_resolve(args) -> int:
-    from .format_resolver import UNKNOWN, branched_axes, decimals, resolve
+    from .format_resolver import branched_axes, decimals, resolve
 
     ctx = _context(args.path)
-    table = next((t for m in ctx.models for t in m.table_list if t.name == args.table), None)
-    if table is None:
-        raise UsageError(f"no table '{args.table}' in {args.path}")
-    text = table.file.read_text(encoding="utf-8-sig")
-    axes = [args.axis] if args.axis else [None, *branched_axes(text)]
     rows = []
-    for axis in axes:
-        fmt, unresolved = resolve(table.file, args.name, axis=axis, label=args.label)
-        row = {"axis": axis, "format": fmt, "decimals": decimals(fmt), "unresolved": unresolved}
-        if args.compare:
-            other, _u = resolve(table.file, args.compare, axis=axis)
-            row["compare_format"] = other
-            row["compare_decimals"] = decimals(other)
-            row["decimals_differ"] = decimals(other) != decimals(fmt)
-        rows.append(row)
+    for model in ctx.models:
+        table = model.get_table(args.table)
+        if table is None:
+            continue
+        text = table.file.read_text(encoding="utf-8-sig")
+        axes = [args.axis] if args.axis else [None, *branched_axes(text)]
+        for axis in axes:
+            fmt, unresolved = resolve(table.file, args.name, axis=axis, label=args.label)
+            row = {"model": ctx.model_key(model), "axis": axis, "format": fmt,
+                   "decimals": decimals(fmt), "unresolved": unresolved}
+            if args.compare:
+                other, _u = resolve(table.file, args.compare, axis=axis)
+                row["compare_format"] = other
+                row["compare_decimals"] = decimals(other)
+                row["decimals_differ"] = decimals(other) != decimals(fmt)
+            rows.append(row)
     if args.json:
         print(json.dumps({"name": args.name, "compare": args.compare, "results": rows}, indent=2))
         return 0
     for row in rows:
-        where = row["axis"] or "(measure name)"
-        line = f"{where}: {row['format'] if row['format'] != UNKNOWN else '<unknown>'}"
+        where = row["axis"] or "SELECTEDMEASURENAME"
+        line = f"  {row['model']:<46} axis={where:<24} {row['format']!r}"
         if args.compare:
-            line += f"   {args.compare}: {row['compare_format']}"
+            line += f"  ->  {row['compare_format']!r}"
             if row["decimals_differ"]:
-                line += "   (decimals differ)"
+                line += "   ⚠ CHANGES"
         print(line)
-        for u in row["unresolved"]:
-            print(f"    unresolved: {u}")
+        if row["unresolved"]:
+            print(f"       unresolved: {row['unresolved'][:2]!r}")
     return 0
 
 
@@ -1040,52 +1141,145 @@ def _cmd_dead_facts(args) -> int:
 
 
 def _cmd_comment_refs(args) -> int:
-    from .ratchet import RatchetFileError, load_floors, write_floors
-    from .rules.comments import CLASSES, count_by_class, model_ticket_refs
+    from .ratchet import RatchetFileError, load_floors, matching_key, write_floors
+    from .rules.comments import CLASSES, root_ticket_refs
 
-    ctx = _context(args.path)
+    cfg = _load_config(args, full_ruleset())
+    ctx = _context(args.path, cfg.exclude, cfg.exclude_configured)
+    root = Path(args.path)
+    refs = root_ticket_refs(root, ctx)
     counts: dict[str, dict[str, int]] = {}
-    hits: dict[str, list] = {}
-    for model in ctx.models:
-        key = ctx.model_key(model)
-        refs = model_ticket_refs(model.definition_path, ctx)
-        counts[key] = count_by_class(refs)
-        hits[key] = refs
-    if args.tighten:
-        if not args.floors:
-            raise UsageError("--tighten needs --floors FILE")
+    for ref in refs:
+        counts.setdefault(ref.model, {c: 0 for c in CLASSES})
+        counts[ref.model][ref.cls] += 1
+
+    if args.list is not None:
+        return _comment_refs_list(args, root, refs)
+
+    floors: dict = {}
+    if args.floors:
         try:
             floors = load_floors(args.floors, missing_ok=True)
         except RatchetFileError as exc:
             raise UsageError(str(exc)) from exc
-        seeded = not Path(args.floors).exists()
+
+    if args.tighten:
+        if not args.floors:
+            raise UsageError("--tighten needs --floors FILE")
+        if not Path(args.floors).exists():
+            print("no floors file yet — seeding from the current scan")
+            write_floors(args.floors, {k: dict(v) for k, v in sorted(counts.items())})
+            return 0
+        lowered = []
         new: dict[str, dict[str, int]] = {}
-        for key, entry in floors.items():
-            now = counts.get(key)
-            if now is None:
-                continue  # the model is gone: its entry goes with it
-            new[key] = {c: min(int(entry.get(c, 0)), now[c]) for c in CLASSES}
-        if seeded:
-            new = {k: dict(v) for k, v in counts.items()}
-        new = {k: v for k, v in sorted(new.items()) if any(v.values())}
+        done: set[str] = set()
+        for key in sorted(set(floors) | set(counts)):
+            floor_key = matching_key(floors, key) if key in counts else key
+            if floor_key in done:
+                continue
+            done.add(floor_key)
+            entry = floors.get(floor_key) or {}
+            model = _model_for_key(floors, counts, key)
+            cur = counts.get(model, {c: 0 for c in CLASSES}) if model else {c: 0 for c in CLASSES}
+            row = {}
+            for cls in CLASSES:
+                old = int(entry.get(cls, 0))
+                now = int(cur.get(cls, 0))
+                if now < old:
+                    lowered.append(f"{floor_key} {cls}: {old} -> {now}")
+                row[cls] = min(old, now)
+            if any(row.values()):
+                new[floor_key] = row
         write_floors(args.floors, new)
-        print(f"tmdl-preflight: floors written to {args.floors} ({len(new)} model(s))")
+        print("\n".join(lowered) if lowered else "nothing to tighten")
         return 0
+
     if args.json:
-        payload: dict = {"counts": counts}
-        if args.list is not None:
-            payload["refs"] = [
-                {"model": k, "file": str(r.file), "line": r.line, "class": r.cls, "ref": r.ref}
-                for k, refs in hits.items() if k.startswith(args.list) for r in refs
-            ]
-        print(json.dumps(payload, indent=2))
+        print(json.dumps({"counts": counts}, indent=2))
         return 0
+
+    return _comment_refs_gate(args, floors_path=args.floors, counts=counts, floors=floors, refs=refs)
+
+
+def _model_for_key(floors, counts, key):
+    """The scanned model a floors key names, or None when it names none."""
+    from .ratchet import matching_key
+
+    if key in counts:
+        return key
+    for model in counts:
+        if matching_key(floors, model) == key:
+            return model
+    return None
+
+
+def _comment_refs_list(args, root: Path, refs) -> int:
+    """One line per reference, then the total."""
+    prefix = args.list or ""
+    shown = [r for r in refs if r.model.startswith(prefix)]
+    for ref in shown:
+        rel = ref.file.relative_to(root).as_posix()
+        print(f"{rel}:{ref.line}  [{ref.cls}]  {ref.text[:140]}")
+    print()
+    print(f"{len(shown)} reference(s) in {len({r.model for r in shown})} model(s)")
+    return 0
+
+
+def _comment_refs_gate(args, floors_path, counts, floors, refs) -> int:
+    """The gate: the counts against the committed floor."""
+    from .ratchet import ambiguous_keys, matching_key
+    from .rules.comments import CLASSES
+
+    rises = []
+    below = []
+    claimed = set()
     for key in sorted(counts):
-        c = counts[key]
-        print(f"{key}: description {c['description']}, inline {c['inline']}")
-        if args.list is not None and key.startswith(args.list):
-            for r in hits[key]:
-                print(f"  {r.file.name}:{r.line} [{r.cls}] {r.ref}  {r.text}")
+        floor_key = matching_key(floors, key)
+        entry = floors.get(floor_key) or {} if floor_key else {}
+        claimed.add(floor_key)
+        cur = counts[key]
+        for cls in CLASSES:
+            floor = int(entry.get(cls, 0))
+            if cur.get(cls, 0) > floor:
+                rises.append(f"{key} [{cls}]: {floor} -> {cur[cls]}")
+            elif cur.get(cls, 0) < floor:
+                below.append(f"{key} [{cls}]: {floor} -> {cur.get(cls, 0)}")
+        for candidate in ambiguous_keys(floors, key):
+            print(f"   note: the floor key '{candidate}' could name '{key}' but "
+                  f"several keys say so; none of them was used.")
+    for key in sorted(set(floors) - claimed):
+        entry = floors[key] or {}
+        for cls in CLASSES:
+            floor = int(entry.get(cls, 0))
+            if floor:
+                below.append(f"{key} [{cls}]: {floor} -> 0")
+    below.sort()
+    if rises:
+        print(f"❌ issue/PR references in TMDL comments ROSE above the committed floor "
+              f"in {len(rises)} model/class(es):")
+        for line in rises:
+            print(f"   {line}")
+        print()
+        print("   Offending lines (new refs are among these; comments carry the mechanism, "
+              "the commit carries the issue):")
+        risen = {line.split(" [")[0] for line in rises}
+        shown = 0
+        for ref in refs:
+            if ref.model in risen and shown < 40:
+                rel = ref.file.relative_to(Path(args.path)).as_posix()
+                print(f"   {rel}:{ref.line}  [{ref.cls}]  {ref.text[:120]}")
+                shown += 1
+        print()
+        print(f"   Fix the comment, or (human edit, justified in the PR) raise "
+              f"{floors_path}.")
+        return 1
+    total = sum(sum(v.values()) for v in counts.values())
+    print(f"✅ comment issue-ref ratchet: {total} reference(s) across {len(counts)} "
+          f"model(s), none above floor")
+    if below:
+        print("   below floor — tighten with --tighten:")
+        for line in below:
+            print(f"   {line}")
     return 0
 
 

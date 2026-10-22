@@ -318,19 +318,32 @@ class DeadAnchorCalendarRule(Rule):
     id = "R016"
     name = "dead-anchor-calendar"
     severity = Severity.ERROR
-    option_defaults = {"template": None, "retained": [], "max_hops": 2}
+    option_defaults = {"template": None, "retained": [], "max_hops": 2, "floors": None}
     description = (
         "An anchor calendar (a table named '__…Calendar') that reaches no "
         "table through active relationships filters nothing: every cohort "
         "measure written against it renders the grand total or blanks. "
         "Calendars the template model also carries (set 'template' to its "
-        "folder) and tables listed in 'retained' are not anchors. Use the "
-        "baseline to accept known dead calendars."
+        "folder) and tables listed in 'retained' are not anchors. The 'floors' "
+        "file (a JSON object of model key to a list of calendar names) "
+        "accepts the dead calendars that are known; a configured file that "
+        "does not exist is an error."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
+        from ..ratchet import RatchetFileError, entry_for, load_floors
+
         out: list[Violation] = []
         excluded = set(self.options.get("retained") or [])
+        floors: Optional[dict] = None
+        if self.options.get("floors"):
+            try:
+                floors = load_floors(self.options["floors"])
+            except RatchetFileError as exc:
+                return [self.violation(
+                    f"{exc}; record the accepted dead anchor calendars (or an "
+                    f"empty object) before relying on this gate.",
+                )]
         template = self.options.get("template")
         template_models = [m for m in ctx.models if template and ctx.model_matches(template, m)]
         for tm in template_models:
@@ -339,16 +352,31 @@ class DeadAnchorCalendarRule(Rule):
         for model in ctx.models:
             if model in template_models:
                 continue
+            key = ctx.model_key(model)
+            accepted: set[str] = set()
+            if floors is not None:
+                _found, value = entry_for(floors, key)
+                accepted = set(value or [])
             graph = filter_graph(model)
+            dead: list[str] = []
             for f in sorted((model.definition_path / "tables").glob("*.tmdl")):
                 stem = f.stem
                 if not (stem.startswith("__") and stem.endswith("Calendar")) or stem in excluded:
                     continue
                 if not reachable(graph, stem, int(self.options["max_hops"])):
-                    out.append(self.violation(
-                        f"anchor calendar {stem} reaches no table through an active "
-                        f"relationship, so it filters nothing. Wire it to the anchor date "
-                        f"on its subject dimension, or delete it.",
-                        file=f, obj=stem,
-                    ))
+                    dead.append(stem)
+            for stem in dead:
+                if stem in accepted:
+                    continue
+                f = model.definition_path / "tables" / f"{stem}.tmdl"
+                out.append(self.violation(
+                    f"anchor calendar {stem} reaches no table through an active "
+                    f"relationship, so it filters nothing. Wire it to the anchor date "
+                    f"on its subject dimension, or delete it.",
+                    file=f if f.exists() else None, obj=stem,
+                ))
+            for stem in sorted(accepted - set(dead)):
+                ctx.notes.append(
+                    f"[dead-anchor-calendar floor] {{{key}: [{stem}]}} now reach "
+                    f"something — tighten the floor")
         return out

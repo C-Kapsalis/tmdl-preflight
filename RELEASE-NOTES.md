@@ -110,6 +110,13 @@ Contract rules (C001-C008, R008, F005, S005, X001) read their contracts from the
 configuration (`contracts` section or rule options) and report nothing
 until configured.
 
+**S004 stays opt-in.** The reference ran the ticket-reference gate on every
+run against a committed floor file. The tool needs a floor file to be
+configured before it can gate, and a rule that is on by default without one
+fails every model that carries a reference, so the rule runs only when it
+is named. The `comment-refs` command is the always-available gate: it reads
+the same floor file and fails on a rise.
+
 ### Changed rules
 
 - **M002** pairs ``` fences by structure (a fence opens after `=` and closes
@@ -372,6 +379,12 @@ unchanged.
   measure reads. `--capture FILE` records them as the floor the dead-fact
   gate compares against (a JSON object of model key to the sorted list of
   dead fact tables, the models with none left out).
+
+  counts ticket references in comments. With a floor file it gates: a rise
+  above the floor fails, a fall is reported for tightening. `--tighten`
+  only ever lowers floors and drops all-zero entries.
+- `baseline --capture-floors O007|R008|R016 [--output FILE]` writes the
+  floor file of a ratcheted rule from today's findings.
 - Ratchet files for O007, R008 and S004 keep the shape teams already use: a
   JSON object keyed by the `*.SemanticModel` folder relative to the scanned
   root (with or without the suffix). Recorded entries that no longer fail
@@ -508,6 +521,116 @@ unchanged.
   prints, per model, the user-facing measures it found on a fact (with the
   field parameter that surfaces one) and the advisory ones with the
   recommended actions.
+
+- **A floor file can be written by the tool.** `baseline --capture-floors
+  O007|R008|R016 [--output FILE]` records what the rule finds today in the
+  file the rule reads back, so a team does not have to write it by hand.
+  The dead fact tables and the dead anchor calendars record only the models
+  that have some; the account keys record every scanned model, an empty
+  list included.
+- **R016 reads a floor file.** The `floors` option holds the dead anchor
+  calendars that are known: one that is listed is not a finding, one that
+  now reaches something prints a tighten hint, and a configured file that
+  does not exist is an error.
+- **R008 fails a model with no floor entry.** Until the entry is recorded
+  deliberately, the model is a finding and the message names what is
+  flagged. The old option turns this off.
+- **The tighten hints read as the reference reads them.** The dead fact
+  tables print `[dead-fact-table floor] entries no longer dead — tighten
+  the floor:` and the account keys print `FIXED since the floor was
+  recorded (N): ...` and `KNOWN BACKLOG (ratcheted, not failing) - N
+  table(s) awaiting an active <dimension> relationship: ...`.
+- **A relative floor path is resolved against the configuration.** A
+  `floors` or `baseline` path that is relative is read next to the
+  configuration file that names it, not next to the working directory, so a
+  run from anywhere finds the same file. BUGFIX.
+- **`report complexity` reads like a report.** The banners, the statistics,
+  the length distribution, the longest measures and the suggested
+  thresholds are printed in the layout a reviewer reads, and the expression
+  statistics follow. The report writes no file: the old version left a
+  `measure_complexity.json` in the working directory on every run.
+- **`report complexity --json` holds the reference keys.** `total_measures`,
+  `statistics`, `top_10_complex` and `all_measures`, in that order, with
+  the average lengths as plain floats. The extra blocks the tool used to
+  add (buckets, thresholds, the flat copies of the expression block) are
+  gone; the thresholds the text report prints are still there.
+- **A measure is measured without the indentation of its first line.** The
+  later lines keep theirs, so a multi-line measure is two characters
+  shorter than the file suggests. BUGFIX.
+- **`report nameof` groups the field-parameter tables in two families.**
+  The x family (the `x-Selector` and `x-Plot Specific` tables) and the y
+  family (the `y-Selector` and `y-Plot Specific` tables), each sorted by
+  name, with the references each table holds and the broken ones. The
+  validation block comes first, then the two families, then the summary.
+- **`report nameof --json` holds the two families and the summary.** The
+  keys are `x_selector`, `y_selector` and `summary`.
+- **The NAMEOF reasons read as the reference reads them.** `Measure 'X' not
+  found in any table`, `Ambiguous: measure 'X' exists in multiple tables:
+  ['A', 'B']`, `Table 'T' not found`, `Column 'C' not found in table 'T'`,
+  `'C' is a measure, not a column. Use NAMEOF([C]) instead` and `Invalid
+  reference format`. The tool-only cases (a casing mismatch, an excluded
+  table, an unparseable field-parameter row) keep their own text.
+- **`report relationships` reads like a report.** The progress lines, the
+  summary, the cardinality types, the bidirectional relationships, the
+  orphan categories and the hub tables are printed in the layout a reviewer
+  reads. The report writes no file.
+- **The orphan categories are named after what they are.** The key is
+  `report_tables`, not `parameter_tables`, and the JSON keeps the
+  cardinalities and the hubs in the order the relationships file lists
+  them. BUGFIX: a relationship block on the first line of the file is
+  counted, as the file's own structure says it should be.
+- **`comment-refs` is a gate.** With a floor file it compares the counts
+  with the floors and fails when a model or a class rose above its floor:
+  the risen model/class pairs, the offending lines, and the line that says
+  to raise the floor by hand. Without a rise it prints the totals and, for
+  every class below its floor, the pair to tighten. Without a floor file it
+  keeps printing today's counts.
+- **`comment-refs --list` lists the references.** One line per reference —
+  `<file>:<line>  [<class>]  <line>` — then the number of references and
+  the number of models. `--list` takes precedence over `--tighten`.
+- **`comment-refs --tighten` says what it lowered.** A floor file that does
+  not exist yet is seeded from the current scan; otherwise one line per
+  lowered class, or `nothing to tighten`.
+- **A floor key never borrows another model's floor.** A floor key matches
+  a model only when it is that model's key, with or without the
+  `.SemanticModel` suffix. A key whose last path segments equal the model
+  key is used when exactly one key in the file says so; when several do,
+  none is used, so a run on one client never passes on another's floor.
+- **`comment-refs` reads the whole scan root.** Every `*.tmdl` under it
+  counts, not only the model definition folders; a file outside a model
+  belongs to the folder it sits in. In a git work tree only tracked files
+  are read. The `tests/` folder is skipped, and a configured `exclude` list
+  replaces that default as it does for every other scan. BUGFIX: an
+  unclosed double quote no longer hides the comment behind it, and a file
+  that cannot be decoded is read with replacement characters instead of
+  being skipped. BUGFIX: a file with a byte-order mark keeps its `///`
+  line a description.
+- **`format-resolve` resolves every model under the path.** It used to
+  answer for the first model it found; now it answers for each model under
+  the path, in model-path order, one row for the measure-name path and one
+  row for every axis the calculation group branches on. A model without the
+  calculation group is skipped silently. Each row reads
+  `  <model> axis=<axis> <format>`, the format quoted the Python way, with
+  `  ->  <format>` and `   ⚠ CHANGES` appended under `--compare`. A row
+  whose conditions could not be read is followed by
+  `       unresolved: [...]` with the first two conditions named.
+- **`format-resolve` reads a wider grammar.** A parenthesised condition,
+  `FALSE()`, a `TRUE ()` selector, a lower-case `return`, a fenced
+  definition and a `{...}` list inside a condition are now evaluated
+  instead of reported as unknown. BUGFIX.
+- **An unquoted table in `SELECTEDVALUE` means "nothing selected".** The
+  condition is then readable (usually false) and the evaluation continues,
+  so the format resolves instead of coming back unknown. BUGFIX.
+- **The format resolver names every unreadable condition of a chain.** It
+  recorded only the first; now each unreadable condition of an `&&` / `||`
+  chain is named. A non-literal needle in `CONTAINSSTRING` and an unquoted
+  table in `ISINSCOPE` give the unknown result without a note, and the
+  note for a selector that is not `TRUE()` is exactly
+  `SWITCH on a non-TRUE() selector`. BUGFIX.
+- **S005 names the file and the axis it failed on.** The finding reads
+  `<file> axis=<axis> renders '<name>' as <format> — <n> decimals`, so a
+  reviewer sees which calculation group and which branch lost the
+  decimals. One finding per failing axis, not one per model.
 - **`stats --measures` prints one summary per model.** A folder with two
   models prints two summaries, each with its own totals, in the layout a
   reviewer reads: the totals, the user-facing and helper split, the

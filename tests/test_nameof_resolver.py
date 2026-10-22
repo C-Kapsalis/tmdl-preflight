@@ -27,6 +27,7 @@ import json
 import pytest
 
 from conftest import run_check, run_cli, violations
+from tmdl_preflight import nameof
 from tmdl_preflight.parser import parse_model
 
 FIXTURE = "test_dax_parsable_bikeshop"
@@ -224,11 +225,12 @@ def test_validate_invalid_column_reference(model):
 
 
 def test_get_reference_statistics(model, model_dir):
-    """Statistics from `report nameof --json`."""
+    """Statistics from the resolver, and the report that shows them."""
     refs = NameofResolver(model).find_all_nameof_references()
     code, out, err = run_cli("report", "nameof", model_dir, "--json")
     assert code == 0, err
-    stats = json.loads(out)["statistics"]
+    payload = json.loads(out)
+    stats = nameof.statistics(refs)
 
     assert "total_references" in stats
     assert "measure_references" in stats
@@ -240,6 +242,7 @@ def test_get_reference_statistics(model, model_dir):
     assert stats["measure_references"] + stats["column_references"] == stats["total_references"]
     assert stats["unique_tables"] > 0
     assert stats["unique_objects"] > 0
+    assert set(payload) == {"x_selector", "y_selector", "summary"}
 
 
 def _report_text(model_dir):
