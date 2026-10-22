@@ -243,6 +243,9 @@ until configured.
   `2 field-parameter selector branch(es) call a measure that does not exist — the containing helper/projected measure fails at processing time and PBI rejects the model on refresh/deploy.: Fixture Measures.tmdl:11  [Gone Measure] [Also Gone]`.
   The auto-fix says how many branches it killed, once per model:
   `killed 2 dangling selector branch(es)`.
+- The findings of F011, F012, F013 and F014 name the object in the message
+  and leave the report's object field empty: the message already says which
+  table, which line and which measure the finding is about.
 
 ### Commands and options
 
