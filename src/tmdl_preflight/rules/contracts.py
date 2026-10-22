@@ -22,6 +22,7 @@ from typing import Any, Iterable, Optional
 from ..model import SemanticModel, Table
 from ..parser import parse_endpoint
 from .base import Context, Rule, Severity, Violation
+from .relationships import short_rel_id
 
 
 def _entries(ctx: Context, section: str, extra: Iterable[dict] = ()) -> list[dict]:
@@ -264,7 +265,7 @@ class ModelContractRelationshipsRule(Rule):
                 out.append(self.violation(message, file=self._where(model), obj=dim))
             else:
                 out.append(self.violation(message, file=rel.file, line=rel.line,
-                                          obj=f"relationship {rel.rel_id[:8]}"))
+                                          obj=f"relationship {short_rel_id(rel.rel_id)}"))
         return out
 
     def _guard(self, model: SemanticModel, g: dict) -> list[Violation]:

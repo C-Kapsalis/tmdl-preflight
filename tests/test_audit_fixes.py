@@ -330,3 +330,39 @@ def test_every_write_text_in_the_tool_names_its_newline():
                     and not any(k.arg == "newline" for k in node.keywords)):
                 missing.append(f"{file.name}:{node.lineno}")
     assert missing == [], missing
+
+
+# ---------------------------------------------------------------------------
+# 6. smaller findings
+# ---------------------------------------------------------------------------
+
+
+def test_r007_finding_is_one_line(tmp_path):
+    model = _autodetected(tmp_path)
+    code, out, err = run_cli("check", model, "--select", "R007", "--no-config")
+    lines = [ln for ln in out.splitlines() if " R007 " in ln]
+    assert len(lines) == 1, out
+    assert "AutoDetected_5c1d2e3f-4a5b-4c6d-8e7f-901234567890" in lines[0], out
+
+
+def test_r007_json_message_has_no_newline(tmp_path):
+    import json as _json
+
+    model = _autodetected(tmp_path)
+    code, out, err = run_cli("check", model, "--select", "R007", "--json", "--no-config")
+    found = [v for v in _json.loads(out)["violations"] if v["rule"] == "R007"]
+    assert found and "\n" not in found[0]["message"], found
+
+
+def test_r003_names_an_autodetected_relationship_readably(tmp_path):
+    dup = (
+        "relationship 1f6f2b3a-8c1d-4e5f-9a70-1b2c3d4e5f60\n"
+        "\tfromColumn: Beans.kg\n"
+        "\ttoColumn: Beans.id\n\n"
+        + AUTODETECTED
+    )
+    model = _autodetected(tmp_path, dup.encode())
+    code, out, err = run_cli("check", model, "--select", "R003", "--no-config")
+    assert "[relationship AutoDetected_5c1d2e3f]" in out, out
+    assert "duplicate of relationship 1f6f2b3a:" in out, out
+    assert "AutoDete]" not in out, out

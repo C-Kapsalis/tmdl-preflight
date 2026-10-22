@@ -50,6 +50,18 @@
   rewrites, the `--write-holdbacks` file and the `live --record`
   responses were written in text mode, so Windows got CRLF and a file
   committed from Windows differed from the same file written elsewhere.
+- BUGFIX (kept): an R007 finding is one line. Its message ended the
+  endpoints with a newline and put `name: <id>` on a second line, which
+  broke the one-finding-per-line text report and put a newline in the
+  JSON `message`. The name now follows on the same line, after two
+  spaces.
+- BUGFIX (kept): a relationship id is shortened readably in a finding.
+  R001 to R006 and the C003 contract cut the id to its first eight
+  characters, which turned `AutoDetected_5c1d2e3f-…` into `AutoDete`. The
+  GUID in the id is cut to eight characters and a prefix is kept
+  (`relationship AutoDetected_5c1d2e3f`); a bare GUID reads as before,
+  and an id with no GUID is kept whole. A baseline entry for such a
+  finding names the new object, so it is reported once as new.
 
 ## 1.2.1 (2026-10-22)
 
