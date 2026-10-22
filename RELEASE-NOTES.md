@@ -197,7 +197,9 @@ until configured.
   advice once per run, after the summary: `Removed 3 orphan comma(s) across
   1 file(s). ...`, `Repaired 1 separator defect(s) across 1 file(s). ...`,
   `removed 1 duplicate axis row(s) under <folder>`, and the three ragged-row
-  blocks (auto-realigned, auto-padded, over-long rows left untouched).
+  blocks (auto-realigned, auto-padded, over-long rows left untouched). F002
+  and F003 are two rules, so each prints its own separator-defect line when
+  it changed something.
 - **F006**'s fixer leaves a commented-out row alone: a copy of the row
   that sits behind a `--` or `//` marker is a parked row, and removing it
   would destroy a row the author kept on purpose.
