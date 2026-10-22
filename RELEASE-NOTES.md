@@ -146,6 +146,20 @@ until configured.
   (`<file>: visualName '<ref>' has no matching visual directory`, and
   `Could not parse <path>: <error>` for a file it cannot read), and the rule
   description keeps the advice on how to resolve one.
+- **B003** names the file it found an illegal key in, relative to the scan
+  root, so two reports that hold a bookmark of the same name are told apart:
+  the finding is `<path>  ->  options.<key>` and the fix line is
+  `<path>  ->  removed options.<key>`. The summaries are the ones the repair
+  script printed (`<n> illegal options key(s) across <scanned> bookmark
+  file(s):`, `clean: <scanned> bookmark file(s), no illegal options keys`,
+  `fixed <n> illegal options key(s):`, `nothing to fix: <scanned> bookmark
+  file(s) already clean`, and `REFUSED <n> unsafe repair(s):`).
+- BUGFIX: B003 removes an illegal key whatever its value is (an object, an
+  array, a number in exponent form); the original refused those repairs and
+  left the file unchanged.
+- `check --select B003` on a path with no bookmark file says `error: no
+  bookmark files under <path> — the glob is broken, not the repo` and exits
+  2.
 - BUGFIX: a "MISSING $schema" finding of B007 names the path relative to the
   `.Report` folder (`definition/pages/p1/visuals/v1/visual.json`, `.platform`);
   the original computed the path three folders up, which was wrong for every

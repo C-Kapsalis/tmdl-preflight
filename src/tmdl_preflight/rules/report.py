@@ -62,6 +62,11 @@ def report_of(path: Path) -> Optional[Path]:
     return None
 
 
+def _relative(ctx: Context, path: Path) -> str:
+    """The path of a file relative to the scan root (POSIX)."""
+    return ctx.scan_relative(path) or path.name
+
+
 def _direct_bookmarks(ctx: Context) -> list[Path]:
     """The bookmarks the scan root names itself (a file, or a folder of them)."""
     out: list[Path] = []
@@ -189,6 +194,10 @@ class BookmarkIntegerTypesRule(Rule):
         else:
             ctx.notes.append("No fixes needed.")
         return applied
+
+    def pending_repairs(self, ctx: Context) -> bool:
+        """True when there is a bookmark file to look at."""
+        return bool(bookmark_files(ctx))
 
 
 class BookmarkVisualRefsRule(Rule):
@@ -395,40 +404,62 @@ class BookmarkOptionsSchemaRule(Rule):
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
-        for report_dir in ctx.report_dirs:
-            for bf in _bookmark_files(report_dir, ctx):
-                try:
-                    data = json.loads(bf.read_text(encoding="utf-8-sig"))
-                except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-                    continue  # B001 reports unreadable bookmarks
-                for key in illegal_option_keys(data):
-                    out.append(
-                        self.violation(
-                            f"options.{key} is not a bookmark option the "
-                            f"report schema accepts, so the report is rejected "
-                            f"on import. Remove it (the auto-fix does); the "
-                            f"accepted keys are "
-                            f"{', '.join(sorted(ALLOWED_OPTIONS_KEYS))}.",
-                            file=bf,
-                            obj=bf.stem,
-                        )
-                    )
+        files = bookmark_files(ctx)
+        offenders = 0
+        for bf in files:
+            try:
+                data = json.loads(bf.read_text(encoding="utf-8-sig"))
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                continue  # B001 reports unreadable bookmarks
+            for key in illegal_option_keys(data):
+                out.append(self.violation(
+                    f"{_relative(ctx, bf)}  ->  options.{key}",
+                    file=bf,
+                    obj=bf.stem,
+                ))
+                offenders += 1
+        if offenders:
+            ctx.notes.append(
+                f"{offenders} illegal options key(s) across {len(files)} "
+                "bookmark file(s):")
+        else:
+            ctx.notes.append(
+                f"clean: {len(files)} bookmark file(s), no illegal options keys")
         return out
 
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
-        for report_dir in ctx.report_dirs:
-            for bf in _bookmark_files(report_dir, ctx):
-                try:
-                    original = read_text_file(bf)
-                    new_text, removed = strip_illegal_options(original.text)
-                    if removed and verified_write(original, new_text):
-                        applied.extend(f"{bf.name}: removed options.{k}" for k in removed)
-                except EditRefused as exc:
-                    ctx.refused_fixes.append(f"{self.id}: {bf}: {exc}")
-                except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-                    continue
+        files = bookmark_files(ctx)
+        fixed = 0
+        refused = 0
+        for bf in files:
+            try:
+                original = read_text_file(bf)
+                new_text, removed = strip_illegal_options(original.text)
+            except EditRefused as exc:
+                ctx.refused_fixes.append(f"{_relative(ctx, bf)}: {exc}")
+                refused += 1
+                continue
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                continue
+            if not removed:
+                continue
+            if verified_write(original, new_text):
+                rel = _relative(ctx, bf)
+                applied.extend(f"{rel}  ->  removed options.{k}" for k in removed)
+                fixed += len(removed)
+        if refused:
+            ctx.notes.append(f"REFUSED {refused} unsafe repair(s):")
+        if fixed:
+            ctx.notes.append(f"fixed {fixed} illegal options key(s):")
+        else:
+            ctx.notes.append(
+                f"nothing to fix: {len(files)} bookmark file(s) already clean")
         return applied
+
+    def pending_repairs(self, ctx: Context) -> bool:
+        """True when there is a bookmark file to look at."""
+        return bool(bookmark_files(ctx))
 
 
 class ReportDefinitionIntegrityRule(Rule):

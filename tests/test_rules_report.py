@@ -145,7 +145,9 @@ class TestBookmarkOptionsSchema:
         original = _bookmark(report_dir).read_text(encoding="utf-8")
         self._plant(report_dir, '"bogus": {"nested": [1, 2]}')
         rule = BookmarkOptionsSchemaRule()
-        assert rule.fix(Context(project)) == ["spotlight-revenue.bookmark.json: removed options.bogus"]
+        assert rule.fix(Context(project)) == [
+            "BikeShop.Report/definition/bookmarks/spotlight-revenue.bookmark.json"
+            "  ->  removed options.bogus"]
         assert _bookmark(report_dir).read_text(encoding="utf-8") == original
         assert rule.check(Context(project)) == []
         assert rule.fix(Context(project)) == []

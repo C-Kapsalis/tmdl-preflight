@@ -85,6 +85,11 @@ class TestBookmarkIntTypesFixer:
         assert code == 0, payload
         assert any("Applied 1 fix(es) across 1 file(s)." in n for n in payload["notes"])
 
+    def test_the_fix_says_when_there_is_nothing_to_fix(self, project):
+        code, payload = run_fix(project, "B001")
+        assert code == 0, payload
+        assert any("No fixes needed." in n for n in payload["notes"])
+
     def test_a_value_the_fixer_cannot_convert_is_not_auto_fixable(self, project, report_dir):
         _stringify(report_dir, "x")
         code, payload = run_check(project, "B001")
