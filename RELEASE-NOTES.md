@@ -111,6 +111,30 @@ until configured.
 
 ### Changed rules
 
+- **P001** reports one finding per problem and words it the way the
+  original does: a policy that comes after the partition, a policy that
+  comes after a table-level annotation, a `policyType` outside
+  `('basic',)`, a granularity outside the four, a period count that is not
+  a positive integer, an unrecognized property, a missing
+  `sourceExpression`, a table with no M partition, a `sourceExpression`
+  that is not byte-identical to the partition source (the first difference
+  is shown, with its line and column), and a `sourceExpression` that names
+  no window. Only the drifted `sourceExpression` can be repaired
+  automatically; the other problems need a human, are not marked
+  auto-fixable and are not counted by `fix --check`.
+- **P002** reports the eligible facts that have no policy with the
+  original's reasons: a source that is already windowed (the block was
+  probably lost in a merge), an event-date fact on a view, with the
+  caution when the column is the ETL load stamp rather than an event date.
+  The facts whose M source is hand-written are listed once per model, and
+  the stale backlog entries are listed per model too. The exempt list
+  accepts a table-to-reason map or a list of `{table, reason}` tables.
+- **P001** reads the window markers from the configuration: a source
+  counts as windowed when it names `RangeStart` and one of
+  `window_markers` (default `["RangeEnd"]`).
+  BUGFIX: the original's test hard-coded the window variable of one
+  template; `window_markers = ["ir_dfilter"]` restores the original's exact
+  test.
 - **M002** pairs ``` fences by structure (a fence opens after `=` and closes
   on the next line that starts with backticks), so backticks inside a fenced
   string literal are no longer an "unpaired fence". It also reports a
@@ -304,6 +328,34 @@ until configured.
 
 ### Bug fixes
 
+- **The refresh repair replaces only the loader call.** The windowed query
+  takes the place of the loader call itself, so the rest of the partition's
+  M source (the surrounding `let ... in ...`, the other steps, the
+  indentation, the line breaks) stands, and the policy's `sourceExpression`
+  is the new partition body, line for line.
+  BUGFIX: the repair used to replace the whole source body with the
+  template, which dropped every other step of the M query.
+- **The refresh repair says what it did.** It prints the tables it
+  repaired, the tables it could not repair and why, the tables that owe a
+  manual XMLA full refresh because their partition source changed, and the
+  tables it only reinstated a policy over (no refresh owed).
+- **A refresh table the repair cannot write is reported, not skipped.** A
+  loader table with no `inline_template` configured, a source that is
+  deliberately unfiltered or has no date column, and a source whose loader
+  call cannot be parsed are listed under the failed repairs, and the
+  coverage finding for them is not marked auto-fixable.
+- **A blanket `fix --check` does not count the unsafe refresh fixer.** The
+  repair changes what a partition stores, so a blanket fix does not run
+  it; the check now counts what the selected fixers would act on and lists
+  the same rules, so `fix --check` without `--select` neither lists nor
+  counts P001, and `fix --check --select P001` does.
+- **The written refresh policy closes its fence with four tabs.** The
+  partition's own fence may sit at any indentation; the fence the repair
+  writes is always four tabs and three backticks.
+- **The refresh repair prunes the backlog it fixed.** The repaired entries
+  are removed from that model's backlog in the configuration file, line by
+  line, so every other line of the file stays byte-identical, and the run
+  says how many entries it pruned. `--no-prune` keeps them.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the

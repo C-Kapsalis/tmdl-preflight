@@ -156,6 +156,9 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--only", choices=("missing", "invalid"),
                            help="refresh-policy fixers: only add missing policies, or "
                                 "only realign invalid ones")
+            p.add_argument("--no-prune", action="store_true",
+                           help="refresh-policy fixer: keep the backlog entries of the "
+                                "tables it repaired")
         _add_config_options(p)
 
     p_base = sub.add_parser(
@@ -403,8 +406,12 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
     cfg = _load_config(args, full)
     ctx = _context(args.path, cfg.exclude, cfg.exclude_configured)
     ctx.options = dict(cfg.sections)
+    if cfg.source is not None:
+        ctx.options["_config_path"] = str(cfg.source)
     if getattr(args, "only", None):
         ctx.options["_fix_only"] = args.only
+    if getattr(args, "no_prune", False):
+        ctx.options["_no_prune"] = True
     ruleset = _effective_ruleset(full, cfg, args)
     explicit = _parse_id_list(getattr(args, "select", None)) or set()
     if explicit & {"b003", "bookmark-options-schema"}:
@@ -419,11 +426,14 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
     else:
         report = check(ctx, ruleset)
         if mode == "fix":  # dry run: say what would be repaired
-            fixable = {r.id: r for r in ruleset.rules if r.fixable}
+            explicit = {e.lower() for e in (_parse_id_list(getattr(args, "select", None)) or set())}
             counts: dict[str, int] = {}
-            for v in report.violations:
-                if v.rule_id in fixable:
-                    counts[v.rule_id] = counts.get(v.rule_id, 0) + 1
+            for rule in ruleset.rules:
+                if not _runs_fixer(rule, explicit):
+                    continue
+                n = len(rule.pending_fix_objects(ctx, report.violations))
+                if n:
+                    counts[rule.id] = n
             report.would_fix = [
                 f"{rid}: {n} violation(s)" for rid, n in sorted(counts.items())
             ]
@@ -433,13 +443,44 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
     return report, ruleset, cfg, ctx
 
 
+def _runs_fixer(rule, explicit: set[str]) -> bool:
+    """Would a fix with this selection run the rule's fixer?
+
+    An unsafe fixer (one that changes what a model stores) runs only when
+    its rule is named, so a blanket fix -- and a blanket ``fix --check`` --
+    leaves it alone.
+    """
+    if not rule.fixable:
+        return False
+    if rule.safe:
+        return True
+    if {rule.id.lower(), rule.name.lower()} & explicit:
+        return True
+    return rule.unsafe_fix_enabled()
+
+
 def _cmd_check(args) -> int:
     if args.json and args.format not in (None, "json"):
         raise UsageError(f"--json conflicts with --format {args.format}")
-    report, ruleset, cfg, _ctx = _run(args, args.command)
+    report, ruleset, cfg, ctx = _run(args, args.command)
     if args.command == "fix" and getattr(args, "check", False):
-        pending = {(v.rule_id, v.obj or v.path or "") for v in report.violations
-                   if v.fixable and v.severity.value != "info"}
+        explicit = {e.lower() for e in (_parse_id_list(getattr(args, "select", None)) or set())}
+        pending: set[tuple[str, str]] = set()
+        listed: set[str] = set()
+        for rule in ruleset.rules:
+            named = bool({rule.id.lower(), rule.name.lower()} & explicit)
+            if not (_runs_fixer(rule, explicit) or named):
+                # an unsafe fixer is not part of a blanket fix, so a blanket
+                # `fix --check` neither lists nor counts it
+                continue
+            listed.add(rule.id)
+            if not rule.fixable:
+                # the rule has no fixer of its own; the fixer that repairs
+                # its findings counts the objects itself
+                continue
+            for obj in rule.pending_fix_objects(ctx, report.violations):
+                pending.add((rule.id, obj))
+        report.violations = [v for v in report.violations if v.rule_id in listed]
         fmt = "json" if args.json else (args.format or "text")
         print(render(fmt, report, Path(args.path), ruleset))
         return min(len(pending), 255)
@@ -452,7 +493,7 @@ def _cmd_check(args) -> int:
             report.violations, known, ruleset, {r.id for r in ruleset.rules}
         )
     if args.command == "fix" and not getattr(args, "dry_run", False):
-        _after_fix_cache(args, report, _ctx)
+        _after_fix_cache(args, report, ctx)
     fmt = "json" if args.json else (args.format or "text")
     print(render(fmt, report, Path(args.path), ruleset))
     return report.exit_code(strict=args.strict or cfg.strict)

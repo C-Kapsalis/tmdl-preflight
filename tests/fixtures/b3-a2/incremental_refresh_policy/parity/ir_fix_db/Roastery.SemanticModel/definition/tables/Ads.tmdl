@@ -1,0 +1,22 @@
+table Ads
+	lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00001
+
+	column ads_id
+		dataType: int64
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00002
+		summarizeBy: none
+		sourceColumn: ads_id
+
+	column order_date
+		dataType: dateTime
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00003
+		summarizeBy: none
+		sourceColumn: order_date
+	partition Ads = m
+		mode: import
+		source =
+				let
+				    ir_dfilter = " order_date >= '" & Date.ToText(DateTime.Date(RangeStart), "yyyy-MM-dd") & "' and order_date < '" & Date.ToText(DateTime.Date(RangeEnd), "yyyy-MM-dd") & "'",
+				    Source = Value.NativeQuery(Warehouse, "select * from orders_n where " & ir_dfilter)
+				in
+				    Source

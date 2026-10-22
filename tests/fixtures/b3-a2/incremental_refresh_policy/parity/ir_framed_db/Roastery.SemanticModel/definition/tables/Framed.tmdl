@@ -1,0 +1,17 @@
+table Framed
+	lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00099
+
+	column framed_id
+		dataType: int64
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00098
+		summarizeBy: none
+		sourceColumn: framed_id
+
+	partition Framed = m
+		mode: import
+		source = ```
+			let
+			    Source = source_filter_dates("orders_n", "order_date", false, #"v-fromdate")
+			in
+			    Source
+			```

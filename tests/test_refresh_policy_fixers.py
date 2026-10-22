@@ -77,11 +77,12 @@ def test_loader_form_needs_a_template(stand_in):
     run_fix(model, "refresh-policy-repair", config=CONFIG, args=("--only", "missing"))
     assert f.read_bytes() == before
     cfg = {"refresh_policy": dict(CONFIG["refresh_policy"], inline_template=(
-        'let\n    ir_dfilter = "{date_column} >= " & Text.From(RangeStart) & " and {date_column}'
-        ' < " & Text.From(RangeEnd),\n    Source = Value.NativeQuery(Warehouse, "select * from'
-        ' {view} where " & ir_dfilter)\nin\n    Source'))}
+        'let ir_dfilter = "{date_column} >= " & Text.From(RangeStart) & " and {date_column}'
+        ' < " & Text.From(RangeEnd), Source = Value.NativeQuery(Warehouse, "select * from'
+        ' {view} where " & ir_dfilter) in Source'))}
     code, payload = run_fix(model, "refresh-policy-repair", config=cfg, args=("--only", "missing"))
-    assert any("full refresh" in x for x in payload["fixes"]), payload
+    assert any("windowed on" in x for x in payload["fixes"]), payload
+    assert any("MANUAL XMLA FULL REFRESH REQUIRED" in x for x in payload["notes"]), payload
     text = f.read_text(encoding="utf-8")
     assert "tastings_v" in text and "source_filter_dates" not in text
     code, payload = run_check(model, "refresh-policy-repair", config=cfg)

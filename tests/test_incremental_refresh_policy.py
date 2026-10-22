@@ -101,7 +101,7 @@ def test_ir_eligible_facts_have_refresh_policy(root, folder, verdict, new, stale
     if verdict == "pass":
         assert failing == [], failing
         return
-    got_stale = {v["object"] for v in failing if "stale" in v["message"].lower()}
+    got_stale = {v["object"] for v in failing if v["message"].startswith("    - ")}
     got_new = {v["object"] for v in failing} - got_stale
     assert got_new == new
     assert got_stale == stale
@@ -111,13 +111,15 @@ def test_ir_eligible_facts_have_refresh_policy(root, folder, verdict, new, stale
 def test_report_undecidable_ir_tables(root, folder):
     """Advisory inventory of facts with a hand-written M source (never fails)."""
     _code, payload = run_check(root, COVER, config=CONFIG)
-    infos = {v["object"] for v in _mine(payload, folder, "info")}
+    infos = [v for v in _mine(payload, folder, "info")]
     if folder.startswith("ir_ok"):
-        assert infos == {"Waste"}
+        assert len(infos) == 1
+        assert infos[0]["message"] == (
+            "ir_ok_db/Roastery: 1 fact table(s) need a HAND-WRITTEN refreshPolicy "
+            "(M source is not a source_filter_dates call): Waste")
     else:
-        assert infos == set()
-    assert all(v["severity"] != "error" for v in _mine(payload, folder)
-               if v["object"] == "Waste")
+        assert infos == []
+    assert all(v["severity"] != "error" for v in _mine(payload, folder))
 
 
 def test_fixer_check_mode_agrees_with_gate(root, tmp_path):
@@ -131,11 +133,14 @@ def test_fixer_check_mode_agrees_with_gate(root, tmp_path):
     folder = "universal/Performance.SemanticModel"
     _c, structural = run_check(root, STRUCT, config=CONFIG)
     _c, coverage = run_check(root, COVER, config=CONFIG)
-    invalid = {v["object"] for v in _mine(structural, folder, "error")}
+    invalid = {v["object"] for v in _mine(structural, folder, "error") if v["fixable"]}
     missing = {v["object"] for v in _mine(coverage, folder)
-               if v["severity"] != "info" and "stale" not in v["message"].lower()}
+               if v["severity"] != "info" and not v["message"].startswith("    - ")}
+    # the count is what the fixer would act on: the drifted sourceExpression
+    # of Orders, and the three facts a policy can be added to. Brews' misplaced
+    # policy needs a human, so it is not counted.
     expected = min(len(invalid) + len(missing), 255)   # exit statuses are 8-bit
-    assert expected == 5
+    assert expected == 4
     cfg = write_config(tmp_path, CONFIG)
     before = {p: p.read_bytes() for p in template.rglob("*.tmdl")}
     code, out, err = run_cli("fix", str(template), "--check", "--select", f"{STRUCT},{COVER}",
