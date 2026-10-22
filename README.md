@@ -335,9 +335,11 @@ measures, the warehouse table each partition reads, relationships) for the
 pipelines next to the model; `--check` fails when the committed copy is stale,
 and a targets file pins the warehouse project and dataset each model must
 declare. `tmdl-preflight schema-check --manifest M --schema SNAPSHOT
-[--strict]` compares it with a schema snapshot you export (model columns the
-warehouse lost fail; columns the model does not import are informational), and
-`schema-check --sql-dir DIR --entries FILE` proves from view SQL files that the
+[--strict] [--project P] [--dataset D]` compares it with a schema snapshot you
+export (model columns the warehouse lost fail; columns the model does not
+import are informational) and writes the result next to the manifest as
+`<name>.bq.json`, and `schema-check --sql-dir DIR --entries FILE
+[--write-holdbacks] [--clear-ready]` proves from view SQL files that the
 views expose the columns a model needs. Nothing connects to a warehouse.
 
 `tmdl-preflight live <Model.SemanticModel> --workspace ID --dataset ID
@@ -352,9 +354,10 @@ It refuses to run when the dataset name does not match the local model.
 `--record DIR` saves every response and `--replay DIR` answers from such a
 folder without any network access.
 
-`tmdl-preflight refs NAME [PATH ...] [--files]` counts every place a table,
-column or measure name appears, model side and report side, before a rename
-or delete.
+`tmdl-preflight refs NAME [PATH ...] [--files] [--include-nonlive]
+[--targets FILE]` counts every place a table, column or measure name
+appears, model side and report side, before a rename or delete; the live
+set is the registered model paths when a targets file is given.
 
 `tmdl-preflight comment-refs <path>` counts ticket references (`#365`) in
 comments per model; `--floors FILE --tighten` lowers a ratchet file to

@@ -368,7 +368,6 @@ def _speaks_warehouse(text: str, loaders: Iterable[str], s: SourceSettings) -> b
     return any(n in text for n in loaders)
 
 
-
 def resolve_source(text: str, loaders: Iterable[str], s: SourceSettings) -> Optional[dict]:
     loaders = list(loaders)
     call = _loader_call(text, loaders, s.loader_family_prefixes)

@@ -137,6 +137,8 @@ def reconcile(manifest: dict, snapshot: dict, ignore: Iterable[str] = frozenset(
         src = t.get("bq_source") or {}
         for key in ("drift", "check_error", "bq_columns", "checked_against"):
             src.pop(key, None)
+        for key in ("drift", "error", "unreachable", "bq_columns"):
+            t.pop(key, None)
         for c in t.get("columns", []):
             c.pop("bqType", None)
         if t.get("unresolved_source"):
