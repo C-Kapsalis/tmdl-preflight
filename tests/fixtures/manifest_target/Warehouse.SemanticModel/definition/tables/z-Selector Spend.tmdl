@@ -1,0 +1,16 @@
+table z-Selector Spend
+	lineageTag: 0000b4b1-0000-0000-0000-000000000050
+
+	column spend
+		dataType: double
+		lineageTag: 0000b4b1-0000-0000-0000-000000000051
+		summarizeBy: none
+		sourceColumn: spend
+
+	partition z-Selector Spend = m
+		mode: import
+		source =
+			let
+			    Source = source_filter_dates("spend_n", "date")
+			in
+			    Source

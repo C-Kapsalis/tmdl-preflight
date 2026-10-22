@@ -1,0 +1,8 @@
+table __Calendar
+	lineageTag: 0000b4b1-0000-0000-0000-000000000020
+
+	column Date
+		dataType: dateTime
+		lineageTag: 0000b4b1-0000-0000-0000-000000000021
+		summarizeBy: none
+		sourceColumn: Date

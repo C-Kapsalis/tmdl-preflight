@@ -283,6 +283,36 @@ until configured.
 
 ### Changed
 
+- **The manifest names its target block `bigquery` and keeps its key
+  order.** The block that describes the warehouse target is `bigquery`
+  (the `block_key` setting still renames it) and its keys keep the order
+  the contract reads them in: `model_project`, `model_dataset`,
+  `model_billing_project`, `project`, `dataset`, `billing_project`, then
+  `client_id`, `registry_project` and `registry_dataset` when a targets
+  entry matched, then `warehouse` and `note`.
+- **A table's `fqtn_default` lives in its `bq_source` object.** It is the
+  last key there and every table that reads the warehouse carries one,
+  whatever its classification: a `z-` selector that reads the warehouse
+  is checked like any fact.
+- **A table record lists its keys in one order.** `name`,
+  `classification`, `column_count`, `domain` (for a fact, a dimension or
+  a calendar), `bq_source`, `programmatic_renames`, `m_type_changes` (or
+  `unresolved_source`), `columns`, `measures`. The domain rules ship with
+  the tool: the shared tables are `Core / Shared`, and the first rule
+  whose word appears in the table name wins.
+- **A relationship record carries no `name`.** Its keys are `fromTable`,
+  `fromColumn`, `toTable`, `toColumn`, `isActive`,
+  `crossFilteringBehavior`, `fromCardinality` and `toCardinality`. A
+  type step keeps the spaces it was written with.
+- **The manifest reads the registry shape of the targets file.** A
+  `clients:` mapping whose entries carry `bq_project`, `bq_billing_project`
+  and `bq_dataset` is accepted next to the flat shape; a secondary model
+  row overrides any of the three target fields, and an explicit null
+  removes one. The billing project is the declared one when the key is
+  there, else the project.
+- **The manifest command prints the summary the pipelines read.** `Wrote
+  <path>`, the model and the warehouse target it resolved to, the table
+  and relationship counts, the classification map and the domains.
 - **`stats --measures` prints one summary per model.** A folder with two
   models prints two summaries, each with its own totals, in the layout a
   reviewer reads: the totals, the user-facing and helper split, the
@@ -304,6 +334,28 @@ until configured.
 
 ### Bug fixes
 
+- **The manifest names the tool that wrote it.** `generated_by` says
+  `tmdl-preflight manifest`; naming a script the tool does not ship is
+  meaningless to whoever reads the file. BUGFIX.
+- **The manifest is written with unix line endings.** The original wrote
+  in text mode, so a Windows run produced CRLF endings; the file is
+  written with LF everywhere, and the `--check` comparison normalises
+  line endings so a copy with CRLF endings is not stale. BUGFIX.
+- **The manifest command keeps the tool's usage-error exit code.** A
+  model that is neither a registry client id nor a model directory, and a
+  registry entry without a model path, exit 2 — the tool-wide usage-error
+  code — with the wording the contract uses. BUGFIX.
+- **The unregistered-model warning appears only when a targets file is in
+  use.** With no registry file there is nothing to be missing from, so
+  the warning is noise. BUGFIX.
+- **The manifest reads a pair list and a property line leniently.** A
+  rename or type pair may carry spaces around the braces, a column
+  property is read from any line that starts with two tabs, and a file
+  with a byte-order mark is read as UTF-8. BUGFIX.
+- **The `manifest` section of the configuration file is read again.** The
+  section was listed in the documentation, but the configuration
+  validator rejected it as an unknown key, so `sources`, `target` and
+  `domains` never reached the command. BUGFIX.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the

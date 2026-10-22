@@ -737,17 +737,28 @@ def _cmd_manifest(args) -> int:
             raise UsageError(f"configuration error: {exc}") from exc
         cfg_sections = cfg.sections
     opts = dict(cfg_sections.get("manifest") or {})
-    targets_path = args.targets or (opts.get("target") or {}).get("targets_file")
+    target_opts = dict(opts.get("target") or {})
+    targets_path = args.targets or target_opts.get("targets_file")
     targets = load_targets(Path(targets_path)) if targets_path else {}
+    targets_name = Path(targets_path).name if targets_path else "the targets file"
+    root = Path.cwd()
     model_arg = args.model
+    from_registry = False
     if not Path(model_arg).exists() and model_arg in targets:
+        from_registry = True
         rel = targets[model_arg].get("model_path")
         if not rel:
-            raise UsageError(f"targets entry {model_arg} declares no model path")
-        model_arg = str(Path(targets_path).parent / rel) if not Path(rel).exists() else rel
+            raise UsageError(f"registry entry '{model_arg}' declares no model_path")
+        candidate = Path(rel)
+        if not candidate.exists() and targets_path:
+            candidate = Path(targets_path).parent / rel
+        model_arg = str(candidate)
     model_dir = Path(model_arg)
     if not (model_dir / "definition").is_dir():
-        raise UsageError(f"{model_dir} has no definition/ folder; pass a *.SemanticModel folder")
+        if from_registry:
+            raise UsageError(f"model path '{model_arg}' has no definition/ directory under {root}")
+        raise UsageError(f"MODEL '{model_arg}' is neither a registry client_id nor a "
+                         f"<path>/definition model directory under {root}")
     rel = Path(model_arg).as_posix()
     entry = None
     if targets:
@@ -755,36 +766,40 @@ def _cmd_manifest(args) -> int:
                       (rel, f"{model_dir.parent.name}/{model_dir.name}")
                       if find_entry(targets, cand)), None)
         if entry is None:
-            print(f"tmdl-preflight: warning: {rel} is not registered in the targets file; the "
-                  f"warehouse target comes only from the model's own parameters.", file=sys.stderr)
+            print(f"WARNING: '{rel}' is not in {targets_name} — no client_id; warehouse "
+                  f"derived from the model's v-BQ_project only.", file=sys.stderr)
+    target_opts["targets_name"] = targets_name
+    opts["target"] = target_opts
     try:
         doc = build_manifest(model_dir, rel, entry, opts)
     except WarehouseTargetError as exc:
-        print(f"tmdl-preflight: {exc}", file=sys.stderr)
+        print(f"{exc}", file=sys.stderr)
         return 1
     text = render(doc)
     out = Path(args.out) if args.out else (
         model_dir / opts.get("output_dir_name", "generated")
         / f"{doc['model'].lower()}{opts.get('output_suffix', '-manifest.json')}")
-    regen = f"tmdl-preflight manifest {args.model}" + (f" --out {args.out}" if args.out else "")
+    regen = f"tmdl-preflight manifest {model_arg}" + (f" --out {args.out}" if args.out else "")
     if args.check:
         if not out.is_file():
-            print(f"MISSING: {out}; run {regen}", file=sys.stderr)
+            print(f"MISSING: {out} was never generated. Run: {regen}", file=sys.stderr)
             return 1
-        if out.read_bytes() != text.encode("utf-8"):
-            print(f"DRIFT: {out} is stale; run {regen}", file=sys.stderr)
+        existing = out.read_bytes().decode("utf-8", "replace").replace("\r\n", "\n")
+        if existing != text:
+            print(f"DRIFT: {out} is stale. Run: {regen}", file=sys.stderr)
             return 1
         print(f"OK: {out} is up to date.")
         return 0
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(text.encode("utf-8"))
-    block = doc.get((opts.get("target") or {}).get("block_key", "warehouse")) or {}
-    print(f"wrote {out}")
-    print(f"target: {block.get('project')}.{block.get('dataset')} ({block.get('warehouse')})")
-    print(f"tables: {doc['counts']['tables']}, relationships: {doc['counts']['relationships']}")
-    print("by classification: " + ", ".join(f"{k} {v}" for k, v in
-                                           doc["counts"]["by_classification"].items()))
-    print("domains: " + (", ".join(doc["domains"]) or "-"))
+    block = doc.get(target_opts.get("block_key", "bigquery")) or {}
+    counts = doc["counts"]
+    print(f"Wrote {out}")
+    print(f"  model: {doc['model']} ({rel}) -> {block.get('project')}.{block.get('dataset')} "
+          f"[{block.get('warehouse')}]")
+    print(f"  {counts['tables']} tables, {counts['relationships']} relationships")
+    print(f"  by classification: {counts['by_classification']}")
+    print(f"  domains: {', '.join(doc['domains'])}")
     return 0
 
 

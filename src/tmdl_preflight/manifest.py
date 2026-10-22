@@ -25,8 +25,39 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 GENERATED_BY = "tmdl-preflight manifest"
-TARGET_NOTE = ("Model parameter values must match the target contract; contract values "
-               "never mask a stale model target.")
+TARGET_NOTE = ("Model declarations from expressions.tmdl must match the warehouse target "
+               "contract in real_clients_registry.yml; registry bq_project/bq_dataset "
+               "values are never allowed to mask a stale model target.")
+
+#: The marker an inlined incremental-refresh query always carries.
+DEFAULT_IR_MARKER = "ir_dfilter"
+
+#: Tables every domain shares; their name is matched exactly.
+SHARED_DIMENSIONS = (
+    "__Calendar",
+    "__Comparison Calendar",
+    "_Accounts",
+    "_Devices",
+    "_Countries",
+    "_Landing Pages",
+)
+
+#: The shipped domain rules: the first rule whose substring appears in the
+#: (lowercased) table name wins.
+DEFAULT_DOMAINS: list[dict] = [
+    {"name": "Facebook", "substrings": ["fb ", "facebook", "_fb "]},
+    {"name": "GA4", "substrings": ["ga4"]},
+    {"name": "Email", "substrings": ["client-c", "email"]},
+    {"name": "App & YouTube",
+     "substrings": ["youtube", "google play", "play installs", "adjust"]},
+    {"name": "Speed",
+     "substrings": ["speed", "lighthouse", "audit score", "page speed"]},
+    {"name": "SEO & Search",
+     "substrings": ["queries organic", "crawl", "sitemap", "cluster", "organic"]},
+    {"name": "Advertising",
+     "substrings": ["ads", "campaign", "conversion", "keyword", "queries paid",
+                    "google ads", "_ad", "_quer", "device"]},
+]
 
 
 @dataclass
@@ -35,9 +66,19 @@ class SourceSettings:
     default_loaders: list[str] = field(default_factory=lambda: ["source_filter_dates"])
     loader_family_prefixes: list[str] = field(default_factory=lambda: ["_source_filter_rowsLimit"])
     project_parameter: str = "v-BQ_project"
-    ir_marker: Optional[str] = None
+    ir_marker: Optional[str] = DEFAULT_IR_MARKER
     name_transform_functions: list[str] = field(
         default_factory=lambda: ["PrefixColumns", "TransformColumnNames"])
+
+
+@dataclass
+class DomainSettings:
+    """The domain rules a table name is classified with."""
+
+    rules: list[dict] = field(default_factory=lambda: [dict(r) for r in DEFAULT_DOMAINS])
+    shared: list[str] = field(default_factory=lambda: list(SHARED_DIMENSIONS))
+    shared_label: str = "Core / Shared"
+    fallback: str = "Other"
 
 
 @dataclass
@@ -207,7 +248,7 @@ def type_changes(m_text: str) -> dict[str, str]:
     out: dict[str, str] = {}
     for args in _call_windows(m_text, "TransformColumnTypes"):
         for col, typ in _TYPE_PAIR_RE.findall(args):
-            out[col.replace('""', '"')] = re.sub(r"\s+", " ", typ)
+            out[col.replace('""', '"')] = typ
     return out
 
 
@@ -287,14 +328,17 @@ def derive_name_transformers(expressions_text: str, settings: Optional[SourceSet
 # Source forms
 # ---------------------------------------------------------------------------
 
-_IR_TABLE_RE = re.compile(r'&\s*"([A-Za-z0-9_]+)"\s*&\s*"`\s*where', re.IGNORECASE)
-_IR_DATE_RE = re.compile(r"cast\(\s*([A-Za-z_][\w.]*)\s+as\s+date\s*\)", re.IGNORECASE)
+_IR_TABLE_RE = re.compile(r'&\s*"([A-Za-z0-9_]+)"\s*&\s*"`\s*where\s*"')
+_IR_DATE_RE = re.compile(r"cast\((\w+) as date\)")
 _NAV_RE = re.compile(r'\{\s*\[\s*Name\s*=\s*"((?:[^"]|"")+)"\s*,\s*Kind\s*=\s*"Table"\s*\]\s*\}')
 
 
 def parse_inline_window(text: str, marker: Optional[str] = None) -> Optional[tuple[str, Optional[str]]]:
     """``(view, date column)`` of an inlined incremental-refresh query."""
-    if "RangeStart" not in text or (marker and marker not in text):
+    marker = DEFAULT_IR_MARKER if marker is None else marker
+    if marker and marker not in text:
+        return None
+    if "RangeStart" not in text:
         return None
     m = _IR_TABLE_RE.search(text)
     if not m:
@@ -307,21 +351,22 @@ def _loader_call(text: str, loaders: Iterable[str], prefixes: Iterable[str]) -> 
     lit = r'"((?:[^"]|"")*)"'
     names = [re.escape(n) for n in sorted(set(loaders), key=len, reverse=True)]
     names += [re.escape(p) + r"[A-Za-z-]*" for p in prefixes]
-    for pat in names:
-        rx = re.compile(r'(?:#"(?:' + pat + r')"|(?<![\w"#.-])(?:' + pat + r'))\s*\(\s*' + lit
-                        + r'(?:\s*,\s*' + lit + r')?')
-        m = rx.search(text)
-        if m:
-            date = m.group(2).replace('""', '"') if m.group(2) else None
-            return m.group(1).replace('""', '"'), date or None
+    if not names:
+        return None
+    rx = re.compile(r'(?:#")?(?:' + "|".join(names) + r')(?:")?\s*\(\s*' + lit
+                    + r'(?:\s*,\s*' + lit + r')?')
+    m = rx.search(text)
+    if m:
+        date = m.group(2).replace('""', '"') if m.group(2) else None
+        return m.group(1).replace('""', '"'), date or None
     return None
 
 
 def _speaks_warehouse(text: str, loaders: Iterable[str], s: SourceSettings) -> bool:
-    code = code_only(text)
-    if any(t in code for t in s.connector_tokens) or s.project_parameter in code:
+    if any(t in text for t in s.connector_tokens) or s.project_parameter in text:
         return True
-    return any(_references(code, n) for n in loaders)
+    return any(n in text for n in loaders)
+
 
 
 def resolve_source(text: str, loaders: Iterable[str], s: SourceSettings) -> Optional[dict]:
@@ -369,9 +414,22 @@ def classify(name: str, cls: Optional[ClassSettings] = None) -> str:
     return "fact"
 
 
+def assign_domain(name: str, settings: Optional[DomainSettings] = None) -> Optional[str]:
+    """The domain a data table belongs to, or None for a non-data table."""
+    d = settings or DomainSettings()
+    if name in d.shared:
+        return d.shared_label
+    low = name.lower()
+    for rule in d.rules:
+        if any(str(sub).lower() in low for sub in rule.get("substrings", [])):
+            return str(rule.get("name"))
+    return d.fallback
+
+
 def parse_table(path: Path, readers: Optional[Iterable[str]] = None,
                 transformers: Iterable[str] = (), settings: Optional[SourceSettings] = None,
-                classes: Optional[ClassSettings] = None) -> dict:
+                classes: Optional[ClassSettings] = None,
+                domains: Optional[DomainSettings] = None) -> dict:
     s = settings or SourceSettings()
     lines = Path(path).read_text(encoding="utf-8-sig").replace("\r\n", "\n").split("\n")
     first = lines[0] if lines else ""
@@ -410,7 +468,7 @@ def parse_table(path: Path, readers: Optional[Iterable[str]] = None,
         if in_partition:
             partitions[-1].append(line)
             continue
-        if line.startswith("\t\t") and current is not None and not line.startswith("\t\t\t"):
+        if line.startswith("\t\t") and current is not None:
             prop = line.strip()
             m = re.match(r"^(dataType|summarizeBy|sourceColumn)\s*:\s*(.*)$", prop)
             if m:
@@ -423,8 +481,11 @@ def parse_table(path: Path, readers: Optional[Iterable[str]] = None,
 
     loaders = set(readers) if readers is not None else set()
     loaders |= set(s.default_loaders)
-    table: dict[str, Any] = {"name": name, "classification": classify(name, classes),
+    classification = classify(name, classes)
+    table: dict[str, Any] = {"name": name, "classification": classification,
                              "column_count": len(columns)}
+    if classification in DATA_CLASSES:
+        table["domain"] = assign_domain(name, domains)
     texts = [drop_comment_lines("\n".join(p)) for p in partitions]
     resolved, speaks = None, False
     for t in texts:
@@ -440,9 +501,8 @@ def parse_table(path: Path, readers: Optional[Iterable[str]] = None,
     synth = synthesized_columns(all_m)
     if resolved is not None:
         table["bq_source"] = resolved
-        code = code_only(all_m)
-        if any(f in code for f in s.name_transform_functions) or any(
-                _references(code, n) for n in transformers):
+        if any(f in all_m for f in s.name_transform_functions) or any(
+                n in all_m for n in transformers):
             table["programmatic_renames"] = True
         changes = type_changes(all_m)
         if changes:
@@ -479,8 +539,8 @@ def parse_relationships(path: Path) -> list[dict]:
     out: list[dict] = []
     for line in path.read_text(encoding="utf-8-sig").replace("\r\n", "\n").split("\n"):
         if line.startswith("relationship "):
-            out.append({"name": line[len("relationship "):].strip(), "fromTable": None,
-                        "fromColumn": None, "toTable": None, "toColumn": None, "isActive": True,
+            out.append({"fromTable": None, "fromColumn": None,
+                        "toTable": None, "toColumn": None, "isActive": True,
                         "crossFilteringBehavior": "single", "fromCardinality": "many",
                         "toCardinality": "one"})
             continue
@@ -531,18 +591,19 @@ def read_warehouse_target(expressions: Path, entry: Optional[dict] = None,
     model_project = params.get(project_parameter)
     model_dataset = params.get(dataset_parameter)
     model_billing = params.get(billing_parameter) or model_project
-    out: dict[str, Any] = {"project": model_project, "dataset": model_dataset,
-                           "billing_project": model_billing, "model_project": model_project,
-                           "model_dataset": model_dataset, "model_billing_project": model_billing}
+    out: dict[str, Any] = {"model_project": model_project, "model_dataset": model_dataset,
+                           "model_billing_project": model_billing, "project": model_project,
+                           "dataset": model_dataset, "billing_project": model_billing}
+    fields = target_fields(entry)
     if entry:
         out["client_id"] = entry.get("client_id")
-        out["registry_project"] = entry.get("project") or default_project
-        out["registry_dataset"] = entry.get("dataset")
-        if entry.get("project"):
-            out["project"] = entry["project"]
-            out["billing_project"] = entry.get("billing_project") or entry["project"]
-        if entry.get("dataset"):
-            out["dataset"] = entry["dataset"]
+        out["registry_project"] = fields.get("project") or default_project
+        out["registry_dataset"] = fields.get("dataset")
+        if fields.get("project"):
+            out["project"] = fields["project"]
+            out["billing_project"] = fields.get("billing_project")
+        if fields.get("dataset"):
+            out["dataset"] = fields["dataset"]
     out["warehouse"] = ("internal" if out["project"] is None or out["project"] == default_project
                         else "external")
     out["note"] = TARGET_NOTE
@@ -552,39 +613,65 @@ def read_warehouse_target(expressions: Path, entry: Optional[dict] = None,
 def check_warehouse_target(model_rel: str, target: dict, entry: Optional[dict],
                            reads_warehouse: bool, default_project: Optional[str] = None,
                            dataset_template: Optional[str] = None,
-                           key_pattern: Optional[str] = None) -> None:
+                           key_pattern: Optional[str] = None,
+                           targets_name: str = "the targets file") -> None:
     if not reads_warehouse:
         return
     if not target.get("project") or not target.get("dataset"):
         raise WarehouseTargetError(
-            f"{model_rel}: could not resolve the project/dataset parameters for a model "
-            f"that reads the warehouse, refusing to guess")
+            f"{model_rel}: could not resolve v-BQ_project/v-db from expressions.tmdl for a "
+            f"model that reads BigQuery — refusing to guess a target.")
     if entry:
         key = entry.get("client_id")
-        expected = entry.get("project") or default_project
+        fields = target_fields(entry)
+        expected = fields.get("project") or default_project
         declared = target.get("model_project")
         if declared != expected:
             raise WarehouseTargetError(
-                f"{model_rel}: the model declares project {declared or '<missing>'} but the "
-                f"target contract for {key} expects {expected}; warehouse targets must match")
-        if entry.get("dataset") and target.get("model_dataset") != entry["dataset"]:
+                f"{model_rel}: v-BQ_project is '{declared or '<missing>'}' but {targets_name} "
+                f"expects '{expected}' for {key} — the model and registry warehouse targets "
+                f"must match. Refusing to query the registry target because that would hide "
+                f"what Power BI actually reads.")
+        if fields.get("dataset") and target.get("model_dataset") != fields["dataset"]:
             raise WarehouseTargetError(
-                f"{model_rel}: the model declares dataset {target.get('model_dataset') or '<missing>'} "
-                f"but the target contract for {key} expects {entry['dataset']}; dataset targets "
-                f"must match")
-        if dataset_template and key and not entry.get("dataset") and (
+                f"{model_rel}: v-db is '{target.get('model_dataset') or '<missing>'}' but "
+                f"{targets_name} declares bq_dataset '{fields['dataset']}' for {key} — the "
+                f"model and registry dataset targets must match.")
+        if dataset_template and key and not fields.get("dataset") and (
                 key_pattern is None or re.fullmatch(key_pattern, key)):
             want = dataset_template.format(key=key.replace("-", "_"))
             if target.get("dataset") != want:
                 raise WarehouseTargetError(
-                    f"{model_rel}: dataset {target.get('dataset')} is not {want}: this model reads "
-                    f"another tenant's dataset; declare the dataset in the targets file if "
-                    f"intentional")
+                    f"{model_rel}: v-db is '{target.get('dataset')}' but client {key} implies "
+                    f"'{want}' — this model reads another org's dataset. If intentional, "
+                    f"declare bq_dataset: in the registry entry.")
+
+
+def target_fields(entry: Optional[dict]) -> dict:
+    """The canonical target fields of a targets entry.
+
+    Both spellings are accepted: the flat one (``project``, ``dataset``,
+    ``billing_project``) and the registry one (``bq_project``, ``bq_dataset``,
+    ``bq_billing_project``). The billing project is the declared
+    ``bq_billing_project`` when the key is there (even when it is null), else
+    the project."""
+    if not entry:
+        return {}
+    project = entry["project"] if "project" in entry else entry.get("bq_project")
+    dataset = entry["dataset"] if "dataset" in entry else entry.get("bq_dataset")
+    if "billing_project" in entry:
+        billing = entry["billing_project"]
+    elif "bq_billing_project" in entry:
+        billing = entry["bq_billing_project"]
+    else:
+        billing = project
+    return {"project": project, "dataset": dataset, "billing_project": billing}
 
 
 def load_targets(path: Optional[Path]) -> dict[str, dict]:
     """The targets file (YAML or JSON) as {key: entry}; missing or unreadable
-    means no contract."""
+    means no contract. Both the flat shape and the registry shape (a
+    ``clients:`` mapping) are accepted."""
     if path is None:
         return {}
     try:
@@ -612,11 +699,14 @@ def load_targets(path: Optional[Path]) -> dict[str, dict]:
                 return {}
     if not isinstance(data, dict):
         return {}
+    clients = data.get("clients")
+    if isinstance(clients, dict):
+        data = clients
     out = {}
     for key, entry in data.items():
         if isinstance(entry, dict):
             e = dict(entry)
-            e.setdefault("client_id", key)
+            e.setdefault("client_id", str(key))
             out[str(key)] = e
     return out
 
@@ -627,12 +717,19 @@ def entry_for_model(entry: dict, model_rel: str) -> dict:
     norm = model_rel.replace("\\", "/").strip("/")
     for sec in entry.get("secondary_models") or []:
         if str(sec.get("path", "")).replace("\\", "/").strip("/") == norm:
-            for key in ("project", "billing_project", "dataset"):
-                if key in sec:
-                    if sec[key] is None:
-                        base.pop(key, None)
-                    else:
-                        base[key] = sec[key]
+            for field, alias in (("project", "bq_project"),
+                                 ("billing_project", "bq_billing_project"),
+                                 ("dataset", "bq_dataset")):
+                if field in sec:
+                    value = sec[field]
+                elif alias in sec:
+                    value = sec[alias]
+                else:
+                    continue
+                base.pop(field, None)
+                base.pop(alias, None)
+                if value is not None:
+                    base[field] = value
             base["model_path"] = sec.get("path")
             return base
     return base
@@ -663,7 +760,12 @@ def build_manifest(model_dir: Path, source_path: str, entry: Optional[dict] = No
     expr_text = expr_path.read_text(encoding="utf-8-sig") if expr_path.is_file() else ""
     readers = derive_loaders(expr_text, s)
     transformers = derive_name_transformers(expr_text, s)
-    tables = [parse_table(p, readers, transformers, s)
+    domain_settings = DomainSettings(
+        rules=[dict(r) for r in (opts.get("domains") or DEFAULT_DOMAINS)],
+        shared=list(SHARED_DIMENSIONS) + [str(t) for t in (opts.get("shared_tables") or [])],
+        shared_label=opts.get("shared_domain_label", "Core / Shared"),
+        fallback=opts.get("fallback_domain", "Other"))
+    tables = [parse_table(p, readers, transformers, s, domains=domain_settings)
               for p in sorted((definition / "tables").glob("*.tmdl"))]
     default_project = target_opts.get("default_project")
     target = read_warehouse_target(
@@ -673,24 +775,18 @@ def build_manifest(model_dir: Path, source_path: str, entry: Optional[dict] = No
         target_opts.get("billing_parameter", "v-BQ_billing_project"))
     reads = any("bq_source" in t or t.get("unresolved_source") for t in tables)
     check_warehouse_target(source_path, target, entry, reads, default_project,
-                           target_opts.get("dataset_template"), target_opts.get("key_pattern"))
-    shared = set(opts.get("shared_tables") or [])
-    domains_cfg = opts.get("domains") or []
+                           target_opts.get("dataset_template"), target_opts.get("key_pattern"),
+                           target_opts.get("targets_name", "the targets file"))
     domains: dict[str, list[str]] = {}
     for t in tables:
-        if t["classification"] not in DATA_CLASSES:
+        dom = t.get("domain")
+        if dom is None:
             continue
-        if t["name"] in shared:
-            dom = opts.get("shared_domain_label", "Core / Shared")
-        else:
-            low = t["name"].lower()
-            dom = next((d["name"] for d in domains_cfg
-                        if any(sub.lower() in low for sub in d.get("substrings", []))),
-                       opts.get("fallback_domain", "Other"))
-        t["domain"] = dom
         domains.setdefault(dom, []).append(t["name"])
-        if "bq_source" in t and target.get("project") and target.get("dataset"):
-            t["fqtn_default"] = f"{target['project']}.{target['dataset']}.{t['bq_source']['table']}"
+    for t in tables:
+        src = t.get("bq_source") or {}
+        if src.get("table") and target.get("project") and target.get("dataset"):
+            src["fqtn_default"] = f"{target['project']}.{target['dataset']}.{src['table']}"
     by_class: dict[str, int] = {}
     for t in tables:
         by_class[t["classification"]] = by_class.get(t["classification"], 0) + 1
@@ -700,7 +796,7 @@ def build_manifest(model_dir: Path, source_path: str, entry: Optional[dict] = No
         "model": name,
         "source_model_path": source_path,
         "generated_by": GENERATED_BY,
-        target_opts.get("block_key", "warehouse"): target,
+        target_opts.get("block_key", "bigquery"): target,
         "counts": {"tables": len(tables), "relationships": len(rels), "by_classification": by_class},
         "domains": {d: sorted(v) for d, v in sorted(domains.items())},
         "tables": tables,

@@ -36,7 +36,7 @@ TOOL_KEY = "tmdl-preflight"
 # refresh-policy settings, live-check options, the advisory list for the
 # pytest plugin). Their content is validated by the rules that use them.
 SECTION_KEYS = {"contracts", "refresh_policy", "live", "advisory", "table_roles", "measure_classes",
-                "bookmarks"}
+                "bookmarks", "manifest"}
 
 _TOP_LEVEL_KEYS = {
     "select", "ignore", "strict", "severity_overrides", "exclude", "rules",
