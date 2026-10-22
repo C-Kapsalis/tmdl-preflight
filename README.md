@@ -345,12 +345,15 @@ views expose the columns a model needs. Nothing connects to a warehouse.
 asks the published dataset whether its tables hold rows (a row-limit
 parameter left at `LIMIT 1` imports one row per table), whether measures
 evaluate, whether the last refresh succeeded and the data is fresh, and runs
-a best-practice pass over the published metadata. It signs in as a service
-principal (`PBI_TENANT_ID`, `PBI_CLIENT_ID`, `PBI_CLIENT_SECRET`) or, with
-the optional `msal` package, interactively; credentials are never stored.
-It refuses to run when the dataset name does not match the local model.
-`--record DIR` saves every response and `--replay DIR` answers from such a
-folder without any network access.
+a best-practice pass over the published metadata. In text mode every check
+prints its report block before its result line; `--json` prints the same
+findings as data. It signs in as a service principal (`PBI_TENANT_ID`,
+`PBI_CLIENT_ID`, `PBI_CLIENT_SECRET`) or, with the optional `msal` package,
+interactively; credentials are never stored. The workspace and the dataset
+may also come from `FABRIC_WORKSPACE_ID` and `FABRIC_MODEL_ID`. It refuses
+to run when the dataset name does not match the local model. `--record DIR`
+saves every response and `--replay DIR` answers from such a folder without
+any network access.
 
 `tmdl-preflight refs NAME [PATH ...] [--files]` counts every place a table,
 column or measure name appears, model side and report side, before a rename
