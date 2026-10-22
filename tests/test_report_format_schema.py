@@ -373,3 +373,22 @@ class TestReportFormatFixer:
         code, payload = run_fix(project, "B007")
         assert code == 0, payload
         assert any("Fixed 1 files" in n for n in payload["notes"])
+
+
+class TestAutoFixableTag:
+    """Only the findings the fixer repairs are tagged as auto-fixable."""
+
+    def test_a_finding_the_fixer_does_not_repair_is_not_tagged(self, project, report_dir):
+        (report_dir / "definition.pbir").write_text('{"version": "4.0"}', encoding="utf-8")
+        code, payload = run_check(project, "B007")
+        found = {v["message"]: v["fixable"] for v in violations(payload, "B007")}
+        assert found["BikeShop.Report: definition.pbir missing datasetReference"] is False
+        assert found["BikeShop.Report: definition.pbir missing $schema property "
+                    "(recommended for IntelliSense)"] is False
+
+    def test_a_finding_the_fixer_repairs_is_tagged(self, project, report_dir):
+        _write(report_dir / "definition" / "version.json", {"version": "2.0"})
+        code, payload = run_check(project, "B007")
+        found = {v["message"]: v["fixable"] for v in violations(payload, "B007")}
+        assert found["BikeShop.Report: version.json MISSING $schema property"] is True
+        assert found["BikeShop.Report: version.json has INVALID version format: '2.0'"] is True

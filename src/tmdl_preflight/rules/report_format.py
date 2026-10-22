@@ -63,6 +63,13 @@ class ReportFormatSchemaRule(Rule):
             out.extend(self._check_report(report_dir))
         return out
 
+    def _finding(self, message: str, file: Optional[Path] = None,
+                 obj: Optional[str] = None,
+                 severity: Optional[Severity] = None) -> Violation:
+        """A finding the fixer does not repair."""
+        return self.violation(message, file=file, obj=obj, severity=severity,
+                              fixable=False)
+
     # -- the report folder ---------------------------------------------------
 
     def _check_report(self, report_dir: Path) -> list[Violation]:
@@ -74,10 +81,10 @@ class ReportFormatSchemaRule(Rule):
         has_root = root_report.is_file()
         has_def = def_report.is_file()
         if has_root and has_def:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: Has BOTH root and definition/report.json", file=report_dir))
         elif not has_root and not has_def:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: Missing report.json (neither at root nor in definition/)",
                 file=report_dir))
         if has_def:
@@ -87,7 +94,7 @@ class ReportFormatSchemaRule(Rule):
         out.extend(self._check_content_files(report_dir))
         local_settings = report_dir / ".pbi" / "localSettings.json"
         if local_settings.is_file():
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: .pbi/localSettings.json found in version control (should be "
                 "in .gitignore - it's user/machine specific)",
                 file=local_settings, severity=Severity.WARNING))
@@ -98,84 +105,87 @@ class ReportFormatSchemaRule(Rule):
         name = report_dir.name
         pbir = report_dir / "definition.pbir"
         if not pbir.is_file():
-            out.append(self.violation(f"{name}: Missing definition.pbir", file=pbir))
+            out.append(self._finding(f"{name}: Missing definition.pbir", file=pbir))
             return out
         data, error = load_json(pbir)
         if error is not None:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: Invalid JSON in definition.pbir: {error}", file=pbir))
             return out
         if not isinstance(data, dict):
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: definition.pbir is not a JSON object", file=pbir))
             return out
         if "$schema" not in data:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: definition.pbir missing $schema property "
                 "(recommended for IntelliSense)",
                 file=pbir, severity=Severity.WARNING))
         elif data["$schema"] != DEFINITION_PBIR_SCHEMA:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: definition.pbir has unexpected $schema: {data['$schema']}",
                 file=pbir, severity=Severity.WARNING))
         if "version" not in data:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: definition.pbir missing version property", file=pbir))
         else:
             version = data["version"]
             if not isinstance(version, str) or not PBIR_VERSION.match(version):
-                out.append(self.violation(
+                out.append(self._finding(
                     f"{name}: definition.pbir has invalid version format: {version}",
                     file=pbir))
         if "datasetReference" not in data:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: definition.pbir missing datasetReference", file=pbir))
         else:
             reference = data["datasetReference"]
             if not isinstance(reference, dict) or (
                     "byPath" not in reference and "byConnection" not in reference):
-                out.append(self.violation(
+                out.append(self._finding(
                     f"{name}: datasetReference missing byPath or byConnection", file=pbir))
         return out
 
     def _check_version_json(self, version_file: Path, name: str) -> list[Violation]:
         out: list[Violation] = []
         if not version_file.is_file():
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: New format but missing version.json", file=version_file))
             return out
         data, error = load_json(version_file)
         if error is not None:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: Invalid JSON in version.json: {error}", file=version_file))
             return out
         if not isinstance(data, dict):
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: version.json is not a JSON object", file=version_file))
             return out
         if "$schema" not in data:
             out.append(self.violation(
-                f"{name}: version.json MISSING $schema property", file=version_file))
+                f"{name}: version.json MISSING $schema property", file=version_file,
+                fixable=True))
         elif data["$schema"] != VERSION_METADATA_SCHEMA:
             out.append(self.violation(
                 f"{name}: version.json has incorrect $schema: {data['$schema']}",
-                file=version_file))
+                file=version_file, fixable=True))
         if "version" not in data:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: version.json MISSING version property", file=version_file))
         else:
             version = data["version"]
             if not isinstance(version, str) or not DEFINITION_VERSION.match(version):
+                repairable = (isinstance(version, str)
+                              and self._repair_version(version) is not None)
                 out.append(self.violation(
                     f"{name}: version.json has INVALID version format: '{version}'",
-                    file=version_file))
+                    file=version_file, fixable=repairable))
         unexpected = set(data) - {"$schema", "version"}
         if unexpected:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: version.json has unexpected properties: {unexpected}",
                 file=version_file, severity=Severity.WARNING))
         if data.get("version") == "4.0.0":
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: version.json is 4.0.0, recommend 2.0.0 for compatibility",
                 file=version_file, severity=Severity.WARNING))
         return out
@@ -184,22 +194,22 @@ class ReportFormatSchemaRule(Rule):
         out: list[Violation] = []
         data, error = load_json(report_file)
         if error is not None:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: Invalid JSON in report.json: {error}", file=report_file))
             return out
         if not isinstance(data, dict):
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: report.json is not a JSON object", file=report_file))
             return out
         if "$schema" not in data:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: report.json MISSING $schema property", file=report_file))
         elif data["$schema"] not in REPORT_SCHEMAS:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: report.json has unexpected $schema: {data['$schema']}",
                 file=report_file, severity=Severity.WARNING))
         if "themeCollection" not in data:
-            out.append(self.violation(
+            out.append(self._finding(
                 f"{name}: report.json MISSING required property 'themeCollection'",
                 file=report_file))
         return out
@@ -224,13 +234,13 @@ class ReportFormatSchemaRule(Rule):
         for path in files:
             data, error = load_json(path)
             if error is not None:
-                out.append(self.violation(
+                out.append(self._finding(
                     f"{name}: Invalid JSON in {path.name}: {error}", file=path))
                 continue
             if not isinstance(data, dict):
                 continue  # a JSON array (pages.json) carries no $schema
             if "$schema" not in data:
-                out.append(self.violation(
+                out.append(self._finding(
                     f"{name}: {path.relative_to(report_dir).as_posix()} MISSING "
                     "$schema property", file=path))
         return out

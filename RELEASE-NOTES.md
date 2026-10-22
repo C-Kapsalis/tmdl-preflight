@@ -178,6 +178,10 @@ until configured.
 - BUGFIX: a `definition.pbir` whose `version` is not a string is an invalid
   version format, and a file that is not a JSON object is skipped; the original
   crashed on both. A byte-order mark is tolerated.
+- **B007** tags only the findings its fixer repairs as auto-fixable: the
+  schema URL and the version format of `version.json`. Everything else it
+  reports (a missing `definition.pbir`, a `report.json` without a theme, a
+  content file without a `$schema`) is a human decision.
 - **M002** pairs ``` fences by structure (a fence opens after `=` and closes
   on the next line that starts with backticks), so backticks inside a fenced
   string literal are no longer an "unpaired fence". It also reports a
