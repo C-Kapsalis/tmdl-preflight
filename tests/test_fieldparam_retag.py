@@ -139,8 +139,7 @@ def test_entry_set_is_preserved_by_a_retag(tmp_path):
 
 
 CURATED = {"rules": {"fieldparam-retag": {
-    "families": [{"globs": ["y-Selector *"]}],
-    "curated_categories": ["m_attr_y", "m_attr_sub_y"]}}}
+    "families": ["y-Selector *"], "curated_categories": ["m_attr_y", "m_attr_sub_y"]}}}
 
 
 def test_live_spinout_05_family_agrees_on_the_curated_groups(stand_in):

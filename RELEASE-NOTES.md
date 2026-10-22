@@ -186,9 +186,9 @@ until configured.
 - **F010** judges the numbered `y-Selector` tables and the `y-Plot Specific`
   tables as ONE family: a display name must carry the same category in all
   of them, and the finding says which file disagrees
-  (`Main is g_b in y-Plot Specific 1.tmdl but g_a in a sibling table`). A
-  family is configured as `{globs: [glob, ...]}`; the default family is
-  `y-Selector *` together with `y-Plot Specific *`. BUGFIX: before, only
+  (`Main is g_b in y-Plot Specific 1.tmdl but g_a in a sibling table`). The
+  globs that share their first word are one family, so the default family
+  is `y-Selector *` together with `y-Plot Specific *`. BUGFIX: before, only
   the first file that held a name was compared, so a half-finished retag
   went unnoticed.
 - **F011** runs in the default suite (it only looks at the tables named

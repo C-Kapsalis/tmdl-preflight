@@ -180,18 +180,18 @@ class FieldParameterRetagRule(Rule):
     name = "fieldparam-retag"
     severity = Severity.ERROR
     opt_in = True
-    option_defaults = {"families": [{"globs": ["y-Selector *", "y-Plot Specific *"]}],
+    option_defaults = {"families": ["y-Selector *", "y-Plot Specific *"],
                         "curated_categories": [], "category_position": 4}
     description = (
         "A display name must carry the same category (row value 4) in every "
         "sibling table of a field-parameter family. Retagging a row in some "
         "siblings and not others makes consumers that read different "
-        "siblings disagree on what a category holds. The default family is "
-        "the numbered y-Selector tables together with the y-Plot Specific "
+        "siblings disagree on what a category holds. The globs that share "
+        "their first word are one family, so the default family is the "
+        "numbered y-Selector tables together with the y-Plot Specific "
         "tables. Restricted to curated_categories when set; commented and "
-        "bracket-labelled rows are ignored. Configure a family as "
-        "{globs: [glob, ...]}. Use 'tmdl-preflight fieldparam retag' to "
-        "retag all siblings at once."
+        "bracket-labelled rows are ignored. Use 'tmdl-preflight fieldparam "
+        "retag' to retag all siblings at once."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -199,16 +199,23 @@ class FieldParameterRetagRule(Rule):
         curated = set(self.options.get("curated_categories") or [])
         pos = int(self.options.get("category_position") or 4) - 1
         for model in ctx.models:
-            for fam in self.options.get("families") or []:
-                out.extend(self._family(model, fam, curated, pos))
+            for globs in self._families().values():
+                out.extend(self._family(model, globs, curated, pos))
         return out
 
-    def _family(self, model: SemanticModel, fam, curated: set[str],
+    def _families(self) -> "OrderedDict[str, list[str]]":
+        """The configured globs, grouped into families: the globs that share
+        their first word (the axis) are one family."""
+        families: "OrderedDict[str, list[str]]" = OrderedDict()
+        for glob in self.options.get("families") or []:
+            families.setdefault(_family_key(str(glob)), []).append(str(glob))
+        return families
+
+    def _family(self, model: SemanticModel, globs: list[str], curated: set[str],
                 pos: int) -> list[Violation]:
-        globs = fam.get("globs") if isinstance(fam, dict) else [fam]
         tables: list[Table] = []
-        for glob in globs or []:
-            tables.extend(_matching(model, [str(glob)]))
+        for glob in globs:
+            tables.extend(_matching(model, [glob]))
         seen: "OrderedDict[str, list[tuple[Table, Row, str]]]" = OrderedDict()
         for table in tables:
             for row in live_rows(table):
@@ -323,6 +330,12 @@ def _axis_family(name: str) -> str:
     "Field-parameter" for a table that is on no axis."""
     m = re.match(r"^([xy])[- ]", name, re.IGNORECASE)
     return f"{m.group(1).lower()}-Selector" if m else "Field-parameter"
+
+
+def _family_key(glob: str) -> str:
+    """The axis a glob belongs to: the text before its first dash or space."""
+    m = re.match(r"^[^-\s]*", glob)
+    return (m.group(0) if m else glob).lower()
 
 
 def _family_report(family: str, kind: str, rows: list[tuple[str, str]],
