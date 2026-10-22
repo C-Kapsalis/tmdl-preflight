@@ -501,8 +501,18 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
             report.would_fix = [
                 f"{rid}: {n} violation(s)" for rid, n in sorted(counts.items())
             ]
+            dirty = {v.rule_id for v in report.violations}
             for rule in ruleset.rules:
                 if not rule.fixable:
+                    continue
+                if not _runs_fixer(rule, explicit):
+                    # the real run skips an unsafe fixer nobody named, and
+                    # names it when it had findings to repair; so does this
+                    # (a `fix --check` neither lists nor counts it)
+                    if getattr(args, "dry_run", False) \
+                            and (rule.id in dirty or rule.pending_repairs(ctx)) \
+                            and dirty & rule.repaired_rule_ids():
+                        report.skipped_fixers.append(rule.id)
                     continue
                 report.fix_notes.extend(rule.dry_run_notes(ctx))
     apply_policy(report, cfg, ctx=ctx)

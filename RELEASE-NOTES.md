@@ -15,6 +15,20 @@
   report under `check` counted nothing and said "No issues found" beside
   an M013 finding; it now counts the occurrences. `fix` and
   `fix --dry-run` print what they did before.
+- BUGFIX (kept): a refused R007 repair is reported. When the edit could
+  not be proven (for example on a `relationships.tmdl` that mixes its
+  line endings), the fixer swallowed the refusal: it printed "Deleting 1
+  autodetected relationships (strict policy)...", wrote nothing, printed
+  no `refused` line and exited 1. It now prints `refused  R007:
+  relationships.tmdl: …` and the `ERROR` line on standard error, and
+  exits 2, the documented code of a refused repair. Its dry run says
+  "Would not delete: … mixes its line endings" instead of "Would delete".
+- BUGFIX (kept): a blanket `fix --dry-run` describes what the blanket fix
+  does. It printed "Would delete 1 autodetected relationships" for R007,
+  whose unsafe fixer a blanket fix skips, and no `not fixed` line. The
+  dry run now leaves out what a skipped unsafe fixer would do and prints
+  the same `not fixed  R007: …` line the real run prints. `fix --check`
+  is unchanged (it neither lists nor counts a skipped fixer).
 
 ## 1.2.1 (2026-10-22)
 

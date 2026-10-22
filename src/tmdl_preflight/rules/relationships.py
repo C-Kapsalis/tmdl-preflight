@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+from ..edits import mixed_line_endings
 from .base import Context, Rule, Severity, Violation
 
 VALID_CARDINALITIES = {"one", "many"}
@@ -448,6 +449,14 @@ class AutodetectedRelationshipsRule(Rule):
                 continue
             out.append(f"Found {len(doomed)} autodetected relationships:")
             out.extend(f"   - {r.rel_id}" for r in doomed)
+            if mixed_line_endings(path):
+                # the real run refuses this file; the dry run says so
+                out.append(
+                    f"Would not delete: {_rel_path(ctx, path)} mixes its line "
+                    f"endings, so the fix would refuse it (normalize it to one "
+                    f"style first)"
+                )
+                continue
             out.append(
                 f"Would delete {len(doomed)} autodetected relationships (strict policy)"
             )
@@ -502,9 +511,16 @@ class AutodetectedRelationshipsRule(Rule):
                         f"relationships.tmdl: removed relationship {r.rel_id}"
                         for r in doomed
                     )
-            except EditRefused:
+            except EditRefused as exc:
+                # a refused deletion is reported (exit 2), never swallowed
+                ctx.refused_fixes.append(f"{self.id}: {_rel_path(ctx, path)}: {exc}")
                 continue
         return applied
+
+
+def _rel_path(ctx: Context, path: Path) -> str:
+    """A file's path relative to the scan root, or its name."""
+    return ctx.scan_relative(path) or path.name
 
 
 class FactConformedDimensionJoinRule(Rule):
