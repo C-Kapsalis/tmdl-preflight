@@ -181,15 +181,18 @@ class FieldParameterRetagRule(Rule):
     name = "fieldparam-retag"
     severity = Severity.ERROR
     opt_in = True
-    option_defaults = {"families": ["y-Selector *"], "curated_categories": [], "category_position": 4}
+    option_defaults = {"families": [{"globs": ["y-Selector *", "y-Plot Specific *"]}],
+                        "curated_categories": [], "category_position": 4}
     description = (
         "A display name must carry the same category (row value 4) in every "
         "sibling table of a field-parameter family. Retagging a row in some "
         "siblings and not others makes consumers that read different "
-        "siblings disagree on what a category holds. Restricted to "
-        "curated_categories when set; commented and bracket-labelled rows are "
-        "ignored. Use 'tmdl-preflight fieldparam retag' to retag all siblings "
-        "at once."
+        "siblings disagree on what a category holds. The default family is "
+        "the numbered y-Selector tables together with the y-Plot Specific "
+        "tables. Restricted to curated_categories when set; commented and "
+        "bracket-labelled rows are ignored. Configure a family as "
+        "{globs: [glob, ...]}. Use 'tmdl-preflight fieldparam retag' to "
+        "retag all siblings at once."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -197,28 +200,36 @@ class FieldParameterRetagRule(Rule):
         curated = set(self.options.get("curated_categories") or [])
         pos = int(self.options.get("category_position") or 4) - 1
         for model in ctx.models:
-            for glob in self.options.get("families") or []:
-                tables = _matching(model, [glob])
-                seen: "OrderedDict[str, OrderedDict[str, set[str]]]" = OrderedDict()
-                for table in tables:
-                    for row in live_rows(table):
-                        if len(row.fields) <= pos:
-                            continue
-                        label, cat = _label(row.fields[0]), _label(row.fields[pos])
-                        if label is None or cat is None or (curated and cat not in curated):
-                            continue
-                        seen.setdefault(label, OrderedDict()).setdefault(table.name, set()).add(cat)
-                for label, per_table in seen.items():
-                    if len(per_table) < 2 or len({frozenset(c) for c in per_table.values()}) == 1:
-                        continue
-                    detail = "; ".join(f"{t}: {', '.join(sorted(c))}" for t, c in per_table.items())
-                    first = model.get_table(next(iter(per_table)))
-                    out.append(self.violation(
-                        f"\"{label}\" carries different categories across the '{glob}' "
-                        f"family ({detail}); finish the retag in every sibling "
-                        f"(tmdl-preflight fieldparam retag).",
-                        file=first.file if first else None, obj=f"{glob}:{label}",
-                    ))
+            for fam in self.options.get("families") or []:
+                out.extend(self._family(model, fam, curated, pos))
+        return out
+
+    def _family(self, model: SemanticModel, fam, curated: set[str],
+                pos: int) -> list[Violation]:
+        globs = fam.get("globs") if isinstance(fam, dict) else [fam]
+        tables: list[Table] = []
+        for glob in globs or []:
+            tables.extend(_matching(model, [str(glob)]))
+        seen: "OrderedDict[str, list[tuple[Table, Row, str]]]" = OrderedDict()
+        for table in tables:
+            for row in live_rows(table):
+                if len(row.fields) <= pos:
+                    continue
+                label, cat = _label(row.fields[0]), _label(row.fields[pos])
+                if label is None or cat is None or (curated and cat not in curated):
+                    continue
+                seen.setdefault(label, []).append((table, row, cat))
+        out: list[Violation] = []
+        for label, entries in seen.items():
+            first = entries[0][2]
+            other = next((e for e in entries if e[2] != first), None)
+            if other is None:
+                continue
+            table, row, cat = other
+            out.append(self.violation(
+                f"{label} is {cat} in {table.file.name} but {first} in a sibling table",
+                file=table.file, line=row.index + 1, obj=label,
+            ))
         return out
 
 
@@ -226,38 +237,43 @@ class RetagIncomplete(RuntimeError):
     pass
 
 
+def _retag_hits(lines: list[str], names: list[str], old: str, pos: int) -> "OrderedDict[str, Row]":
+    """The first live row of each requested name whose category is ``old``,
+    in the order the rows occur in the file."""
+    hits: "OrderedDict[str, Row]" = OrderedDict()
+    for row in read_rows(lines):
+        if not is_live_row(row) or len(row.fields) <= pos:
+            continue
+        label = _label(row.fields[0])
+        if label is None or label not in names or label in hits:
+            continue
+        if _label(row.fields[pos]) != old:
+            continue
+        hits[label] = row
+    return hits
+
+
 def retag_rows(files: list[Path], names: list[str], old: str, new: str,
                position: int = 4) -> list[str]:
     """Change the category of the first live row named N under ``old`` to
-    ``new``, for each N; all or nothing across ``files``."""
+    ``new``, for each N, in EVERY file; all or nothing across ``files``."""
     pos = position - 1
     loaded = [read_text_file(Path(f)) for f in files]
     lines = [tf.lines() for tf in loaded]
     edits: dict[tuple[int, int], tuple[int, int]] = {}
-    done: list[str] = []
-    for name in names:
-        hit = None
-        for fi, ls in enumerate(lines):
-            for row in read_rows(ls):
-                if not is_live_row(row) or len(row.fields) <= pos:
-                    continue
-                if (fi, row.index) in edits:
-                    continue
-                if _label(row.fields[0]) == name and _label(row.fields[pos]) == old:
-                    hit = (fi, row)
-                    break
-            if hit:
-                break
-        if hit is None:
-            continue
-        fi, row = hit
-        edits[(fi, row.index)] = field_spans(row.text, row.open_at, row.close_at)[pos]
-        done.append(name)
-    missing = [n for n in names if n not in done]
-    if missing:
-        raise RetagIncomplete(
-            f"retag incomplete: no live row under category \"{old}\" for "
-            f"{', '.join(missing)}; nothing was written")
+    order: list[str] = []
+    for fi, ls in enumerate(lines):
+        hits = _retag_hits(ls, names, old, pos)
+        missing = [n for n in names if n not in hits]
+        if missing:
+            where = f" in {Path(files[fi]).name}" if len(files) > 1 else ""
+            raise RetagIncomplete(
+                f"field-parameter retag incomplete: {sorted(missing)!r} not found "
+                f"under category {old!r}{where}")
+        if fi == 0:
+            order = list(hits)
+        for label, row in hits.items():
+            edits[(fi, row.index)] = field_spans(row.text, row.open_at, row.close_at)[pos]
     literal = '"' + new.replace('"', '""') + '"'
     for (fi, idx), (s, e) in edits.items():
         ln = lines[fi][idx]
@@ -268,7 +284,7 @@ def retag_rows(files: list[Path], names: list[str], old: str, new: str,
                 if len(o.split("\n")) != len(n.split("\n")):
                     raise EditRefused("line count changed")
             verified_write(tf, tf.join(lines[fi]), verify)
-    return done
+    return order
 
 
 # ---------------------------------------------------------------------------

@@ -183,6 +183,14 @@ until configured.
 - `fix` exits 2 when a fixer refuses a repair it cannot prove (the file is
   left unchanged and listed under `refused_fixes`); other files are still
   repaired.
+- **F010** judges the numbered `y-Selector` tables and the `y-Plot Specific`
+  tables as ONE family: a display name must carry the same category in all
+  of them, and the finding says which file disagrees
+  (`Main is g_b in y-Plot Specific 1.tmdl but g_a in a sibling table`). A
+  family is configured as `{globs: [glob, ...]}`; the default family is
+  `y-Selector *` together with `y-Plot Specific *`. BUGFIX: before, only
+  the first file that held a name was compared, so a half-finished retag
+  went unnoticed.
 
 ### Commands and options
 
@@ -270,6 +278,14 @@ until configured.
 - `fieldparam retag <files> --names N1,N2 --from OLD --to NEW` changes the
   category value of the named live rows across sibling tables; a name not
   found live under OLD fails with "retag incomplete" and nothing is written.
+  Every file given is retagged, and a name missing from any one of them
+  stops the whole run:
+  `field-parameter retag incomplete: ['Main'] not found under category 'g_a' in y-Selector 2.tmdl`.
+  `--names` may be given more than once, one name per option, for a display
+  name that holds a comma. The success lines list the retagged names in the
+  order their rows occur in the file. BUGFIX: before, only the first file
+  that held a name was rewritten, and the siblings were left behind — the
+  half-retag the family rule then reported.
 - New Python API: `tmdl_preflight.measure_classes.classify_measure_name`
   (helper vs user-facing names, helper subcategory, scaffolding noise) and
   `tmdl_preflight.roles.fact_tables` (the shared fact-table law).

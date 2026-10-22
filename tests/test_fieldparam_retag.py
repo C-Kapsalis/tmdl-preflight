@@ -59,6 +59,40 @@ def _retag(path, names, old, new):
     return run_cli("fieldparam", "retag", path, "--names", ",".join(names), "--from", old, "--to", new)
 
 
+_SIBLING = """table '{name}'
+\tcolumn '{name}'
+\t\tsourceColumn: [Value1]
+
+\tpartition 'p' = calculated
+\t\tmode: import
+\t\tsource = ```
+\t\t\t\t{
+{rows}
+\t\t\t\t}
+\t\t\t\t```
+"""
+
+_ROW_TEMPLATE = '\t\t\t\t\t("{label}", NAMEOF(\'_A\'[{field}]), {order}, "{cat}")'
+
+
+def _write_sibling(tmp_path, name, rows):
+    """A sibling field-parameter table holding ``rows`` (label, field, order, category)."""
+    tables = tmp_path / "Shop.SemanticModel" / "definition" / "tables"
+    tables.mkdir(parents=True, exist_ok=True)
+    body = "\n".join(_ROW_TEMPLATE.format(**r) for r in rows)
+    f = tables / f"{name}.tmdl"
+    f.write_text(_SIBLING.replace("{name}", name).replace("{rows}", body), encoding="utf-8")
+    return f
+
+
+def _retag_many(paths, names, old, new):
+    argv = ["fieldparam", "retag", *[str(p) for p in paths],
+            "--from", old, "--to", new]
+    for name in names:
+        argv += ["--names", name]
+    return run_cli(*argv)
+
+
 def test_retag_moves_only_the_named_entries_in_the_named_group(tmp_path):
     f = _write(tmp_path)
     code, out, err = _retag(f, ["Main Attribution"], "m_attr_y", "m_attr_sub_y")
@@ -105,7 +139,8 @@ def test_entry_set_is_preserved_by_a_retag(tmp_path):
 
 
 CURATED = {"rules": {"fieldparam-retag": {
-    "families": ["y-Selector *"], "curated_categories": ["m_attr_y", "m_attr_sub_y"]}}}
+    "families": [{"globs": ["y-Selector *"]}],
+    "curated_categories": ["m_attr_y", "m_attr_sub_y"]}}}
 
 
 def test_live_spinout_05_family_agrees_on_the_curated_groups(stand_in):
@@ -122,4 +157,91 @@ def test_half_retagged_family_fails_naming_both_tables(stand_in):
     found = violations(payload)
     assert len(found) == 1
     assert "Main Attribution" in found[0]["message"]
-    assert "y-Selector 1" in found[0]["message"] and "y-Selector 2" in found[0]["message"]
+    assert "y-Selector 2.tmdl" in found[0]["message"]
+
+
+def test_family_covers_the_plot_specific_tables(tmp_path):
+    """The y family is the numbered tables AND the plot-specific ones."""
+    one = _write_sibling(tmp_path, "y-Selector 1",
+                         [{"label": "Main", "field": "m", "order": -997, "cat": "g_a"}])
+    two = _write_sibling(tmp_path, "y-Plot Specific 1",
+                         [{"label": "Main", "field": "m", "order": -997, "cat": "g_b"}])
+    model = one.parent.parent.parent
+    code, payload = run_check(model, "fieldparam-retag")
+    assert code == 1, payload
+    found = violations(payload)
+    assert len(found) == 1
+    assert found[0]["message"] == (
+        "Main is g_b in y-Plot Specific 1.tmdl but g_a in a sibling table")
+
+
+# ---------------------------------------------------------------------------
+# The whole family is retagged, or none of it is
+# ---------------------------------------------------------------------------
+
+
+def test_retag_rewrites_every_file_it_is_given(tmp_path):
+    one = _write_sibling(tmp_path, "y-Selector 1",
+                         [{"label": "Main", "field": "m", "order": -997, "cat": "g_a"}])
+    two = _write_sibling(tmp_path, "y-Selector 2",
+                         [{"label": "Main", "field": "m", "order": -997, "cat": "g_a"}])
+    code, out, err = _retag_many([one, two], ["Main"], "g_a", "g_b")
+    assert code == 0, err
+    for f in (one, two):
+        assert '"g_b"' in f.read_text(encoding="utf-8")
+        assert '"g_a"' not in f.read_text(encoding="utf-8")
+
+
+def test_retag_writes_nothing_when_one_file_lacks_the_name(tmp_path):
+    one = _write_sibling(tmp_path, "y-Selector 1",
+                         [{"label": "Main", "field": "m", "order": -997, "cat": "g_a"}])
+    two = _write_sibling(tmp_path, "y-Selector 2",
+                         [{"label": "Other", "field": "m", "order": -996, "cat": "g_a"}])
+    before_one = one.read_text(encoding="utf-8")
+    before_two = two.read_text(encoding="utf-8")
+    code, out, err = _retag_many([one, two], ["Main"], "g_a", "g_b")
+    assert code == 1
+    assert one.read_text(encoding="utf-8") == before_one
+    assert two.read_text(encoding="utf-8") == before_two
+
+
+def test_retag_error_names_the_missing_names_and_the_file(tmp_path):
+    one = _write_sibling(tmp_path, "y-Selector 1",
+                         [{"label": "Main", "field": "m", "order": -997, "cat": "g_a"}])
+    two = _write_sibling(tmp_path, "y-Selector 2",
+                         [{"label": "Other", "field": "m", "order": -996, "cat": "g_a"}])
+    code, out, err = _retag_many([one, two], ["Main"], "g_a", "g_b")
+    assert code == 1
+    assert ("field-parameter retag incomplete: ['Main'] not found under category "
+            "'g_a' in y-Selector 2.tmdl") in err
+
+
+def test_retag_error_lists_the_missing_names_sorted(tmp_path):
+    f = _write(tmp_path)
+    code, out, err = _retag(f, ["Main Attribution", "Nope", "Another"], "m_attr_y",
+                            "m_attr_sub_y")
+    assert code == 1
+    assert ("field-parameter retag incomplete: ['Another', 'Nope'] not found under "
+            "category 'm_attr_y'") in err
+
+
+def test_retag_success_lines_follow_the_row_order(tmp_path):
+    f = _write_sibling(tmp_path, "y-Selector 1", [
+        {"label": "Zebra", "field": "z", "order": -997, "cat": "g_a"},
+        {"label": "Alpha", "field": "a", "order": -996, "cat": "g_a"},
+    ])
+    code, out, err = _retag(f, ["Alpha", "Zebra"], "g_a", "g_b")
+    assert code == 0, err
+    assert out.index("Zebra") < out.index("Alpha")
+
+
+def test_retag_accepts_a_name_that_holds_a_comma(tmp_path):
+    f = _write_sibling(tmp_path, "y-Selector 1", [
+        {"label": "Sessions, Organic", "field": "s", "order": -997, "cat": "g_a"},
+        {"label": "Plain", "field": "p", "order": -996, "cat": "g_a"},
+    ])
+    code, out, err = _retag_many([f], ["Sessions, Organic", "Plain"], "g_a", "g_b")
+    assert code == 0, err
+    text = f.read_text(encoding="utf-8")
+    assert '("Sessions, Organic", NAMEOF(\'_A\'[s]), -997, "g_b")' in text
+
