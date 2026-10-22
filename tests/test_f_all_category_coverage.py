@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 
@@ -272,4 +273,88 @@ def test_an_empty_mapping_table_skips_checks_3_to_6(stand_in, tmp_path):
     assert {"rule": "A004", "model": "Performance",
             "reason": "no decodable z-Map to derive registered categories from"} \
         in payload["skipped"]
+
+
+# --- the priority of the checks --------------------------------------------
+
+F_FILTERS = (
+    "table 'f-Filters'\n"
+    "\tlineageTag: 11111111-1111-4111-8111-111111111121\n\n"
+    "\tmeasure 'f-All' =\n"
+    "\t\t\tVAR all_cats = CONCATENATEX(VALUES('z-Map Dimension-Measure Groupings'"
+    "[Analysis Category]), [Analysis Category], \",\")\n"
+    "\t\t\tVAR temp_basic =\n"
+    "\t\t\t    IF(CONTAINSSTRING(all_cats, \"Beans\"), IF([f-Beans] > 0, TRUE(), "
+    "FALSE()), TRUE())\n"
+    "\t\t\tVAR temp_alt =\n"
+    "\t\t\t    IF(CONTAINSSTRING(all_cats, \"Beans\"), IF([f-Beans] > 0, TRUE(), "
+    "FALSE()), FALSE())\n"
+    "\t\t\tRETURN\n"
+    "\t\t\t    IF(temp_basic || temp_alt, 1, 0)\n"
+    "\t\tlineageTag: 11111111-1111-4111-8111-111111111122\n\n"
+    "\tmeasure 'f-Beans' = COUNTROWS(Beans)\n"
+    "\t\tlineageTag: 11111111-1111-4111-8111-111111111123\n\n"
+    "\tmeasure 'f-Tea' = COUNTROWS(Beans)\n"
+    "\t\tlineageTag: 11111111-1111-4111-8111-111111111124\n\n"
+    "\tpartition 'f-Filters' = m\n"
+    "\t\tmode: import\n"
+    "\t\tsource = x\n"
+)
+
+
+def _model_with_gates(tmp_path, zmap_rows, f_filters) -> Path:
+    """A model with a mapping table and an f-Filters table."""
+    import base64
+    import zlib
+    definition = tmp_path / "Shop.SemanticModel" / "definition"
+    (definition / "tables").mkdir(parents=True)
+    (definition / "model.tmdl").write_text(
+        "model Model\nref table 'z-Map Dimension-Measure Groupings'\nref table 'f-Filters'\n",
+        encoding="utf-8")
+    payload = json.dumps(zmap_rows, ensure_ascii=True, separators=(", ", ": ")).encode()
+    comp = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
+    blob = base64.b64encode(comp.compress(payload) + comp.flush()).decode()
+    (definition / "tables" / "z-Map Dimension-Measure Groupings.tmdl").write_text(
+        "table 'z-Map Dimension-Measure Groupings'\n"
+        "\tlineageTag: 11111111-1111-4111-8111-111111111111\n\n"
+        "\tcolumn 'Analysis Category'\n\t\tdataType: string\n\t\tlineageTag: "
+        "11111111-1111-4111-8111-111111111112\n\t\tsourceColumn: Analysis Category\n\n"
+        "\tcolumn 'Analysis Subcategory'\n\t\tdataType: string\n\t\tlineageTag: "
+        "11111111-1111-4111-8111-111111111113\n\t\tsourceColumn: Analysis Subcategory\n\n"
+        "\tcolumn category_x_id\n\t\tdataType: string\n\t\tlineageTag: "
+        "11111111-1111-4111-8111-111111111114\n\t\tsourceColumn: category_x_id\n\n"
+        "\tpartition 'z-Map Dimension-Measure Groupings' = m\n"
+        "\t\tmode: import\n\t\tsource =\n"
+        "\t\t\t\tlet\n"
+        "\t\t\t\t    Source = Table.FromRows(Json.Document(Binary.Decompress("
+        f'Binary.FromText("{blob}", BinaryEncoding.Base64), '
+        "Compression.Deflate)), let _t = ((type nullable text) meta "
+        '[Serialized.Text = true]) in type table [#"Analysis Category" = _t, '
+        '#"Analysis Subcategory" = _t, category_x_id = _t])\n'
+        "\t\t\t\tin\n"
+        "\t\t\t\t    Source\n", encoding="utf-8")
+    (definition / "tables" / "f-Filters.tmdl").write_text(f_filters, encoding="utf-8")
+    return definition
+
+
+def test_a_coverage_gap_alone_is_a_warning(tmp_path):
+    """P1 = warning: the run passes, --strict is the full run."""
+    model = _model_with_gates(tmp_path,
+                              [["Beans", "", "Beans_x"], ["Tea", "", "Tea_x"]],
+                              F_FILTERS)
+    code, payload = run_check(model, RULE, config={"rules": {RULE: {}}})
+    assert code == 0, payload
+    found = violations(payload, "A004")
+    assert len(found) == 1, found
+    assert "coverage-gap" in found[0]["message"]
+    assert found[0]["severity"] == "warning"
+
+
+def test_strict_makes_a_coverage_gap_fail(tmp_path):
+    model = _model_with_gates(tmp_path,
+                              [["Beans", "", "Beans_x"], ["Tea", "", "Tea_x"]],
+                              F_FILTERS)
+    code, payload = run_check(model, RULE, strict=True, config={"rules": {RULE: {}}})
+    assert code == 1, payload
+
 
