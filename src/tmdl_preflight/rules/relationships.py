@@ -3,9 +3,11 @@ bidirectional filters, orphan tables. IDs R0xx."""
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Optional
 
+from ..edits import mixed_line_endings
 from .base import Context, Rule, Severity, Violation
 
 VALID_CARDINALITIES = {"one", "many"}
@@ -52,7 +54,7 @@ class RelationshipEndpointsRule(Rule):
                         f"delete the relationship.",
                         file=rel.file,
                         line=rel.line,
-                        obj=f"relationship {rel.rel_id[:8]}",
+                        obj=f"relationship {short_rel_id(rel.rel_id)}",
                     )
                 )
             for rel in model.relationships:
@@ -60,14 +62,14 @@ class RelationshipEndpointsRule(Rule):
                     ("from", rel.from_table, rel.from_column),
                     ("to", rel.to_table, rel.to_column),
                 ):
-                    obj = f"relationship {rel.rel_id[:8]}"
+                    obj = f"relationship {short_rel_id(rel.rel_id)}"
                     t = model.find_table(table)
                     if t is None:
                         broken_ids.add(id(rel))
                         endpoint_errors += 1
                         out.append(self.violation(
                             f"{side.capitalize()} table not found: {table} "
-                            f"(in relationship {rel.rel_id[:8]}...)",
+                            f"(in relationship {short_rel_id(rel.rel_id)}...)",
                             file=rel.file, line=rel.line, obj=obj,
                         ))
                         continue
@@ -77,7 +79,7 @@ class RelationshipEndpointsRule(Rule):
                         endpoint_errors += 1
                         out.append(self.violation(
                             f"{side.capitalize()} column not found: {table}[{column}] "
-                            f"(in relationship {rel.rel_id[:8]}...)",
+                            f"(in relationship {short_rel_id(rel.rel_id)}...)",
                             file=rel.file, line=rel.line, obj=obj,
                         ))
                         continue
@@ -133,10 +135,10 @@ class RelationshipCardinalityRule(Rule):
                         out.append(
                             self.violation(
                                 f"Invalid {side[:-len('Cardinality')]} "
-                                f"cardinality: {value.lower()} in {rel.rel_id[:8]}...",
+                                f"cardinality: {value.lower()} in {short_rel_id(rel.rel_id)}...",
                                 file=rel.file,
                                 line=rel.line,
-                                obj=f"relationship {rel.rel_id[:8]}",
+                                obj=f"relationship {short_rel_id(rel.rel_id)}",
                             )
                         )
                 kind = f"{rel.from_cardinality}_to_{rel.to_cardinality}"
@@ -175,14 +177,14 @@ class DuplicateRelationshipsRule(Rule):
                     first = seen[key]
                     out.append(
                         self.violation(
-                            f"duplicate of relationship {first.rel_id[:8]}: both "
+                            f"duplicate of relationship {short_rel_id(first.rel_id)}: both "
                             f"connect {rel.from_table}[{rel.from_column}] -> "
                             f"{rel.to_table}[{rel.to_column}]. Duplicates "
                             f"usually come from a copy/paste or merge accident; "
                             f"delete one of the two.",
                             file=rel.file,
                             line=rel.line,
-                            obj=f"relationship {rel.rel_id[:8]}",
+                            obj=f"relationship {short_rel_id(rel.rel_id)}",
                         )
                     )
                 else:
@@ -215,7 +217,7 @@ class BidirectionalFilterRule(Rule):
                         f"slow queries; confirm this one is intentional.",
                         file=rel.file,
                         line=rel.line,
-                        obj=f"relationship {rel.rel_id[:8]}",
+                        obj=f"relationship {short_rel_id(rel.rel_id)}",
                     )
                 )
             lines = [
@@ -363,10 +365,24 @@ class AmbiguousActivePairRule(Rule):
                         f"[{ids}] on columns [{', '.join(columns)}]",
                         file=first.file,
                         line=first.line,
-                        obj=f"relationship {first.rel_id[:8]}",
+                        obj=f"relationship {short_rel_id(first.rel_id)}",
                     )
                 )
         return out
+
+
+_GUID_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
+def short_rel_id(rel_id: str) -> str:
+    """A relationship id, shortened for a finding: its GUID cut to the first
+    eight characters, any prefix kept (``AutoDetected_5c1d2e3f``, not
+    ``AutoDete``). An id with no GUID is kept whole."""
+    m = _GUID_RE.search(rel_id)
+    if m is None:
+        return rel_id
+    return rel_id[:m.start()] + m.group(0)[:8]
 
 
 class AutodetectedRelationshipsRule(Rule):
@@ -412,8 +428,10 @@ class AutodetectedRelationshipsRule(Rule):
                          if rel.is_active else "inactive")
                 out.append(
                     self.violation(
+                        # one line per finding: the name follows on the
+                        # same line, not on a second one
                         f"{state}  {rel.from_table}[{rel.from_column}] -> "
-                        f"{rel.to_table}[{rel.to_column}]" "\n"
+                        f"{rel.to_table}[{rel.to_column}]  "
                         f"name: {rel.rel_id}",
                         file=rel.file,
                         line=rel.line,
@@ -448,6 +466,14 @@ class AutodetectedRelationshipsRule(Rule):
                 continue
             out.append(f"Found {len(doomed)} autodetected relationships:")
             out.extend(f"   - {r.rel_id}" for r in doomed)
+            if mixed_line_endings(path):
+                # the real run refuses this file; the dry run says so
+                out.append(
+                    f"Would not delete: {_rel_path(ctx, path)} mixes its line "
+                    f"endings, so the fix would refuse it (normalize it to one "
+                    f"style first)"
+                )
+                continue
             out.append(
                 f"Would delete {len(doomed)} autodetected relationships (strict policy)"
             )
@@ -502,9 +528,16 @@ class AutodetectedRelationshipsRule(Rule):
                         f"relationships.tmdl: removed relationship {r.rel_id}"
                         for r in doomed
                     )
-            except EditRefused:
+            except EditRefused as exc:
+                # a refused deletion is reported (exit 2), never swallowed
+                ctx.refused_fixes.append(f"{self.id}: {_rel_path(ctx, path)}: {exc}")
                 continue
         return applied
+
+
+def _rel_path(ctx: Context, path: Path) -> str:
+    """A file's path relative to the scan root, or its name."""
+    return ctx.scan_relative(path) or path.name
 
 
 class FactConformedDimensionJoinRule(Rule):

@@ -501,8 +501,18 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
             report.would_fix = [
                 f"{rid}: {n} violation(s)" for rid, n in sorted(counts.items())
             ]
+            dirty = {v.rule_id for v in report.violations}
             for rule in ruleset.rules:
                 if not rule.fixable:
+                    continue
+                if not _runs_fixer(rule, explicit):
+                    # the real run skips an unsafe fixer nobody named, and
+                    # names it when it had findings to repair; so does this
+                    # (a `fix --check` neither lists nor counts it)
+                    if getattr(args, "dry_run", False) \
+                            and (rule.id in dirty or rule.pending_repairs(ctx)) \
+                            and dirty & rule.repaired_rule_ids():
+                        report.skipped_fixers.append(rule.id)
                     continue
                 report.fix_notes.extend(rule.dry_run_notes(ctx))
     apply_policy(report, cfg, ctx=ctx)
@@ -528,14 +538,15 @@ def _console_report(args, report: PreflightReport, ruleset: RuleSet,
         if rule.id.lower() not in selected and rule.name.lower() not in selected:
             continue
         if rule.id == "M003":
-            lines.extend(console.lineage_report(ctx, rule, dry_run))
+            lines.extend(console.lineage_report(ctx, rule, dry_run, checking))
         elif rule.id == "M011":
             lines.extend(console.misordered_report(
-                ctx, _found(report, "M011"), dry_run))
+                ctx, _found(report, "M011"), dry_run, checking))
         elif rule.id == "M013":
             if rule.options.get("fix_mode") == "attach":
                 lines.extend(console.attach_report(
-                    ctx, rule, dry_run, bool(getattr(args, "verbose", False))))
+                    ctx, rule, dry_run, bool(getattr(args, "verbose", False)),
+                    checking))
             else:
                 lines.extend(console.dangling_report(
                     ctx, _found(report, "M013"), not dry_run and not checking))
@@ -583,7 +594,8 @@ def _capture_floor(args, ruleset: RuleSet, ctx: Context) -> int:
         )
     ordered = {key: floors[key] for key in sorted(floors)}
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(ordered, indent=indent) + "\n", encoding="utf-8")
+    target.write_text(json.dumps(ordered, indent=indent) + "\n", encoding="utf-8",
+                      newline="\n")
     print(f"tmdl-preflight: floor written to {target}")
     return 0
 
@@ -897,6 +909,12 @@ def _cmd_format_resolve(args) -> int:
                 row["compare_decimals"] = decimals(other)
                 row["decimals_differ"] = decimals(other) != decimals(fmt)
             rows.append(row)
+    if not any(model.get_table(args.table) is not None for model in ctx.models):
+        # a model without the calculation group is skipped; when no model
+        # has it, there is nothing to resolve, and the run says so
+        raise UsageError(
+            f"no table '{args.table}' in any model under {args.path}: nothing to "
+            f"resolve. Name the format calculation group with --table.")
     if args.json:
         print(json.dumps({"name": args.name, "compare": args.compare, "results": rows}, indent=2))
         return 0
@@ -934,6 +952,8 @@ def _cmd_grain(args) -> int:
             error, gaps = grain_gaps(model, rows, args.guard_table, args.guard_measure)
         payload.update({"error": error, "gaps": gaps})
         code = 1 if (error or gaps) else 0
+        if not args.guard_table:
+            code = 2  # a usage error: the flag --check needs is missing
     if args.emit_config:
         payload["config"] = {
             "blocked_tables": [r["dimension"] for r in rows
@@ -1021,6 +1041,11 @@ def _cmd_fieldparam(args) -> int:
     return 0
 
 
+def _warn(message: str) -> None:
+    """A warning on standard error; the run goes on."""
+    print(f"WARNING: {message}", file=sys.stderr)
+
+
 def _cmd_manifest(args) -> int:
     from .manifest import WarehouseTargetError, build_manifest, find_entry, load_targets, render
 
@@ -1037,7 +1062,7 @@ def _cmd_manifest(args) -> int:
     opts = dict(cfg_sections.get("manifest") or {})
     target_opts = dict(opts.get("target") or {})
     targets_path = args.targets or target_opts.get("targets_file")
-    targets = load_targets(Path(targets_path)) if targets_path else {}
+    targets = load_targets(Path(targets_path), _warn) if targets_path else {}
     targets_name = Path(targets_path).name if targets_path else "the targets file"
     root = Path.cwd()
     model_arg = args.model
@@ -1121,7 +1146,8 @@ def _cmd_schema_check(args) -> int:
         if not entries:
             print("outstanding-enrichment registry is empty — nothing to hold.")
             if args.write_holdbacks:
-                hb.write_text(holdbacks_yaml([], previous_since(hb)), encoding="utf-8")
+                hb.write_text(holdbacks_yaml([], previous_since(hb)), encoding="utf-8",
+                              newline="\n")
                 print(f"  holdbacks written: {hb} (0 client(s)) — commit it with the registry")
             return 0
         print(f"SQL state: {root} @ {git_head(root)}")
@@ -1143,7 +1169,8 @@ def _cmd_schema_check(args) -> int:
             else:
                 print("\n--clear-ready: nothing to clear (no fully-READY client).")
         if args.write_holdbacks:
-            hb.write_text(holdbacks_yaml(entries, previous_since(hb)), encoding="utf-8")
+            hb.write_text(holdbacks_yaml(entries, previous_since(hb)), encoding="utf-8",
+                          newline="\n")
             clients = {str(e.get("client", "")) for e in entries}
             print(f"  holdbacks written: {hb} ({len(clients)} client(s)) — commit it with the "
                   f"registry")
@@ -1217,7 +1244,7 @@ def _cmd_refs(args) -> int:
     from .manifest import load_targets
     from .refs import census, live_roots, render
 
-    targets = load_targets(Path(args.targets)) if args.targets else {}
+    targets = load_targets(Path(args.targets), _warn) if args.targets else {}
     live = live_roots(targets) if targets else None
     counts = census(args.name, [Path(p) for p in args.paths], args.history, args.loose, live)
     print(render(args.name, counts, args.loose, args.files, args.include_nonlive))

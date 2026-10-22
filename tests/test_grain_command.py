@@ -233,10 +233,12 @@ def test_check_without_gaps_says_so(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_check_without_a_guard_table_is_not_a_usage_error(tmp_path):
+def test_check_without_a_guard_table_is_a_usage_error(tmp_path):
+    """BUGFIX: the table still prints first, but a missing --guard-table is
+    a usage error (exit 2), not a gap (exit 1)."""
     model = _delivery(tmp_path, FULL_GUARD)
     code, out, err = _grain(model, "--check")
-    assert code == 1
+    assert code == 2
     assert "dimension table" in out
     assert err.strip() == "--check needs --guard-table"
 

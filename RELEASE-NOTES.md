@@ -1,5 +1,78 @@
 # Release notes
 
+## Unreleased
+
+### Fixed
+
+- BUGFIX (kept): `check` never prints repair language. With M003 among
+  the selected rules, `check` printed the lineage repair's live report
+  ("Mode: LIVE", "→ Fixing occurrence", "New tag: …", "✅ Fixed 1
+  duplicate lineage tag occurrence(s)") though it changed no file, and
+  `check --select M011` printed "Fixed 0 issue(s)". The console report
+  was told it was not a dry run, and a check is not a fix. A check now
+  prints "Mode: CHECK" and the duplicates with their locations, and the
+  M011 report says "found" and "Found N issue(s)". The M013 attach-mode
+  report under `check` counted nothing and said "No issues found" beside
+  an M013 finding; it now counts the occurrences. `fix` and
+  `fix --dry-run` print what they did before.
+- BUGFIX (kept): a refused R007 repair is reported. When the edit could
+  not be proven (for example on a `relationships.tmdl` that mixes its
+  line endings), the fixer swallowed the refusal: it printed "Deleting 1
+  autodetected relationships (strict policy)...", wrote nothing, printed
+  no `refused` line and exited 1. It now prints `refused  R007:
+  relationships.tmdl: …` and the `ERROR` line on standard error, and
+  exits 2, the documented code of a refused repair. Its dry run says
+  "Would not delete: … mixes its line endings" instead of "Would delete".
+- BUGFIX (kept): a blanket `fix --dry-run` describes what the blanket fix
+  does. It printed "Would delete 1 autodetected relationships" for R007,
+  whose unsafe fixer a blanket fix skips, and no `not fixed` line. The
+  dry run now leaves out what a skipped unsafe fixer would do and prints
+  the same `not fixed  R007: …` line the real run prints. `fix --check`
+  is unchanged (it neither lists nor counts a skipped fixer).
+- BUGFIX (kept): no fixer drops a refused edit silently. R007's swallow
+  was one of several: the fixers of F001 to F004, F006, F007, F014,
+  F016, F017, M021 and D004 caught the refusal at one or more sites and
+  moved on, so a file they could not prove (for
+  example one that mixes its line endings) stayed broken with exit 1 and
+  no word. The fix pass now reports any edit the verified writer refused
+  and its fixer did not report itself, as `refused  <rule>: <path>:
+  <reason>`, with the `ERROR` line on standard error and exit 2.
+- BUGFIX (kept): a `--targets` file the tool cannot use is named. A
+  missing file, one that cannot be read or parsed, and a YAML file read
+  without PyYAML installed were dropped with no message, so `manifest`
+  and `refs` ran as if no targets file had been given. They still run
+  without a contract (the exit code is unchanged), and now print
+  `WARNING: targets file <path>: <reason>; running without a target
+  contract` on standard error. PyYAML stays optional.
+- BUGFIX (kept): every file the tool writes ends its lines with LF, on
+  every OS, as the floor files do since 1.2.1. `check --capture-floor`,
+  the `baseline` file, the entries file `schema-check --clear-ready`
+  rewrites, the `--write-holdbacks` file and the `live --record`
+  responses were written in text mode, so Windows got CRLF and a file
+  committed from Windows differed from the same file written elsewhere.
+- BUGFIX (kept): an R007 finding is one line. Its message ended the
+  endpoints with a newline and put `name: <id>` on a second line, which
+  broke the one-finding-per-line text report and put a newline in the
+  JSON `message`. The name now follows on the same line, after two
+  spaces.
+- BUGFIX (kept): a relationship id is shortened readably in a finding.
+  R001 to R006 and the C003 contract cut the id to its first eight
+  characters, which turned `AutoDetected_5c1d2e3f-…` into `AutoDete`. The
+  GUID in the id is cut to eight characters and a prefix is kept
+  (`relationship AutoDetected_5c1d2e3f`); a bare GUID reads as before,
+  and an id with no GUID is kept whole. A baseline entry for such a
+  finding names the new object, so it is reported once as new.
+- BUGFIX (changed from the original): `format-resolve` says when there is
+  nothing to resolve. When no model under the path had the calculation
+  group (`--table`, default `z-Selector Format`), it printed nothing and
+  exited 0. It now prints `no table '<table>' in any model under <path>:
+  nothing to resolve` and exits 2, the usage-error code. A model without
+  the group is still skipped silently when another model has it.
+- BUGFIX (changed from the original): `grain --check` without
+  `--guard-table` exits 2, the usage-error code, instead of 1, which
+  reads as a coverage gap. It still prints the table first and
+  `--check needs --guard-table` on standard error.
+
 ## 1.2.1 (2026-10-22)
 
 ### Fixed
