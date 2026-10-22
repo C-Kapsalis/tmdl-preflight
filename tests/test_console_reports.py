@@ -22,7 +22,7 @@ def _model(root: Path, name: str = "Cafe", body: str | None = None) -> Path:
     definition = root / f"{name}.SemanticModel" / "definition"
     (definition / "tables").mkdir(parents=True)
     (definition / "model.tmdl").write_text(
-        "model Model\n\tculture: en-US\n\nref table Beans\n", encoding="utf-8")
+        "model Model\n\tculture: en-US\n\nref table Beans\n", encoding="utf-8", newline="\n")
     (definition / "tables" / "Beans.tmdl").write_text(
         body if body is not None else
         "table Beans\n"
@@ -30,7 +30,7 @@ def _model(root: Path, name: str = "Cafe", body: str | None = None) -> Path:
         "\tcolumn kg\n"
         "\t\tlineageTag: 22222222-2222-4222-8222-222222222222\n"
         "\t\tdataType: double\n",
-        encoding="utf-8")
+        encoding="utf-8", newline="\n")
     return root / f"{name}.SemanticModel"
 
 

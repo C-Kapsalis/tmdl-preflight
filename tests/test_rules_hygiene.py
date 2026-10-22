@@ -19,13 +19,13 @@ def _model(tmp_path: Path, tables: dict[str, str], model_extra: str = "",
     (definition / "tables").mkdir(parents=True)
     refs = "".join(f"ref table '{n}'\n" for n in tables)
     (definition / "model.tmdl").write_text(
-        f"model Model\n\tculture: en-US\n\n{model_extra}{refs}", encoding="utf-8")
+        f"model Model\n\tculture: en-US\n\n{model_extra}{refs}", encoding="utf-8", newline="\n")
     (definition / "database.tmdl").write_text("database\n\tcompatibilityLevel: 1601\n",
-                                              encoding="utf-8")
+                                              encoding="utf-8", newline="\n")
     for name, body in tables.items():
-        (definition / "tables" / f"{name}.tmdl").write_text(body, encoding="utf-8")
+        (definition / "tables" / f"{name}.tmdl").write_text(body, encoding="utf-8", newline="\n")
     if expressions is not None:
-        (definition / "expressions.tmdl").write_text(expressions, encoding="utf-8")
+        (definition / "expressions.tmdl").write_text(expressions, encoding="utf-8", newline="\n")
     return definition.parent
 
 

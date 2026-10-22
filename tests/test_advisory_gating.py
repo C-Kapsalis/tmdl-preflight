@@ -9,6 +9,8 @@ would pass a one-case test while throwing away the suite's signal.
 """
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 pytest_plugins = ["pytester"]
@@ -17,6 +19,9 @@ ADVISORY_ID = "alpha-pilot"
 GATED_CLIENT = "spinout-10"   # any non-advisory model
 
 
+# The advisory list is read from pyproject.toml; TOML configuration needs
+# Python 3.11+ (README "Configuration"; on 3.10 the JSON file is the form).
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="tomllib needs 3.11+")
 def test_conftest_hook_demotes_only_failures_on_advisory_clients(pytester):
     pytester.makepyprojecttoml(f"""
         [tool.tmdl-preflight]
