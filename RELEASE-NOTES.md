@@ -212,6 +212,11 @@ until configured.
 - **F007** writes the three annotations the original wrote - `AUTO-ADDED`,
   `AUTO-PROMOTED` and `AUTO-REMOVED`, each with the reviewer's line below
   it - and names the file and the row it edited.
+- **F005** is on by default for the numbered x tables `x-Selector 1` to
+  `x-Selector 9` (exact names), reading only fenced calculated sources, and
+  reports one row at a time as `<table>: "<label>"`. The rule text is "All
+  x-Selector field parameters must have 4th parameter (category_x_id)".
+  Configure `category_column_tables` to read other tables instead.
 
 - **B002** reports a bookmark file that is not valid JSON.
 - **B001-B003** skip bookmarks of archived report copies: paths containing

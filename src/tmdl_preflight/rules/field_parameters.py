@@ -194,14 +194,16 @@ class FieldParameterCategoryColumnRule(Rule):
     id = "F005"
     name = "fieldparam-category-column"
     severity = Severity.ERROR
-    option_defaults = {"category_column_tables": [], "category_position": 4}
+    option_defaults = {"category_column_tables": [f"x-Selector {i}" for i in range(1, 10)],
+                       "category_position": 4}
     description = (
-        "In field parameters that carry a category column (configure "
-        "category_column_tables, names or globs), every row needs the "
-        "category: a 3-field row (label, NAMEOF, order) whose label has no "
-        "4-field twin in the same table silently drops out of every category "
-        "filter. Only fenced calculated sources are read. Not auto-fixable: "
-        "the category is a business decision. Inert until configured."
+        "All x-Selector field parameters must have 4th parameter (category_x_id). "
+        "A 3-field row (label, NAMEOF, order) whose label has no 4-field twin in "
+        "the same table silently drops out of every category filter. Only fenced "
+        "calculated sources are read. Not auto-fixable: the category is a business "
+        "decision. The tables to read are named by the category_column_tables "
+        "option (names or globs); by default the numbered x tables x-Selector 1 to "
+        "x-Selector 9."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -225,9 +227,7 @@ class FieldParameterCategoryColumnRule(Rule):
                     # the fenced body starts on the line after 'source = ```'
                     line = (part.source_start_line or part.line) + 1 + part.source.count("\n", 0, m.start())
                     out.append(self.violation(
-                        f"row \"{m.group('label')}\" of {table.name} has no category "
-                        f"(value {self.options['category_position']}); add it so the row "
-                        f"shows up under category filters.",
+                        f'{table.name}: "{m.group("label")}"',
                         file=part.file, line=line, obj=f"{table.name}[{m.group('label')}]",
                     ))
         return out
