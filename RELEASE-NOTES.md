@@ -44,6 +44,12 @@
   without a contract (the exit code is unchanged), and now print
   `WARNING: targets file <path>: <reason>; running without a target
   contract` on standard error. PyYAML stays optional.
+- BUGFIX (kept): every file the tool writes ends its lines with LF, on
+  every OS, as the floor files do since 1.2.1. `check --capture-floor`,
+  the `baseline` file, the entries file `schema-check --clear-ready`
+  rewrites, the `--write-holdbacks` file and the `live --record`
+  responses were written in text mode, so Windows got CRLF and a file
+  committed from Windows differed from the same file written elsewhere.
 
 ## 1.2.1 (2026-10-22)
 

@@ -297,7 +297,8 @@ class RecordingClient(_Client):
         self._queries: list[dict] = []
 
     def _write(self, name: str, data: Any) -> None:
-        (self.folder / name).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        (self.folder / name).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8",
+                                        newline="\n")
 
     def execute(self, query: str) -> QueryResult:
         result = self.inner.execute(query)

@@ -76,7 +76,8 @@ def write_baseline(path: Path, counts: Counter, tool_version: str) -> None:
         "format": FORMAT_VERSION,
         "entries": entries_from_counts(counts),
     }
-    Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8",
+                          newline="\n")
 
 
 def load_baseline(path: Path) -> Counter:

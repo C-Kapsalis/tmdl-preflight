@@ -594,7 +594,8 @@ def _capture_floor(args, ruleset: RuleSet, ctx: Context) -> int:
         )
     ordered = {key: floors[key] for key in sorted(floors)}
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(ordered, indent=indent) + "\n", encoding="utf-8")
+    target.write_text(json.dumps(ordered, indent=indent) + "\n", encoding="utf-8",
+                      newline="\n")
     print(f"tmdl-preflight: floor written to {target}")
     return 0
 
@@ -1137,7 +1138,8 @@ def _cmd_schema_check(args) -> int:
         if not entries:
             print("outstanding-enrichment registry is empty — nothing to hold.")
             if args.write_holdbacks:
-                hb.write_text(holdbacks_yaml([], previous_since(hb)), encoding="utf-8")
+                hb.write_text(holdbacks_yaml([], previous_since(hb)), encoding="utf-8",
+                              newline="\n")
                 print(f"  holdbacks written: {hb} (0 client(s)) — commit it with the registry")
             return 0
         print(f"SQL state: {root} @ {git_head(root)}")
@@ -1159,7 +1161,8 @@ def _cmd_schema_check(args) -> int:
             else:
                 print("\n--clear-ready: nothing to clear (no fully-READY client).")
         if args.write_holdbacks:
-            hb.write_text(holdbacks_yaml(entries, previous_since(hb)), encoding="utf-8")
+            hb.write_text(holdbacks_yaml(entries, previous_since(hb)), encoding="utf-8",
+                          newline="\n")
             clients = {str(e.get("client", "")) for e in entries}
             print(f"  holdbacks written: {hb} ({len(clients)} client(s)) — commit it with the "
                   f"registry")

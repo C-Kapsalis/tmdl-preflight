@@ -236,3 +236,97 @@ def test_a_usable_targets_file_prints_no_warning(tmp_path, project):
     t.write_text('{"one": {"model_path": "BikeShop.SemanticModel"}}', encoding="utf-8")
     code, out, err = run_cli("refs", "Revenue", str(project), "--targets", str(t))
     assert "WARNING" not in err, err
+
+
+# ---------------------------------------------------------------------------
+# 5. every file the tool writes ends its lines with LF, on every OS
+# ---------------------------------------------------------------------------
+
+import json  # noqa: E402
+import pathlib  # noqa: E402
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture
+def windows_text_mode(monkeypatch):
+    """Write text files the way Windows does in text mode: a ``\\n`` becomes
+    ``\\r\\n`` unless the caller asked for ``newline="\\n"`` or ``""``.
+    CI runs the real thing on windows-latest; this makes the same writes
+    show on every OS."""
+    real = pathlib.Path.write_text
+
+    def write_text(self, data, encoding=None, errors=None, newline=None):
+        if newline is None:
+            data = data.replace("\n", "\r\n")
+            newline = ""
+        return real(self, data, encoding=encoding, errors=errors, newline=newline)
+
+    monkeypatch.setattr(pathlib.Path, "write_text", write_text)
+
+
+def _lf_only(path: Path) -> None:
+    raw = path.read_bytes()
+    assert raw.endswith(b"\n"), raw[-20:]
+    assert b"\r" not in raw, raw[:200]
+
+
+def test_check_capture_floor_writes_lf(windows_text_mode, project, tmp_path):
+    out_file = tmp_path / "floor.json"
+    code, out, err = run_cli("check", project, "--select", "R016",
+                             "--capture-floor", str(out_file), "--no-config")
+    assert code == 0, (out, err)
+    _lf_only(out_file)
+
+
+def test_the_baseline_file_is_lf(windows_text_mode, project, tmp_path):
+    out_file = tmp_path / "baseline.json"
+    code, out, err = run_cli("baseline", project, "--output", str(out_file),
+                             "--no-config")
+    assert code == 0, (out, err)
+    _lf_only(out_file)
+
+
+def test_clear_ready_rewrites_the_entries_file_with_lf(windows_text_mode, tmp_path):
+    from tmdl_preflight.sqlviews import clear_ready
+
+    path = tmp_path / "entries.json"
+    data = {"entries": [{"client": "one"}, {"client": "two"}]}
+    path.write_bytes(json.dumps(data).encode("utf-8"))
+    assert clear_ready(path, data, ["one"]) == 1
+    _lf_only(path)
+
+
+def test_the_holdbacks_file_is_lf(windows_text_mode, tmp_path):
+    entries = tmp_path / "entries.json"
+    entries.write_bytes(b'{"schema_version": 1, "entries": []}')
+    sql = tmp_path / "sql"
+    sql.mkdir()
+    hb = tmp_path / "deploy_holdbacks.yml"
+    code, out, err = run_cli("schema-check", "--sql-dir", sql, "--entries", entries,
+                             "--holdbacks", hb, "--write-holdbacks")
+    assert code == 0, (out, err)
+    _lf_only(hb)
+
+
+def test_live_recordings_are_lf(windows_text_mode, tmp_path):
+    from tmdl_preflight.live import RecordingClient
+
+    client = RecordingClient(None, tmp_path / "rec")
+    client._write("answer.json", {"rows": [1, 2]})
+    _lf_only(tmp_path / "rec" / "answer.json")
+
+
+def test_every_write_text_in_the_tool_names_its_newline():
+    """A text-mode write without ``newline=`` writes CRLF on Windows."""
+    import ast
+
+    src = Path(__file__).resolve().parent.parent / "src" / "tmdl_preflight"
+    missing = []
+    for file in sorted(src.rglob("*.py"), key=lambda p: p.as_posix()):
+        for node in ast.walk(ast.parse(file.read_text(encoding="utf-8"))):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "write_text"
+                    and not any(k.arg == "newline" for k in node.keywords)):
+                missing.append(f"{file.name}:{node.lineno}")
+    assert missing == [], missing

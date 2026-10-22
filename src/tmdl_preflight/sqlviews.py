@@ -178,7 +178,8 @@ def clear_ready(path: Path, data: dict, ready_clients: Iterable[str]) -> int:
     removed = len(entries) - len(kept)
     if removed:
         data["entries"] = kept
-        Path(path).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        Path(path).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8",
+                              newline="\n")
     return removed
 
 
