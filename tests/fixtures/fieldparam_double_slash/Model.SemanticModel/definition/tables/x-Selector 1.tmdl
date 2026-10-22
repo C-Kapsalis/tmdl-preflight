@@ -1,0 +1,15 @@
+table 'x-Selector 1'
+	lineageTag: 11111111-2222-3333-4444-5555555555aa
+
+	partition 'x-Selector 1' = calculated
+		mode: import
+		source = ```
+				
+				{
+				("Revenue", NAMEOF('Sales'[Revenue]), 0, "sales_x"),
+				// ("Old KPI", NAMEOF([CPM]), 1, "old_x"),
+				("Web//App", NAMEOF([Margin %]), 3, "web_x"),
+				// section: sales
+				("Orders", NAMEOF([Update Events]), 2, "sales_x")
+				}
+				```

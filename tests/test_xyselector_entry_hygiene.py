@@ -25,7 +25,12 @@ pytestmark = [pytest.mark.p0]
 
 FIX = "xyselector_axis_standins"
 FIXTURES = Path(__file__).parent / "fixtures" / FIX
-STANDINS = sorted(p.name for p in FIXTURES.iterdir() if p.is_dir())  # fp_* + template
+# These stand-ins carry a duplicate group of their own shape and are covered
+# by tests/test_fieldparam_row_parity.py.
+ELSEWHERE = {"fp_dup_commented_and_live", "fp_dup_two_groups",
+             "fp_family_arity_mismatch"}
+STANDINS = sorted(p.name for p in FIXTURES.iterdir()
+                   if p.is_dir() and p.name not in ELSEWHERE)  # fp_* + template
 
 
 def _model(stand_in, sid):
@@ -39,7 +44,10 @@ def _cases(fails=(), skips=(), overrides=None):
             for s in STANDINS]
 
 
-@pytest.mark.parametrize("sid, verdict", _cases(fails={"fp_dup_three_copies"}, skips={"fp_no_axis_tables"}))
+@pytest.mark.parametrize(
+    "sid, verdict",
+    _cases(fails={"fp_dup_three_copies"}, skips={"fp_no_axis_tables"}),
+)
 def test_no_duplicate_axis_entries(stand_in, sid, verdict):
     model = _model(stand_in, sid)
     rule = "fieldparam-duplicate-rows"

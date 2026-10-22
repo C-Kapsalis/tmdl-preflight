@@ -16,6 +16,7 @@ from ..dax import (
     scan_table_constructors,
 )
 from ..edits import EditRefused, read_text_file, verified_write
+from ..fieldparams import no_axis_files_note
 from .base import Context, Rule, Severity, Violation
 
 
@@ -81,6 +82,10 @@ class _ConstructorRuleBase(Rule):
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
+        for model in ctx.models:
+            note = no_axis_files_note(model)
+            if note:
+                ctx.notes.append(note)
         for table, part, issue in self._issues(ctx):
             out.append(
                 self.violation(
@@ -95,6 +100,8 @@ class _ConstructorRuleBase(Rule):
     def _fix_with(self, ctx: Context, repair, label: str) -> list[str]:
         applied: list[str] = []
         done: set[tuple] = set()
+        touched: set[Path] = set()
+        total = 0
         for table, part, _issue in list(self._issues(ctx)):
             key = (part.file, part.source_start_line)
             if key in done or part.source_start_line is None or part.source_end_line is None:
@@ -105,8 +112,24 @@ class _ConstructorRuleBase(Rule):
                 self.issue_kind,
             )
             if changed:
-                applied.append(f"{part.file.name}: {label} {changed} comma(s) in '{table.name}' partition source")
+                applied.append(f"{part.file.name}: {label.format(changed)}")
+                total += changed
+                touched.add(part.file)
+        if total:
+            ctx.blocks.append(
+                f"Repaired {total} separator defect(s) across {len(touched)} file(s). Commit "
+                f"the changes and re-sync + FULL-refresh the affected workspace(s) - an "
+                f"incremental refresh will not rebuild a calculated table that previously "
+                f"failed to evaluate.")
         return applied
+
+
+#: The Desktop symptom of a separator defect is expected to match F001, but it
+#: was never observed for this defect on its own.
+DESKTOP_UNVERIFIED = (
+    "The Desktop symptom is expected to match F001 (the model opens, visuals on "
+    "the table fail), but it has not been observed for this defect on its own."
+)
 
 
 class MissingRowSeparatorRule(_ConstructorRuleBase):
@@ -127,15 +150,12 @@ class MissingRowSeparatorRule(_ConstructorRuleBase):
 
     def _message(self, issue) -> str:
         return (
-            "two rows of the table constructor have no comma between them, "
-            "so the calculated partition source cannot be parsed (visuals on "
-            "this table are expected to fail, as with F001; not observed for "
-            "this defect alone). Add a comma after the previous row (the "
-            "auto-fix does)."
+            f"tuple closes with no ',' before the next tuple. {DESKTOP_UNVERIFIED} "
+            f"Add a comma after the previous row (the auto-fix does)."
         )
 
     def fix(self, ctx: Context) -> list[str]:
-        return self._fix_with(ctx, insert_missing_row_separators, "inserted")
+        return self._fix_with(ctx, insert_missing_row_separators, "added {0} separator comma(s)")
 
 
 class TrailingRowCommaRule(_ConstructorRuleBase):
@@ -155,13 +175,13 @@ class TrailingRowCommaRule(_ConstructorRuleBase):
 
     def _message(self, issue) -> str:
         return (
-            "the table constructor ends with a comma before its closing "
-            "brace, so the calculated partition source cannot be parsed. "
-            "Delete the trailing comma (the auto-fix does)."
+            "last row before '}' has a trailing ',' -> DAX: \"Table constructor "
+            f"cannot have optional argument\". {DESKTOP_UNVERIFIED} "
+            f"Delete the trailing comma (the auto-fix does)."
         )
 
     def fix(self, ctx: Context) -> list[str]:
-        return self._fix_with(ctx, remove_trailing_row_commas, "removed")
+        return self._fix_with(ctx, remove_trailing_row_commas, "removed {0} trailing comma(s)")
 
 
 _THREE_FIELD_RE = re.compile(r'\(\s*"(?P<label>[^"]*)"\s*,\s*NAMEOF\s*\([^()]*\)\s*,\s*-?\d+\s*\)')
@@ -174,14 +194,16 @@ class FieldParameterCategoryColumnRule(Rule):
     id = "F005"
     name = "fieldparam-category-column"
     severity = Severity.ERROR
-    option_defaults = {"category_column_tables": [], "category_position": 4}
+    option_defaults = {"category_column_tables": [f"x-Selector {i}" for i in range(1, 10)],
+                       "category_position": 4}
     description = (
-        "In field parameters that carry a category column (configure "
-        "category_column_tables, names or globs), every row needs the "
-        "category: a 3-field row (label, NAMEOF, order) whose label has no "
-        "4-field twin in the same table silently drops out of every category "
-        "filter. Only fenced calculated sources are read. Not auto-fixable: "
-        "the category is a business decision. Inert until configured."
+        "All x-Selector field parameters must have 4th parameter (category_x_id). "
+        "A 3-field row (label, NAMEOF, order) whose label has no 4-field twin in "
+        "the same table silently drops out of every category filter. Only fenced "
+        "calculated sources are read. Not auto-fixable: the category is a business "
+        "decision. The tables to read are named by the category_column_tables "
+        "option (names or globs); by default the numbered x tables x-Selector 1 to "
+        "x-Selector 9."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -205,9 +227,7 @@ class FieldParameterCategoryColumnRule(Rule):
                     # the fenced body starts on the line after 'source = ```'
                     line = (part.source_start_line or part.line) + 1 + part.source.count("\n", 0, m.start())
                     out.append(self.violation(
-                        f"row \"{m.group('label')}\" of {table.name} has no category "
-                        f"(value {self.options['category_position']}); add it so the row "
-                        f"shows up under category filters.",
+                        f'{table.name}: "{m.group("label")}"',
                         file=part.file, line=line, obj=f"{table.name}[{m.group('label')}]",
                     ))
         return out

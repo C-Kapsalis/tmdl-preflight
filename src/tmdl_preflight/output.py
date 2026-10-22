@@ -117,6 +117,9 @@ def render_text(report: PreflightReport, root: Path) -> str:
         f"tmdl-preflight: {e} error(s), {w} warning(s), {i} info(s)"
         + (f", {len(report.fixes_applied)} fix(es) applied" if report.fixes_applied else "")
     )
+    for block in report.blocks:
+        out.append("")
+        out.append(block)
     return "\n".join(out)
 
 

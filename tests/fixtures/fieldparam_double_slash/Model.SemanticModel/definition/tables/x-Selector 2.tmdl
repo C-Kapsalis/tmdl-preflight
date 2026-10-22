@@ -1,0 +1,10 @@
+table 'x-Selector 2'
+	lineageTag: 11111112-2222-3333-4444-555555555502
+
+	partition 'x-Selector 2' = calculated
+		mode: import
+		source =
+				{
+				("Revenue", NAMEOF('Sales'[Revenue]), 0, "sales_x"),
+				("Web//App", NAMEOF([Margin %]), 3, "web_x")
+				}

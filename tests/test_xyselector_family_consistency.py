@@ -26,7 +26,11 @@ pytestmark = [pytest.mark.p0]
 
 FIX = "xyselector_axis_standins"
 FIXTURES = Path(__file__).parent / "fixtures" / FIX
-STANDINS = sorted(p.name for p in FIXTURES.iterdir() if p.is_dir())  # fp_* + template
+# The arity stand-in keeps its finding after the fix (a row of another width
+# is never copied) and has its own tests in test_fieldparam_family_parity.py.
+ELSEWHERE = {"fp_family_arity_mismatch"}
+STANDINS = sorted(p.name for p in FIXTURES.iterdir()
+                   if p.is_dir() and p.name not in ELSEWHERE)  # fp_* + template
 
 
 def _model(stand_in, sid):
@@ -45,7 +49,9 @@ RULE = "fieldparam-family-consistency"
 @pytest.mark.parametrize(
     "sid, verdict",
     [c for c in _cases(
-        fails={"fp_family_missing_field", "fp_family_ps1_unique", "fp_family_ps2_date"},
+        fails={"fp_family_missing_field", "fp_family_ps1_unique", "fp_family_ps2_date",
+               "fp_family_ps1_indent", "fp_family_ps2_also_offers",
+               "fp_family_ps2_and_ps3"},
         skips={"fp_no_axis_tables", "template"},
     ) if c[0] != "fp_sep_no_nameof_rows"],  # stand-in for the separator rule only
 )

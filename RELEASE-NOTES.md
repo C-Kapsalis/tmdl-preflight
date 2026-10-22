@@ -85,6 +85,8 @@ the example model with one defect each. Where that evidence and the
 | F013 | field-parameter-table-no-measures | error | no |
 | F014 | selector-branch-resolution | error | yes |
 | F015 | field-parameter-partition-shape (opt-in) | info | no |
+| F016 | fieldparam-double-slash-rows | info | yes (opt-in) |
+| F017 | fieldparam-blank-lines | info | yes |
 | P001 | refresh-policy-repair | error | yes (unsafe; also adds P002's missing policies) |
 | M021 | culture-orphan-bindings | error | yes |
 | M022 | diagram-layout-blank (opt-in) | warning | yes |
@@ -286,7 +288,65 @@ the same floor file and fails on a rise.
   the configured grain-guard measure: an over-long `||` chain breaks the
   model on import wherever it sits. `or_chain_measures` narrows the rule to
   the named measures. STRICTER.
-
+- **F001** says how many orphan commas it found, before anything else
+  (`2 orphan comma(s).`), and names the place it found them: a whole
+  field-parameter file is `(field-parameter file)`, a calculated table's
+  partition is `(partition source)`. The Desktop sentence is unchanged.
+- **F002** and **F003** say what the defect is, in the words the original
+  scripts used: `tuple closes with no ',' before the next tuple` and
+  `last row before '}' has a trailing ',' -> DAX: "Table constructor cannot
+  have optional argument"`, followed by the note that the Desktop symptom
+  is expected but was not observed for these defects alone.
+- **F004** says `<row> has <n> fields, norm is <m>`.
+- **F006** says `'<row>' -> <NAMEOF call> (order=<n>, id='<id>') appears <n>x`,
+  with the whole NAMEOF call compared whitespace run by whitespace run: two
+  spellings of the same call (`NAMEOF([Units])` and `NAMEOF ( [Units] )`)
+  are two rows, not one row twice. Findings are ordered by the row, not by
+  where the first copy sits.
+- **F001, F002, F003, F004 and F006** now say, per file and per row,
+  what they changed (`x-Selector 1.tmdl: removed 2 orphan comma(s)`, `x-
+  Selector 1.tmdl:12: "CPM" padded 5 -> 6 (field 6 set to "Other") —
+  ANNOTATED IN PLACE, needs BI review.`), and print the original's closing
+  advice once per run, after the summary: `Removed 3 orphan comma(s) across
+  1 file(s). ...`, `Repaired 1 separator defect(s) across 1 file(s). ...`,
+  `removed 1 duplicate axis row(s) under <folder>`, and the three ragged-row
+  blocks (auto-realigned, auto-padded, over-long rows left untouched). F002
+  and F003 are two rules, so each prints its own separator-defect line when
+  it changed something.
+- **F006**'s fixer leaves a commented-out row alone: a copy of the row
+  that sits behind a `--` or `//` marker is a parked row, and removing it
+  would destroy a row the author kept on purpose.
+- **F007** says `MISSING <field> (offered by <file>)`, `date-named field
+  <field> must not be in Plot Specific 2` and `<field> is offered NOWHERE
+  in the canonical set — Plot Specific 1 may not introduce fields`. The
+  field is named by its identity: a measure by its bare name, a column as
+  `<table>[<column>]`.
+- **F007** copies a missing row from the numbered tables first and only
+  then from the second plot-specific table, and the second plot-specific
+  table is the LAST one numbered 2 or higher (`x-Plot Specific 3` when both
+  2 and 3 exist). A row of another width is never copied; the fixer says
+  so and leaves the file alone.
+- **F007** writes the three annotations the original wrote - `AUTO-ADDED`,
+  `AUTO-PROMOTED` and `AUTO-REMOVED`, each with the reviewer's line below
+  it - and names the file and the row it edited.
+- **F005** is on by default for the numbered x tables `x-Selector 1` to
+  `x-Selector 9` (exact names), reading only fenced calculated sources, and
+  reports one row at a time as `<table>: "<label>"`. The rule text is "All
+  x-Selector field parameters must have 4th parameter (category_x_id)".
+  Configure `category_column_tables` to read other tables instead.
+- **F016** reports a field-parameter row that carries `//`: a row that was
+  commented out, or a label with a double slash in it that some editor
+  truncates. The rule reads the first fenced source of every axis table
+  (`*-Selector*`, `*-Plot Specific*`). The repair deletes the offending
+  rows, keeps a copy of the file in `tables/backups/<file
+  .double_slash_backup>` and is opt-in, because it removes text from a
+  picker a user sees: a blanket `fix` skips it, `fix --select F016` runs
+  it. A dry run says what it would remove and writes nothing.
+- **F017** reports a fenced field-parameter source that is not in its
+  canonical form - a blank line, the indented brace, the rows with their
+  blank runs collapsed, the indented closing brace - and the repair rewrites
+  the block to that form. The canonical indentation is the indentation of
+  the `source = ` line plus two tabs.
 - **B002** reports a bookmark file that is not valid JSON.
 - **B001-B003** skip bookmarks of archived report copies: paths containing
   `legacy/`, `_backup/`, `_legacy/`, `_b2/`, `DemoData.` or `demodata/`
@@ -892,6 +952,26 @@ unchanged.
   exit 2, a message on standard error, and never a Python traceback.
 - A lineage tag followed by a tab or several spaces after `lineageTag:` is
   rewritten like any other (before, only one space was handled).
+- **The field-parameter fixers keep the file's byte-order mark and its line
+  endings.** The original scripts rewrote every file they touched with the
+  platform's own line ending and dropped a byte-order mark, so a CRLF file
+  checked out on a Mac came back with LF. BUGFIX.
+- **The `fix` command always re-checks, and a finding that survives fails
+  the run.** The original's comma, separator and duplicate fixers always
+  exited 0 after `--fix`; the tool exits 1 when a selected error is still
+  there. STRICTER.
+- **Removing a date row from the second plot-specific table takes the
+  separator with it.** The original left the previous row's comma behind,
+  so the constructor ended with `,` before `}` - a defect of its own. BUGFIX.
+- **A row copied into another table is followed by a separator repair.** The
+  original copied the row's text verbatim and stopped there: appending a row
+  that carried a comma left a trailing comma before `}`, and a promoted row
+  left the previous last row without its separator. The tool repairs both.
+  BUGFIX.
+- **A duplicate row that sits behind a comment marker is never removed.** The
+  original searched for the survivor's text and found the commented-out copy
+  first, so it emptied the parked row and reported the live copy again. The
+  tool skips a copy that sits after a `--` or `//` on its line. BUGFIX.
 - Three or more copies of a tag in one file: the later copies are
   rewritten, the first is kept.
 - The `fact-table-filter-coverage` rule now exempts a fact the way the

@@ -1,0 +1,19 @@
+table _Stores
+	lineageTag: 2f155360-b3a7-5f19-a972-b708605967f4
+
+	column store_id
+		dataType: int64
+		lineageTag: 4f0194ce-e8df-5c79-96cf-a7e95da81e3f
+		summarizeBy: none
+		sourceColumn: store_id
+
+	column Region
+		dataType: string
+		lineageTag: 8116dfa4-cc07-51e6-b2c6-807ebdc08697
+		summarizeBy: none
+		sourceColumn: Region
+
+	partition _Stores = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

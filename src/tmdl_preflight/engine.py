@@ -83,6 +83,8 @@ class PreflightReport:
     would_fix: list[str] = field(default_factory=list)
     # free-text notes from the rules (for example ratchet tighten hints)
     notes: list[str] = field(default_factory=list)
+    # multi-line closing advice from the fixers, printed after the summary
+    blocks: list[str] = field(default_factory=list)
     # repairs a fixer refused because it could not prove them (exit 2)
     refused_fixes: list[str] = field(default_factory=list)
     # the violations the first pass found, before any fixer ran; the console
@@ -140,6 +142,7 @@ class PreflightReport:
             "refused_fixes": self.refused_fixes,
             "notes": self.notes,
             "fix_notes": self.fix_notes,
+            "blocks": self.blocks,
             "violations": [v.to_dict() for v in self.violations],
             "scanned": self.scanned,
         }
@@ -169,6 +172,7 @@ def check(ctx: Context, ruleset: RuleSet) -> PreflightReport:
         report.violations.extend(rule.check(ctx))
     report.scanned = scan_summary(ctx)
     report.notes = list(dict.fromkeys(ctx.notes))
+    report.blocks = list(ctx.blocks)
     return report
 
 
@@ -210,6 +214,7 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
     report.notes = second.notes
     report.skipped = second.skipped
     report.skip_reasons = second.skip_reasons
+    report.blocks = list(ctx.blocks)
     return report
 
 

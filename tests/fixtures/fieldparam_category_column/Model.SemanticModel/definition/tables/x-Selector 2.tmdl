@@ -1,0 +1,35 @@
+table 'x-Selector 2'
+	lineageTag: 4a1c2b30-1111-4a2b-8c3d-0123456789ab
+
+	column 'x-Selector 2'
+		lineageTag: 4a1c2b30-1111-4a2b-8c3d-0123456789abc1
+		dataType: string
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	column 'x-Selector 2 Fields'
+		lineageTag: 4a1c2b30-1111-4a2b-8c3d-0123456789abc2
+		dataType: string
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+	column 'x-Selector 2 Order'
+		lineageTag: 4a1c2b30-1111-4a2b-8c3d-0123456789abc3
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: [Value3]
+
+	column 'x-Selector 2 Group'
+		lineageTag: 4a1c2b30-1111-4a2b-8c3d-0123456789abc4
+		dataType: string
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+	partition 'x-Selector 2' = calculated
+		mode: import
+		source = ```
+				{
+				("Revenue", NAMEOF('Sales'[Revenue]), 0, "sales_x"),
+				("Pace", NAMEOF([Pace]), 1)
+				}
+				```

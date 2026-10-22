@@ -8,7 +8,12 @@ from collections import Counter
 from pathlib import Path
 from typing import Optional
 
-from ..dax import collapse_comma_runs, find_comma_runs, insert_missing_row_separators
+from ..dax import (
+    collapse_comma_runs,
+    find_comma_runs,
+    insert_missing_row_separators,
+    remove_trailing_row_commas,
+)
 from ..edits import EditRefused, TextFile, read_text_file, verified_write
 from ..fieldparams import (
     AXIS_GLOBS,
@@ -20,8 +25,10 @@ from ..fieldparams import (
     field_parameter_files,
     identity,
     nameof_parts,
+    no_axis_files_note,
     read_rows,
     rows_alone,
+    source_span,
     split_fields,
 )
 from ..model import SemanticModel, Table
@@ -33,6 +40,14 @@ def _lines_of(table: Table) -> Optional[TextFile]:
         return read_text_file(table.file)
     except (OSError, UnicodeDecodeError):
         return None
+
+
+#: What Power BI Desktop does with a field-parameter table whose source does
+#: not parse (observed on the Windows bench, 2026-10-18).
+DESKTOP_COMMA = (
+    "Power BI Desktop still opens the model, but every visual that uses this "
+    "table fails ('Error fetching data for this visual')."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +89,10 @@ class FieldParameterCommaRunsRule(Rule):
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
+        for model in ctx.models:
+            note = no_axis_files_note(model)
+            if note:
+                ctx.notes.append(note)
         for table, part in self._targets(ctx):
             if part is None:
                 tf = _lines_of(table)
@@ -81,28 +100,35 @@ class FieldParameterCommaRunsRule(Rule):
                     continue
                 found = [(line, len(offs)) for line, offs in comma_runs(tf.text.replace("\r\n", "\n"))]
                 where, base = table.file, 1
+                obj = f"{table.name} (field-parameter file)"
+                place = ""
             else:
                 found = find_comma_runs(part.source)
                 where, base = part.file, part.source_start_line or part.line
+                obj = f"{table.name} (partition source)"
+                place = " in calculated partition source"
             for line, orphans in found:
                 out.append(self.violation(
-                    f"stray comma run ({orphans} orphan comma(s)) in calculated partition "
-                    f"source. Power BI Desktop still opens the model, but every visual "
-                    f"that uses this table fails ('Error fetching data for this visual'). "
+                    f"{orphans} orphan comma(s){place}. {DESKTOP_COMMA} "
                     f"Delete the orphan comma(s) (the auto-fix does).",
-                    file=where, line=base + line - 1,
-                    obj=f"{table.name} (partition source)",
+                    file=where, line=base + line - 1, obj=obj,
                 ))
         return out
 
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
         done: set[Path] = set()
+        total = 0
+        touched: set[Path] = set()
         for table, part in list(self._targets(ctx)):
             if part is not None:
                 if find_comma_runs(part.source) and part.source_start_line and part.source_end_line:
-                    applied.extend(_collapse_range(part.file, part.source_start_line,
-                                                   part.source_end_line, table.name))
+                    removed = _collapse_range(part.file, part.source_start_line,
+                                             part.source_end_line)
+                    if removed:
+                        applied.append(f"{part.file.name}: removed {removed} orphan comma(s)")
+                        total += removed
+                        touched.add(part.file)
                 continue
             if table.file in done:
                 continue
@@ -124,21 +150,26 @@ class FieldParameterCommaRunsRule(Rule):
 
             try:
                 if verified_write(tf, new, verify):
-                    applied.append(f"{table.file.name}: removed {len(surplus)} orphan comma(s) "
-                                   f"from '{table.name}'")
+                    applied.append(f"{table.file.name}: removed {len(surplus)} orphan comma(s)")
+                    total += len(surplus)
+                    touched.add(table.file)
             except EditRefused:
                 continue
+        if total:
+            ctx.blocks.append(
+                f"Removed {total} orphan comma(s) across {len(touched)} file(s). Commit "
+                f"the changes and re-sync the affected workspace(s).")
         return applied
 
 
-def _collapse_range(file: Path, start: int, end: int, table_name: str) -> list[str]:
+def _collapse_range(file: Path, start: int, end: int) -> int:
     tf = read_text_file(file)
     lines = tf.lines()
     lo, hi = start - 1, min(end, len(lines))
     block = tf.join(lines[lo:hi])
     new_block, removed = collapse_comma_runs(block)
     if not removed:
-        return []
+        return 0
     lines[lo:hi] = new_block.split(tf.newline)
 
     def verify(old: str, new: str) -> None:
@@ -148,8 +179,8 @@ def _collapse_range(file: Path, start: int, end: int, table_name: str) -> list[s
     try:
         verified_write(tf, tf.join(lines), verify)
     except EditRefused:
-        return []
-    return [f"{file.name}: removed {removed} orphan comma(s) from '{table_name}' partition source"]
+        return 0
+    return removed
 
 
 # ---------------------------------------------------------------------------
@@ -189,14 +220,10 @@ class RaggedRowWidthRule(Rule):
                 want = expected_width(rows)
                 if want is None:
                     continue
-                counts = Counter(len(r.fields) for r in rows)
-                summary = ", ".join(f"{counts[w]} row(s) with {w}" for w in sorted(counts))
                 for r in rows:
                     if len(r.fields) != want:
                         out.append(self.violation(
-                            f"row {r.fields[0]} has {len(r.fields)} value(s) where the table's "
-                            f"rows have {want} ({summary}); the engine refuses a constructor "
-                            f"with uneven rows.",
+                            f"{r.fields[0]} has {len(r.fields)} fields, norm is {want}",
                             file=t.file, line=r.index + 1, obj=f"{t.name} (partition source)",
                         ))
         return out
@@ -204,6 +231,7 @@ class RaggedRowWidthRule(Rule):
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
         for model in ctx.models:
+            realigned = padded = long_left = 0
             for t in self._tables(model):
                 tf = _lines_of(t)
                 if tf is None:
@@ -217,12 +245,16 @@ class RaggedRowWidthRule(Rule):
                 edits = 0
                 alone = rows_alone(rows)
                 for r in sorted((r for r in alone if len(r.fields) != want), key=lambda r: -r.index):
-                    new = self._repair(r, want, good)
-                    if new is None:
-                        continue
-                    row_text, notes = new
-                    lines[r.index:r.index + 1] = [r.indent + n for n in notes] + [row_text]
-                    edits += 1
+                    kind, row_text, notes, report = self._repair(r, want, good)
+                    if kind in ("pad", "realign"):
+                        lines[r.index:r.index + 1] = [r.indent + n for n in notes] + [row_text]
+                        edits += 1
+                        padded += kind == "pad"
+                        realigned += kind == "realign"
+                    elif kind == "ambiguous":
+                        long_left += 1
+                    if report:
+                        applied.append(f"{t.file.name}:{r.index + 1}: {report}")
                 if not edits:
                     continue
 
@@ -232,40 +264,92 @@ class RaggedRowWidthRule(Rule):
                         raise EditRefused("row repair changed the number of rows")
 
                 try:
-                    if verified_write(tf, tf.join(lines), verify):
-                        applied.append(f"{t.file.name}: repaired {edits} ragged row(s)")
+                    verified_write(tf, tf.join(lines), verify)
                 except EditRefused:
                     continue
+            if realigned:
+                ctx.blocks.append(
+                    f"  ⚠ {realigned} row(s) AUTO-REALIGNED under "
+                    f"{model.definition_path} by removing the field whose value appears\n"
+                    f"    nowhere else in the table's grouping columns. The removed value "
+                    f"is named in a\n"
+                    f"    '{self.options['marker_realigned']}' comment beside each row — a BI "
+                    f"developer must confirm it did not belong.")
+            if padded:
+                ctx.blocks.append(
+                    f"  ⚠ {padded} row(s) AUTO-PADDED with modal values under "
+                    f"{model.definition_path}.\n"
+                    f"    Each padded row carries a '{self.options['marker_padded']}' comment "
+                    f"in the TMDL.\n"
+                    f"    These values were chosen automatically — a BI developer must\n"
+                    f"    confirm each one is the right grouping for that row.")
+            if long_left:
+                ctx.blocks.append(
+                    f"  ✗ {long_left} over-long row(s) left untouched: the surplus field "
+                    f"could not be identified.\n"
+                    f"    An over-long row IS realigned when exactly one of its grouping "
+                    f"values appears nowhere\n"
+                    f"    else in the table — that one is the interloper. Here two or more "
+                    f"values are unique to\n"
+                    f"    the row (or none are), so there is no basis to pick. Widen the "
+                    f"table's columns or fix\n"
+                    f"    the row by hand. The gate stays red until then — a ragged tuple "
+                    f"stops the whole\n"
+                    f"    calculated table from compiling.")
         return applied
 
-    def _repair(self, r: Row, want: int, good: list[Row]) -> Optional[tuple[str, list[str]]]:
+    def _repair(self, r: Row, want: int, good: list[Row]):
+        """What to do with one ragged row.
+
+        Returns ``(kind, row text, comment lines, report line)``. ``kind`` is
+        ``"pad"``, ``"realign"``, ``"no_modal"`` or ``"ambiguous"``; the last
+        two leave the row alone but still say so.
+        """
+        label = r.fields[0] if r.fields else "?"
         if len(r.fields) < want:
             fills = []
             for pos in range(len(r.fields), want):
                 values = Counter(g.fields[pos] for g in good)
                 if not values:
-                    return None
+                    return ("no_modal", None, [],
+                            f"{label} has {len(r.fields)} fields (norm {want}) but no modal "
+                            f"value could be derived — skipped.")
                 top = max(values.values())
-                fills.append((pos + 1, next(g.fields[pos] for g in good if values[g.fields[pos]] == top)))
+                fills.append((pos + 1, next(g.fields[pos] for g in good
+                                           if values[g.fields[pos]] == top)))
             head = r.text[: r.close_at].rstrip()
             text = head + "".join(f", {v}" for _p, v in fills) + " " + r.text[r.close_at:]
-            what = "; ".join(f"position {p} filled with {v}" for p, v in fills)
-            return text, [
-                f"-- {self.options['marker_padded']}: {what} (most frequent value in this column).",
-                "-- Review needed: confirm this filled value is right for this row.",
+            shown = ", ".join(f"field {p} set to {v}" for p, v in fills)
+            notes = [
+                f"-- {self.options['marker_padded']}: {shown} (modal value of this column).",
+                "-- A BI developer MUST confirm this is correct for this row.",
             ]
+            return ("pad", text, notes,
+                    f"{label} padded {len(r.fields)} -> {want} ({shown}) — ANNOTATED IN "
+                    f"PLACE, needs BI review.")
         used = {g.fields[k] for g in good for k in range(3, len(g.fields))}
         candidates = [k for k in range(3, len(r.fields)) if r.fields[k] not in used]
         if len(candidates) != 1:
-            return None
+            values = ", ".join(r.fields[3:])
+            return ("ambiguous", None, [],
+                    f"{label} has {len(r.fields)} fields (norm {want}) and the surplus "
+                    f"field is AMBIGUOUS — no single value is unique to this row "
+                    f"({values}). Not auto-fixed: widen the table's columns or fix the "
+                    f"row by hand.")
         k = candidates[0]
+        removed = r.fields[k]
         kept = [f for i, f in enumerate(r.fields) if i != k]
         text = r.text[: r.open_at] + "( " + ", ".join(kept) + " )" + r.text[r.close_at + 1:]
-        return text, [
-            f"-- {self.options['marker_realigned']}: position {k + 1} (value {r.fields[k]}) "
-            f"dropped; no other row uses it.",
-            "-- Review needed: if the value belongs to another position, move it back by hand.",
+        notes = [
+            f"-- {self.options['marker_realigned']}: removed field {k + 1}, value {removed} "
+            f"— it appears nowhere else in this table's grouping columns, so it is the "
+            f"inserted one; {len(r.fields)} fields -> {want}.",
+            "-- A BI developer MUST confirm. If that value belongs here, widen the "
+            "table's columns instead.",
         ]
+        return ("realign", text, notes,
+                f"{label} realigned {len(r.fields)} -> {want} by removing field {k + 1} "
+                f"({removed}), unique to this row — ANNOTATED IN PLACE, needs BI review.")
 
 
 # ---------------------------------------------------------------------------
@@ -273,9 +357,16 @@ class RaggedRowWidthRule(Rule):
 # ---------------------------------------------------------------------------
 
 _DUP_ROW_RE = re.compile(
-    r'\(\s*("(?:[^"]|"")*"|\[[^\]]*\])\s*,\s*NAMEOF\s*\(((?:[^()]|\([^()]*\))*)\)\s*,'
-    r'\s*(-?\d+)\s*,\s*("(?:[^"]|"")*")((?:\s*,\s*"(?:[^"]|"")*")*)\s*\)'
+    r'\(\s*(?:"(?P<quoted>(?:[^"]|"")+)"|(?P<bracket>\[[^\]]+\]))\s*,\s*'
+    r'(?P<nameof>NAMEOF\s*\((?:[^()]|\([^()]*\))*\))\s*,'
+    r'\s*(?P<order>-?\d+)\s*,\s*"(?P<identifier>(?:[^"]|"")+)"'
+    r'(?P<extras>(?:\s*,\s*"(?:[^"]|"")*")*)\s*\)'
 )
+
+
+def _commented(before: str) -> bool:
+    """Does a line comment open before the row on this line?"""
+    return "//" in before or "--" in before
 
 
 class FieldParameterDuplicateRowsRule(Rule):
@@ -288,23 +379,30 @@ class FieldParameterDuplicateRowsRule(Rule):
         "Two rows of an axis field parameter that agree on every field "
         "(label, NAMEOF target, order, group and the remaining values) list "
         "the same choice twice in the slicer. Rows that differ in group or "
-        "order are distinct. Auto-fix keeps the first copy and removes later "
-        "copies with exactly the same text; a copy written differently (the "
-        "last row, without its comma) stays and keeps being reported."
+        "order are distinct, and so are two spellings of the same NAMEOF "
+        "call: the whole call is compared, whitespace run by whitespace run. "
+        "Auto-fix keeps the first copy and removes later copies; a commented "
+        "copy is a parked row and is never touched."
     )
 
     @staticmethod
-    def _groups(text: str):
+    def _key(m) -> tuple:
+        """The tuple two rows must agree on to be duplicates."""
+        display = m.group("quoted")
+        if display is None:
+            display = m.group("bracket")
+        extras = tuple(re.findall(r'"([^"]*)"', m.group("extras")))
+        return (display, " ".join(m.group("nameof").split()), int(m.group("order")),
+                m.group("identifier"), extras)
+
+    @classmethod
+    def _groups(cls, text: str):
         groups: dict[tuple, list] = {}
         for m in _DUP_ROW_RE.finditer(text):
             line_start = text.rfind("\n", 0, m.start()) + 1
-            before = text[line_start:m.start()]
-            if "//" in before or "--" in before:
+            if _commented(text[line_start:m.start()]):
                 continue
-            extra = tuple(x.strip() for x in re.findall(r'"(?:[^"]|"")*"', m.group(5)))
-            key = (m.group(1), re.sub(r"\s+", " ", m.group(2).strip()), int(m.group(3)),
-                   m.group(4), extra)
-            groups.setdefault(key, []).append(m)
+            groups.setdefault(cls._key(m), []).append(m)
         return {k: v for k, v in groups.items() if len(v) > 1}
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -314,11 +412,11 @@ class FieldParameterDuplicateRowsRule(Rule):
                 tf = _lines_of(t)
                 if tf is None:
                     continue
-                for key, matches in self._groups(tf.text).items():
+                for key, matches in sorted(self._groups(tf.text).items()):
                     first = matches[0]
                     out.append(self.violation(
-                        f"row ({key[0]}, NAMEOF({key[1]}), {key[2]}, {key[3]}) appears "
-                        f"{len(matches)} times; the slicer lists the choice more than once.",
+                        f"{key[0]!r} -> {key[1]} (order={key[2]}, id={key[3]!r}) "
+                        f"appears {len(matches)}x",
                         file=t.file, line=tf.text.count("\n", 0, first.start()) + 1,
                         obj=f"{t.name}[{key[0]}]",
                     ))
@@ -327,6 +425,7 @@ class FieldParameterDuplicateRowsRule(Rule):
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
         for model in ctx.models:
+            total = 0
             for t in axis_tables(model, self.options.get("axis_globs")):
                 tf = _lines_of(t)
                 if tf is None:
@@ -338,26 +437,35 @@ class FieldParameterDuplicateRowsRule(Rule):
                     piece = survivor.group(0)
                     if text[survivor.end():survivor.end() + 1] == ",":
                         piece += ","
-                    pos = survivor.end()
+                    search_from = survivor.end()
                     while True:
-                        hit = text.find(piece, pos + 1)
+                        hit = text.find(piece, search_from)
                         if hit < 0:
                             break
                         ls = text.rfind("\n", 0, hit) + 1
+                        if _commented(text[ls:hit]):
+                            search_from = hit + len(piece)
+                            continue
                         le = text.find("\n", hit + len(piece))
                         le = len(text) if le < 0 else le
                         if not text[ls:hit].strip() and not text[hit + len(piece):le].strip():
                             text = text[:ls] + text[le + 1:]
+                            search_from = ls
                         else:
                             text = text[:hit] + text[hit + len(piece):]
+                            search_from = hit
                         removed += 1
                 if not removed:
                     continue
                 try:
                     if verified_write(tf, text):
                         applied.append(f"{t.file.name}: removed {removed} duplicate row(s)")
+                        total += removed
                 except EditRefused:
                     continue
+            if total:
+                ctx.blocks.append(
+                    f"removed {total} duplicate axis row(s) under {model.definition_path}")
         return applied
 
 
@@ -382,7 +490,9 @@ class _Family:
             if m:
                 if m.group(1) == "1":
                     self.ps1 = t
-                elif self.ps2 is None:
+                else:
+                    # the LAST numbered plot-specific table in name order is
+                    # "the second plot-specific table"
                     self.ps2 = t
 
 
@@ -404,8 +514,9 @@ class FieldParameterFamilyConsistencyRule(Rule):
         "the group but must not carry a 'date' field; the first plot-specific "
         "table may offer a subset, never a field the family lacks. Fields are "
         "identified by their NAMEOF target (a measure by name alone). "
-        "Auto-fix comments out date rows, promotes plot-specific-only rows "
-        "into the first numbered table, copies missing rows, and annotates "
+        "Auto-fix copies the missing rows from the numbered tables, removes "
+        "date rows from the second plot-specific table, promotes "
+        "plot-specific-only rows into the first numbered table, and annotates "
         "every edit."
     )
 
@@ -423,11 +534,13 @@ class FieldParameterFamilyConsistencyRule(Rule):
             tf = _lines_of(t)
             rows[t.name] = read_rows(tf.lines()) if tf else []
         group = list(fam.numbered) + ([fam.ps2] if fam.ps2 and axis.startswith("x") else [])
-        family: dict[str, tuple[str, Row]] = {}
-        for t in sorted(group, key=lambda t: t.name):
+        family: dict[str, tuple[Table, Row]] = {}
+        # the numbered tables come first, in name order: a field they offer is
+        # the one a missing row is copied from
+        for t in group:
             for r in rows[t.name]:
                 if len(r.fields) > 1:
-                    family.setdefault(identity(r.fields[1], measures), (t.name, r))
+                    family.setdefault(identity(r.fields[1], measures), (t, r))
         missing, dates, unique = [], [], []
         for t in group:
             have = {identity(r.fields[1], measures) for r in rows[t.name] if len(r.fields) > 1}
@@ -440,11 +553,11 @@ class FieldParameterFamilyConsistencyRule(Rule):
         if fam.ps2 is not None and axis.startswith("x"):
             for r in rows[fam.ps2.name]:
                 if len(r.fields) > 1 and word.search(nameof_parts(r.fields[1])[1]):
-                    dates.append((fam.ps2, r))
+                    dates.append((fam.ps2, identity(r.fields[1], measures), r))
         if fam.ps1 is not None:
             for r in rows[fam.ps1.name]:
                 if len(r.fields) > 1 and identity(r.fields[1], measures) not in family:
-                    unique.append((fam.ps1, r))
+                    unique.append((fam.ps1, identity(r.fields[1], measures), r))
         return missing, dates, unique
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -454,26 +567,26 @@ class FieldParameterFamilyConsistencyRule(Rule):
                 missing, dates, unique = self._analyse(model, axis, fam)
                 for t, ident, owner, _r in missing:
                     out.append(self.violation(
-                        f"{t.name} is missing {ident}, which {owner} offers; the field "
-                        f"vanishes when a report swaps to this slot.",
+                        f"MISSING {ident} (offered by {owner.file.name})",
                         file=t.file, obj=f"{t.name}:{ident}",
                     ))
-                for t, r in dates:
+                for t, ident, r in dates:
                     out.append(self.violation(
-                        f"{t.name} carries the date field {r.fields[1]}; the second "
-                        f"plot-specific table must not offer date fields.",
-                        file=t.file, line=r.index + 1, obj=f"{t.name}:{r.fields[1]}",
+                        f"date-named field {ident} must not be in Plot Specific 2",
+                        file=t.file, line=r.index + 1, obj=f"{t.name}:{ident}",
                     ))
-                for t, r in unique:
+                for t, ident, r in unique:
                     out.append(self.violation(
-                        f"{t.name} offers {r.fields[1]}, which no {axis} table offers.",
-                        file=t.file, line=r.index + 1, obj=f"{t.name}:{r.fields[1]}",
+                        f"{ident} is offered NOWHERE in the canonical set — Plot Specific 1 "
+                        f"may not introduce fields",
+                        file=t.file, line=r.index + 1, obj=f"{t.name}:{ident}",
                     ))
         return out
 
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
         for model in ctx.models:
+            added = removed = 0
             for axis, fam in self._families(model):
                 for step in ("dates", "unique", "missing"):
                     ctx.reload()
@@ -482,26 +595,53 @@ class FieldParameterFamilyConsistencyRule(Rule):
                     fam = _Family(model, axis, dict(self.options["axes"])[axis])
                     missing, dates, unique = self._analyse(model, axis, fam)
                     if step == "dates":
-                        for t, r in dates:
-                            if self._comment_out(t, r):
-                                applied.append(f"{t.file.name}: commented out date row {r.fields[0]}")
+                        for t, ident, r in dates:
+                            if self._remove_row(t, r, ident):
+                                applied.append(
+                                    f"{t.file.name}:{r.index + 1}: removed {ident} (date-named)")
+                                removed += 1
                     elif step == "unique":
-                        for t, r in unique:
+                        for t, ident, r in unique:
                             target = fam.numbered[0]
-                            if self._insert(target, r, [
-                                f"-- {self.options['marker_promoted']}: copied from {t.name}, the "
-                                f"only table that offered it.",
-                                "-- Review needed: confirm the field belongs to the whole family.",
-                            ]):
-                                applied.append(f"{target.file.name}: promoted {r.fields[0]} from {t.name}")
+                            status, note = self._insert(target, r, ident, [
+                                f"-- {self.options['marker_promoted']}: {ident} was offered "
+                                f"only by {t.file.name}; Plot Specific 1 may not introduce "
+                                f"fields, so it is promoted here rather than dropped from "
+                                f"the picker.",
+                                "-- A BI developer MUST confirm it belongs in the canonical set.",
+                            ])
+                            if status == "added":
+                                applied.append(
+                                    f"{target.file.name}: promoted {ident} "
+                                    f"(was only in {t.file.name})")
+                                added += 1
+                            elif note:
+                                applied.append(note)
                     else:
                         for t, ident, owner, r in missing:
-                            if self._insert(t, r, [f"-- {self.options['marker_added']}: copied from {owner}."]):
-                                applied.append(f"{t.file.name}: added {r.fields[0]} from {owner}")
+                            status, note = self._insert(t, r, ident, [
+                                f"-- {self.options['marker_added']}: copied from "
+                                f"{owner.file.name} — every table in this family must offer "
+                                f"{ident}.",
+                            ])
+                            if status == "added":
+                                applied.append(
+                                    f"{t.file.name}: added {ident} (from {owner.file.name})")
+                                added += 1
+                            elif note:
+                                applied.append(note)
+            if added or removed:
+                ctx.blocks.append(
+                    f"  ⚠ {added} row(s) added, {removed} removed under "
+                    f"{model.definition_path}.\n"
+                    f"    Each carries a '{self.options['marker_added']}' / "
+                    f"'{self.options['marker_removed']}' comment — these are automatic edits "
+                    f"to a\n"
+                    f"    user-facing picker and a BI developer must review them.")
         return applied
 
-    @staticmethod
-    def _comment_out(t: Table, r: Row) -> bool:
+    def _remove_row(self, t: Table, r: Row, ident: str) -> bool:
+        """Replace a date row with the two comment lines that explain it."""
         tf = read_text_file(t.file)
         lines = tf.lines()
         rows = read_rows(lines)
@@ -514,26 +654,37 @@ class FieldParameterFamilyConsistencyRule(Rule):
                 p = prev[-1]
                 cut = p.text.index(",", p.close_at)
                 lines[p.index] = p.text[:cut] + p.text[cut + 1:]
+        indent = target.indent
         lines[target.index:target.index + 1] = [
-            f"{target.indent}-- AUTO-REMOVED: date field {target.fields[1]} removed from the "
-            f"second plot-specific table.",
-            f"{target.indent}-- Review needed: was: {target.text.strip()}",
+            f"{indent}-- {self.options['marker_removed']}: {ident} references a name "
+            f"containing the word '{self.options['excluded_word']}'; {t.name} must not "
+            f"offer those.",
+            f"{indent}-- A BI developer MUST confirm this row was not wanted here.",
         ]
         try:
             return verified_write(tf, tf.join(lines))
         except EditRefused:
             return False
 
-    @staticmethod
-    def _insert(t: Table, r: Row, notes: list[str]) -> bool:
+    def _insert(self, t: Table, r: Row, ident: str, notes: list[str]) -> tuple[str, str]:
+        """Copy the row ``r`` into table ``t``.
+
+        The row text is copied verbatim - its own indentation and its own
+        trailing comma - and the separators around it are repaired
+        afterwards. Returns ``("added", "")``, ``("arity", note)`` when the
+        sibling row has a different width, or ``("failed", "")``.
+        """
         tf = read_text_file(t.file)
         lines = tf.lines()
         rows = read_rows(lines)
-        if not rows:
-            return False
         widths = Counter(len(x.fields) for x in rows)
-        if len(r.fields) != max(widths, key=lambda w: widths[w]):
-            return False
+        if widths:
+            target_arity = max(widths, key=lambda w: widths[w])
+            if len(r.fields) != target_arity:
+                return ("arity", f"{t.file.name}: {ident} NOT added — the sibling row has "
+                                 f"{len(r.fields)} fields, this table's rows have "
+                                 f"{target_arity}. Re-shaping across arities is the "
+                                 f"ragged-tuple fixer's job, not this one.")
         try:
             order = int(r.fields[2])
         except (IndexError, ValueError):
@@ -547,14 +698,23 @@ class FieldParameterFamilyConsistencyRule(Rule):
                         break
                 except (IndexError, ValueError):
                     continue
-        indent = rows[0].indent
-        body = r.text.strip()
-        body = body[:-1].rstrip() if body.endswith(",") else body
         if at is None:
-            at = rows[-1].index + 1
-        new_lines = lines[:at] + [indent + n for n in notes] + [indent + body] + lines[at:]
+            at = rows[-1].index + 1 if rows else self._constructor_end(lines)
+        indent = (lines[at][: len(lines[at]) - len(lines[at].lstrip())]
+                  if at < len(lines) else "\t\t\t\t")
+        new_lines = lines[:at] + [indent + n for n in notes] + [r.text] + lines[at:]
         text, _n = insert_missing_row_separators(tf.join(new_lines))
+        text, _n = remove_trailing_row_commas(text)
         try:
-            return verified_write(tf, text)
+            return ("added", "") if verified_write(tf, text) else ("failed", "")
         except EditRefused:
-            return False
+            return ("failed", "")
+
+    @staticmethod
+    def _constructor_end(lines: list[str]) -> int:
+        """Index of the line that closes the table constructor."""
+        span = source_span(lines)
+        at = span[1] if span else len(lines)
+        while at > 0 and lines[at - 1].strip() != "}":
+            at -= 1
+        return at

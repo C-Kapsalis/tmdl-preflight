@@ -5,8 +5,9 @@ it is safe to impose automatically:
 
 * safety class: every fixable rule reports ``safe`` in ``rules --json``; the
   data-affecting or deleting repairs (refresh-policy repair, the DAX
-  table-reference cleanup, autodetected-relationship removal) are
-  ``safe: false``, every other fixer ``safe: true``;
+  table-reference cleanup, autodetected-relationship removal, the removal of
+  field-parameter rows that carry a double slash) are ``safe: false``,
+  every other fixer ``safe: true``;
 * a blanket ``fix`` never runs a ``safe: false`` fixer; selecting it by rule
   id does;
 * repairs are opt-in: ``check`` never writes, whatever the environment (an old ``PBI_AUTOFIX=1`` has no effect), and the write verb
@@ -20,9 +21,11 @@ from pathlib import Path
 from conftest import run_check, run_cli, run_fix
 
 # The data-affecting refresh-policy repair, the DAX table-reference cleanup
-# (D004 dax-reference-resolution) and the autodetected-relationship removal
-# (R007) are the unsafe fixers.
-UNSAFE = {"refresh-policy-repair", "dax-reference-resolution", "autodetected-relationships"}
+# (D004 dax-reference-resolution), the autodetected-relationship removal
+# (R007) and the removal of field-parameter rows that carry a double slash
+# (F016) are the unsafe fixers.
+UNSAFE = {"refresh-policy-repair", "dax-reference-resolution", "autodetected-relationships",
+          "fieldparam-double-slash-rows"}
 FIXABLE_IDS = {"M003", "M004", "M006", "M011", "M013", "F001", "F002", "F003", "B001", "B003"}
 
 
