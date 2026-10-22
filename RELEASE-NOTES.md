@@ -1,6 +1,6 @@
 # Release notes
 
-## Fixes after v1.2.0 (unreleased)
+## 1.2.1 (2026-10-22)
 
 ### Fixed
 
@@ -18,7 +18,7 @@
   is 2-space indent, sorted keys and a final `\n`, on every OS. Found by
   `test_the_capture_writes_the_floor_file` on windows-latest.
 
-## Unreleased
+## 1.2.0 (2026-10-22)
 
 This release adds a large set of rules and commands, with a test suite
 that runs on fictional stand-in models.
