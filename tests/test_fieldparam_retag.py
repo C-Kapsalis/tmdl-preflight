@@ -244,3 +244,15 @@ def test_retag_accepts_a_name_that_holds_a_comma(tmp_path):
     text = f.read_text(encoding="utf-8")
     assert '("Sessions, Organic", NAMEOF(\'_A\'[s]), -997, "g_b")' in text
 
+
+def test_retag_leaves_the_family_in_agreement(tmp_path):
+    one = _write_sibling(tmp_path, "y-Selector 1",
+                         [{"label": "Main", "field": "m", "order": -997, "cat": "g_a"}])
+    two = _write_sibling(tmp_path, "y-Selector 2",
+                         [{"label": "Main", "field": "m", "order": -997, "cat": "g_a"}])
+    code, out, err = _retag_many([one, two], ["Main"], "g_a", "g_b")
+    assert code == 0, err
+    code, payload = run_check(one.parent.parent.parent, "fieldparam-retag")
+    assert code == 0, payload
+    assert violations(payload) == []
+

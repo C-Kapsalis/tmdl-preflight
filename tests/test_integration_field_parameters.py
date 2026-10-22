@@ -205,6 +205,30 @@ class TestFieldParameterCoverage:
         summary = violations(payload)[0]["message"]
         assert "Covered in x-Selector:                     1 (16.7%)" in summary
 
+    def test_a_measure_on_an_axis_table_is_listed_with_its_table(self, tmp_path):
+        """A measure that sits on an axis table is named with that table."""
+        tables = tmp_path / "Shop.SemanticModel" / "definition" / "tables"
+        tables.mkdir(parents=True)
+        (tables / "x-Selector 2.tmdl").write_text(
+            "table 'x-Selector 2'\n"
+            "\tmeasure Stray = 1\n"
+            "\t\tlineageTag: 7c6cd67a-9d37-5730-872a-78a386ad12c6\n"
+            "\n"
+            "\tcolumn 'x-Selector 2'\n"
+            "\t\tsourceColumn: [Value1]\n"
+            "\n"
+            "\tpartition 'p' = calculated\n"
+            "\t\tmode: import\n"
+            "\t\tsource = ```\n"
+            "\t\t\t\t{\n"
+            "\t\t\t\t\t(\"Cups\", NAMEOF([Cups]), 1, \"g_x\")\n"
+            "\t\t\t\t}\n"
+            "\t\t\t\t```\n", encoding="utf-8")
+        code, payload = run_check(tmp_path / "Shop.SemanticModel", self.RULE)
+        assert code == 0, payload
+        lists = [v["message"] for v in violations(payload)]
+        assert any("  - x-Selector 2[Stray]" in m for m in lists), lists
+
     def test_the_summary_is_printed_even_when_nothing_is_found(self, tmp_path):
         tables = tmp_path / "Shop.SemanticModel" / "definition" / "tables"
         tables.mkdir(parents=True)
