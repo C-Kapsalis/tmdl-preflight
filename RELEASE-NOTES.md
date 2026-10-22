@@ -113,9 +113,9 @@ until configured.
 
 ### Changed rules
 
-- **B007** is the report-format validator folded into `check`: one finding per
-  defect, each carrying the validator's own message, and the banner the script
-  printed is not reproduced.
+- BUGFIX: the report-format validator now runs as a check rule (B007): one
+  finding per defect, each carrying the validator's own message, and the
+  banner the script printed is not reproduced.
 - **B008** checks the report scaffold: `.platform`, `definition.pbir`,
   `definition/version.json` and `definition/report.json` (and
   `definition/pages/pages.json` when the report has pages) must be there, must
@@ -123,9 +123,9 @@ until configured.
   holds only `.platform` and `definition.pbir` (the blank-report form) needs
   no version.json and no report.json. The option `required_files` adds the
   files a team's own template requires.
-- `.pbi/localSettings.json` is not a required file: one script wanted it, the
-  report-format validator warns when it is there (B007), and the rule follows
-  the validator.
+- BUGFIX: `.pbi/localSettings.json` is not a required file: one script wanted
+  it, the report-format validator only warns when it is there (B007), and the
+  rule follows the validator.
 - **B001** writes the bookmark file whole again (2-space indent, the key order
   kept, one trailing newline), so the file it leaves behind is the one the
   bookmark type checker wrote. Its findings carry the checker's wording
@@ -157,13 +157,14 @@ until configured.
 - BUGFIX: B003 removes an illegal key whatever its value is (an object, an
   array, a number in exponent form); the original refused those repairs and
   left the file unchanged.
-- **B005** (pages-metadata-schema) is no longer opt-in: the pages metadata is
-  checked in every run, because a report whose `pages.json` declares another
-  schema or whose `pageOrder` is not a list breaks the page navigation. The
-  option `accepted_schemas` still says which versions are expected.
-- **B004** reads `pageOrder` as a list of page names; a `pageOrder` that is
-  a string is no longer read as a list of one-letter page names (B005 reports
-  it).
+- STRICTER: **B005** (pages-metadata-schema) is no longer opt-in: the pages
+  metadata is checked in every run, because a report whose `pages.json`
+  declares another schema or whose `pageOrder` is not a list breaks the page
+  navigation. The option `accepted_schemas` still says which versions are
+  expected.
+- BUGFIX: **B004** reads `pageOrder` as a list of page names; a `pageOrder`
+  that is a string is no longer read as a list of one-letter page names (B005
+  reports it).
 - **B006** names the offender the way the gate that grew out of the same
   script named it: `<visual.json>:<json path>.HierarchyLevel` (the path
   starts with a dot), and `<visual.json>: invalid JSON (<error>)` for a file
@@ -268,9 +269,10 @@ until configured.
 - A bare `definition/` folder is accepted as a model when it holds
   `tables/`, `model.tmdl` or `expressions.tmdl`.
 - `fix --dry-run` reports what would be repaired and writes nothing.
-- `fix` exits 1 when findings remain after the re-check; the original's
-  fixers always exited 0 and left the verdict to the gate that ran them. The
-  re-check is the fix contract of every rule, so the run says what is left.
+- STRICTER: `fix` exits 1 when findings remain after the re-check; the
+  original's fixers always exited 0 and left the verdict to the gate that ran
+  them. The re-check is the fix contract of every rule, so the run says what
+  is left.
 - `fix --clear-cache` deletes `<Model>.SemanticModel/.pbi/cache.abf` after
   lineage tags changed; without it the tool prints a hint when the cache
   exists.
