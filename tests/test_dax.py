@@ -67,7 +67,7 @@ class TestBalancedDelimiters:
 
     def test_unterminated_string(self):
         errors = check_balanced_delimiters('IF([x] > 0, "yes)')
-        assert any("string" in e for e in errors)
+        assert any("quote" in e for e in errors)
 
     def test_braces(self):
         assert check_balanced_delimiters("{ (1, 2), (3, 4) }") == []

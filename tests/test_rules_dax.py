@@ -109,7 +109,8 @@ class TestNameofResolution:
         f.write_text(text, encoding="utf-8")
         violations = NameofResolutionRule().check(Context(project))
         assert any(
-            "ambiguous" in v.message and v.severity == Severity.WARNING
+            "Ambiguous: measure 'Units Sold' exists in multiple tables:"
+            in v.message and v.severity == Severity.WARNING
             for v in violations
         )
 
@@ -181,7 +182,9 @@ class TestDaxReferenceResolution:
         violations = DaxReferenceResolutionRule().check(Context(project))
         assert len(violations) == 1
         assert violations[0].severity == Severity.ERROR
-        assert "table 'Orders'" in violations[0].message
+        assert violations[0].message.startswith(
+            "measure Sales Measures[Revenue] -> missing 'Orders'"
+        )
         assert violations[0].line == 6
 
     def test_bare_quoted_table_is_checked(self, project, definition, replace_in):

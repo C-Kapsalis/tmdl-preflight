@@ -186,9 +186,22 @@ def read_rows(lines: list[str]) -> list[Row]:
     span = source_span(lines)
     if span is None:
         return []
+    return _rows_in(lines[span[0]:span[1]], span[0])
+
+
+def source_rows(source: str) -> list[Row]:
+    """The field-parameter rows of a partition source text.
+
+    A row is a top-level ``( "label", NAMEOF(...), ... )`` group that
+    mentions NAMEOF and carries at least two fields; a comment line is
+    never a row.
+    """
+    return _rows_in(source.split("\n"), 0)
+
+
+def _rows_in(lines: list[str], offset: int) -> list[Row]:
     rows = []
-    for idx in range(*span):
-        line = lines[idx]
+    for idx, line in enumerate(lines):
         if line.strip().startswith(("--", "//")):
             continue
         for open_at, close_at in _groups(line):
@@ -197,7 +210,7 @@ def read_rows(lines: list[str]) -> list[Row]:
                 continue
             fields = split_fields(inner)
             if len(fields) >= 2:
-                rows.append(Row(idx, line, open_at, close_at, fields))
+                rows.append(Row(idx + offset, line, open_at, close_at, fields))
     return rows
 
 
@@ -277,6 +290,22 @@ def field_spans(line: str, open_at: int, close_at: int) -> list[tuple[int, int]]
             e -= 1
         out.append((s, e))
     return out
+
+
+def row_label(line: str) -> Optional[str]:
+    """The first value of the first top-level group on the line.
+
+    A field-parameter row starts with its label: ``("Revenue", NAMEOF(...))``.
+    """
+    for open_at, close_at in _groups(line):
+        fields = split_fields(line[open_at + 1:close_at])
+        if not fields:
+            continue
+        value = fields[0].strip()
+        if len(value) >= 2 and value[0] == value[-1] == '"':
+            value = value[1:-1]
+        return value.replace('""', '"')
+    return None
 
 
 def is_live_row(row: Row) -> bool:

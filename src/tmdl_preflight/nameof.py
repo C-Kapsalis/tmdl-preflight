@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Optional
 
-from .dax import strip_comments
+from .dax import strip_comments, unquote_member
 from .model import SemanticModel
 from .rules.base import Severity
 
@@ -32,7 +32,7 @@ _ARG_RE = re.compile(
         '(?P<sq>(?:[^'"]|'')+)'      # 'Table'
       | "(?P<dq>[^"]+)"              # "Table"
       | (?P<bare>[A-Za-z0-9_.]+)     # Table
-    )?\s*\[\s*(?P<member>(?:[^\]]|\]\])+?)\s*\]\s*$""",
+    )?\s*\[\s*(?P<member>(?:[^\]]|\]\])*?)\s*\]\s*$""",
     re.VERBOSE,
 )
 
@@ -55,6 +55,9 @@ class NameofReference:
     source_kind: str = "measure"
     valid_syntax: bool = True
     raw_argument: str = ""
+    #: the label of the field-parameter row the call sits in, when it sits
+    #: in one (``("Revenue", NAMEOF(...), 0)`` -> ``Revenue``)
+    row_label: str | None = None
 
 
 @dataclass
@@ -74,11 +77,25 @@ def _argument_end(text: str, start: int) -> int:
     return len(text)
 
 
+def _row_label(context: str) -> str | None:
+    """The label of the field-parameter row the call sits in."""
+    from .fieldparams import row_label
+
+    return row_label(context)
+
+
+def _reference_rank(ref: NameofReference) -> int:
+    """The order the reference lists the references in: a quoted table
+    first, an unquoted table next, a bare member last."""
+    if ref.table_name is None:
+        return 2
+    if ref.raw_argument.strip().startswith(("'", '"')):
+        return 0
+    return 1
+
+
 def _unquote_member(member: str) -> str:
-    member = member.replace("]]", "]").strip()
-    if len(member) >= 2 and member[0] == member[-1] == "'":
-        member = member[1:-1].replace("''", "'").strip()
-    return member
+    return unquote_member(member)
 
 
 def parse_argument(arg: str) -> Optional[tuple[Optional[str], str]]:
@@ -108,13 +125,14 @@ def extract(text: str, source_measure: str = "", source_table: str = "",
         arg = clean[call.end():end]
         rel_line = clean.count("\n", 0, call.start())
         context = lines[rel_line].strip() if rel_line < len(lines) else ""
+        row = _row_label(context) if source_kind == "partition_source" else None
         parsed = parse_argument(arg)
         if parsed is None:
             refs.append(NameofReference(
                 source_table=source_table, source_measure=source_measure, line_context=context,
                 object_name=arg.strip(), full_reference=arg.strip(), is_measure_ref=False,
                 line_number=first_line + rel_line, file=file, source_kind=source_kind,
-                valid_syntax=False, raw_argument=arg,
+                valid_syntax=False, raw_argument=arg, row_label=row,
             ))
             continue
         table, member = parsed
@@ -123,7 +141,7 @@ def extract(text: str, source_measure: str = "", source_table: str = "",
             source_table=source_table, source_measure=source_measure, line_context=context,
             object_name=member, full_reference=full, is_measure_ref=table is None,
             table_name=table, line_number=first_line + rel_line, file=file,
-            source_kind=source_kind, raw_argument=arg,
+            source_kind=source_kind, raw_argument=arg, row_label=row,
         ))
     return refs
 
@@ -148,7 +166,12 @@ class NameofResolver:
 
     def find_all_nameof_references(self, measures_only: bool = True) -> list[NameofReference]:
         """References in measure expressions (``measures_only``) or in every
-        DAX container of the model."""
+        DAX container of the model.
+
+        Within one expression the references come in the reference's order:
+        the quoted-table ones first, then the unquoted-table ones, then the
+        bare ones; each group keeps the order of the text.
+        """
         out: list[NameofReference] = []
         for block in self.model.dax_blocks():
             if measures_only and block.kind != "measure":
@@ -157,7 +180,7 @@ class NameofResolver:
                            block.file, block.kind)
             if measures_only:
                 refs = [r for r in refs if r.valid_syntax]
-            out.extend(refs)
+            out.extend(sorted(refs, key=_reference_rank))
         return out
 
     # -- resolution ---------------------------------------------------------
@@ -179,15 +202,21 @@ class NameofResolver:
                                         f"not a column or measure reference; target not found")]
             return []
         member = ref.object_name
+        if not member:
+            return [BrokenReference(ref, Severity.ERROR, "Invalid reference format")]
         if ref.table_name is None:
             matches = model.find_measures_ci(member)
             if not matches:
                 return [BrokenReference(ref, Severity.ERROR,
-                                        f"measure '{member}' not found in the model")]
-            if len({m.table.lower() for m in matches}) > 1:
-                tables = ", ".join(sorted({m.table for m in matches}))
+                                        f"Measure '{member}' not found in any table")]
+            tables: list[str] = []
+            for m in matches:
+                if m.table not in tables:
+                    tables.append(m.table)
+            if len(tables) > 1:
                 return [BrokenReference(ref, Severity.WARNING,
-                                        f"measure '{member}' is ambiguous: declared in {tables}")]
+                                        f"Ambiguous: measure '{member}' exists in multiple "
+                                        f"tables: {tables}")]
             if not any(m.name == member for m in matches):
                 return [BrokenReference(ref, Severity.ERROR,
                                         f"casing mismatch: [{member}] is declared as "
@@ -200,12 +229,12 @@ class NameofResolver:
                                     f"a reference to it counts as not found")]
         table = model.find_table(tname)
         if table is None:
-            return [BrokenReference(ref, Severity.ERROR, f"table '{tname}' not found")]
+            return [BrokenReference(ref, Severity.ERROR, f"Table '{tname}' not found")]
         col = table.find_column(member)
         meas = table.find_measure(member) if col is None else None
         if col is None and meas is None:
             return [BrokenReference(ref, Severity.ERROR,
-                                    f"column or measure '{member}' not found in table '{table.name}'")]
+                                    f"Column '{member}' not found in table '{table.name}'")]
         out: list[BrokenReference] = []
         target = col or meas
         if table.name != tname or target.name != member:
@@ -217,8 +246,7 @@ class NameofResolver:
         if meas is not None and not self._in_field_parameter(ref):
             out.append(BrokenReference(
                 ref, Severity.WARNING,
-                f"'{table.name}'[{meas.name}] is a measure, not a column; use the bare "
-                f"form NAMEOF([{meas.name}])",
+                f"'{member}' is a measure, not a column. Use NAMEOF([{member}]) instead",
             ))
         return out
 
@@ -289,29 +317,42 @@ def build_report(model: SemanticModel, prefixes: Optional[list[str]] = None) -> 
 def render_report(data: dict) -> str:
     s = data["statistics"]
     lines = [
-        "=" * 60,
+        "=" * 80,
         "NAMEOF REFERENCE VALIDATION REPORT",
-        "=" * 60,
+        "=" * 80,
+        "",
         f"Total References: {s['total_references']}",
-        f"  Measure references: {s['measure_references']}",
-        f"  Column references: {s['column_references']}",
-        f"  Unique tables: {s['unique_tables']}",
-        f"  Unique objects: {s['unique_objects']}",
+        f"  Measure References: {s['measure_references']}",
+        f"  Column References: {s['column_references']}",
+        f"  Unique Tables: {s['unique_tables']}",
+        f"  Unique Objects: {s['unique_objects']}",
         "",
     ]
     broken = data["broken"]
     if not broken:
-        lines.append("All references are valid")
+        lines.append("✅ All references are valid!")
     else:
-        errors = sum(1 for b in broken if b["severity"] == "ERROR")
-        lines.append(f"Found {len(broken)} issues ({errors} error(s), "
-                     f"{len(broken) - errors} warning(s))")
-        for b in broken:
-            lines += [
-                f"  [{b['severity']}] {b['source_table']}[{b['source_measure']}]: {b['reference']}",
-                f"      {b['reason']}",
-                f"      {b['line_context']}",
-            ]
+        errors = [b for b in broken if b["severity"] == "ERROR"]
+        warnings = [b for b in broken if b["severity"] == "WARNING"]
+        lines.append(f"❌ Found {len(broken)} issues:")
+        lines.append(f"   Errors: {len(errors)}")
+        lines.append(f"   Warnings: {len(warnings)}")
+        lines.append("")
+        for label, group in (("ERRORS", errors), ("WARNINGS", warnings)):
+            if not group:
+                continue
+            lines.append(f"{label}:")
+            lines.append("-" * 80)
+            for b in group:
+                lines += [
+                    f"[{b['severity']}] Broken reference in "
+                    f"{b['source_table']}[{b['source_measure']}]:",
+                    f"  Reference: {b['reference']}",
+                    f"  Reason: {b['reason']}",
+                    f"  Context: {b['line_context']}...",
+                    "",
+                ]
+    lines.append("=" * 80)
     for prefix, tables in data["groups"].items():
         if not tables:
             continue

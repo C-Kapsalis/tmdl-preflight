@@ -112,7 +112,7 @@ def test_calc_group_and_calc_table_dax_blocks_found(stand_in, variant, verdict):
             _blocks_found_gate(model_dir)
         code, payload = run_check(model_dir, BLOCKS_RULE, config=BLOCKS_CONFIG)
         found = violations(payload)
-        assert found and all(v["severity"] == "warning" for v in found)
+        assert found and all(v["severity"] == "error" for v in found)
 
 
 @pytest.mark.parametrize("variant,verdict", [

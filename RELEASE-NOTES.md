@@ -54,7 +54,7 @@ the example model with one defect each. Where that evidence and the
 | O013 | user-facing-measure-description (opt-in) | info | no |
 | O014 | table-description-coverage (opt-in) | info | no |
 | O015 | fact-table-filter-coverage (opt-in) | error | no |
-| D010 | calc-dax-blocks-present (opt-in) | warning | no |
+| D010 | calc-dax-blocks-present (opt-in) | error | no |
 | D011 | calc-item-blind-average | error | no |
 | X001 | cross-fact-multirow-key-join | error | no |
 | C005 | measure-reference-contract | error | no |
@@ -200,16 +200,47 @@ until configured.
 - A fixer marked unsafe can be opted into a blanket `fix` by its own option
   (R007 `fix_autodetected_relationships`).
 - **D001** messages name the delimiter kind ("double quote", "single
-  quote", "bracket", "parenthesis", "brace"). New option `min_success_rate`
-  (default 0.90): when fewer measure and calculated-column expressions are
-  clean, one extra error says so (each unbalanced expression stays an error
-  whatever the share). A model with tables but no measures gets a warning.
+  quote", "bracket", "parenthesis", "brace") and the character position of
+  the problem inside the expression: `Unmatched opening parenthesis '(' at
+  position 3`. The closers come first, in text order; only the earliest
+  still-open opener of each kind is reported, in the order parenthesis,
+  bracket, brace, double quote, single quote. The object label is
+  `Table[Measure]` (or `Table[Column]`, `Table (partition source)`,
+  `Table[Item] (calculationItem)`, `Table (formatStringDefinition)`). New
+  option `min_success_rate` (default 0.90): when fewer measure and
+  calculated-column expressions are clean, one extra error says so (each
+  unbalanced expression stays an error whatever the share). Every model
+  with expressions gets the summary note (`DAX Validation Summary:` with
+  the expression count and the clean share), a clean model too. A model
+  with no measures is an error.
+- **D005** says `VAR 'total' declared twice in the same scope (measure at
+  line 12)`: the name in lower case and the line the object is declared
+  on.
+- **D010** reports an error when it is enabled (it used to warn) and prints
+  the per-kind counts the way the reference does: `[OK] Extracted 3
+  non-measure DAX blocks:` with one `   - {kind}: {count}` line per kind,
+  sorted by kind name. It stays opt-in: the convention is one template's.
+  STRICTER: the reference failed the run on a model without such blocks,
+  and so does the tool now.
+- **X001** says `'Left'[key] compared against VALUES('Right'[key])` and
+  advises comparing at the grain the question is asked at: build each
+  side's set of business keys with
+  `CALCULATETABLE(VALUES(<dimension>[<business key>]), <fact>)`, then use
+  EXCEPT/INTERSECT over those sets.
 - **D002** is rebuilt on the new `tmdl_preflight.nameof` module: quoted
   members (`Sales['Amount']`), double-quoted tables and dotted table names
   are accepted; an unparseable NAMEOF in a field-parameter row is an error;
-  a table-qualified measure outside a field parameter is a warning ("use
-  the bare form"); new option `excluded_tables`. Every unresolved-reference
-  message contains "not found".
+  a table-qualified measure outside a field parameter is a warning (it
+  names the bare form to use instead); new option `excluded_tables`. Every
+  unresolved-reference message contains "not found".
+- **D002** says why a reference does not resolve, in the reference's
+  wording: `Measure 'X' not found in any table`, `Ambiguous: measure 'X'
+  exists in multiple tables: ['A', 'B']`, `Table 'T' not found`, `Column 'C'
+  not found in table 'T'`, `'M' is a measure, not a column. Use
+  NAMEOF([M]) instead` and `Invalid reference format`. A finding in a
+  field-parameter row names the row it sits in: the object label is
+  `x-Plot Specific 1['Bad']`. BUGFIX: a broken row said nothing about which
+  row it was.
 - **Casing mismatches are errors** (project decision): D002 and D004 report
   a table, column or measure spelled with different casing from its
   declaration as an error, although DAX itself resolves it.
@@ -218,6 +249,28 @@ until configured.
   lines that leaked into an expression (M010 reports those), and gains a
   fixer marked unsafe: selected explicitly, it deletes whole generated
   `ISFILTERED('<missing table>') || ...` lines and nothing else.
+- **D004** ignores every property line that can leak into an expression:
+  `sortByColumn`, `lineageTag`, `sourceLineageTag`, `displayFolder`,
+  `formatString`, `dataType`, `summarizeBy`, `sourceColumn`, `isHidden`,
+  `isKey`, `isNullable`, `isUnique`, `isDataTypeInferred`,
+  `isAvailableInMdx`, `dataCategory`, `encodingHint`, `queryGroup`,
+  `contentType`, `mode`, `annotation`, `changedProperty`,
+  `extendedProperty`, `relatedColumnDetails` and `description`. A member
+  written in the quoted form (`Sales['Amount']`) resolves without the
+  quotes, the way the NAMEOF rule reads it. BUGFIX: both were false
+  positives on legal expressions.
+- **D004** reports a missing table as one finding per object, with the
+  missing tables in sorted order: `measure Sales[Revenue] -> missing
+  'Alpha', 'Beta'`. The model carries the note `DANGLING TABLE REFS (1
+  object(s), 2 ref(s)): <definition folder>`, and the run ends with `1
+  model(s) with dangling DAX table references.`
+- **D004** rebuilds the generated `i-Applied Filters` measure from the
+  y-axis field-parameter tables before it removes anything else, and says
+  what it repaired and what it could not: `repaired 1 site-group(s)` and
+  `NOT auto-fixable: Sales[Revenue] -> Alpha`. Every model is processed
+  before the run ends, and the run fails when something is left to a
+  human. BUGFIX: the repair no longer stops at the first model that needs
+  a human.
 - **NAMEOF** extraction ignores a malformed reference whose quoted table
   name contains a double quote.
 - Names declared with trailing spaces inside quotes (`'Frame Size   '`) are
@@ -265,6 +318,10 @@ unchanged.
 
 ### Commands and options
 
+- The parseability check is `check --select D001`. Every finding is
+  labelled `Table[Measure]` and names the delimiter kind and the character
+  position, so the same information the standalone console printed is in
+  the report; there is no separate console for it.
 - `exclude` globs match the path relative to the scan root (the folder you
   pass), as well as the path inside the PBIP item. Folders above the scan
   root never take part, so a checkout under `~/legacy/` is still scanned. A
@@ -295,7 +352,13 @@ unchanged.
   CONFORMED when it reaches every backend fact.
 - `report complexity|nameof|relationships <path> [--json]`: read-only
   reports (measure length distribution and threshold suggestions, NAMEOF
-  inventory, relationship topology).
+  inventory, relationship topology). The NAMEOF report prints the
+  reference's layout: the title rule, the counts, and then either
+  `✅ All references are valid!` or the issues under `ERRORS:` and
+  `WARNINGS:`, each with the reference, the reason and the line the call
+  sits in. Within one expression the references come in the reference's
+  order: the quoted-table ones, the unquoted-table ones, then the bare
+  ones.
 - `format-resolve <path> --name NAME [--axis T] [--label L] [--compare N2]`
   resolves the format a name gets from a format calculation group; the same
   evaluator backs S005. Python API: `tmdl_preflight.format_resolver`
@@ -548,6 +611,40 @@ unchanged.
   comment was reported as a live raw-cost ratio. The tool skips comment
   lines: a commented-out expression is not executed, so it is not a
   defect. BUGFIX.
+
+- **An apostrophe or a parenthesis inside a bracketed name belongs to the
+  name.** `SUM([Customer's Count])` and `SUM([Cost (USD])` are legal DAX:
+  the checker reads the whole bracketed name as one region and reports
+  nothing. The reference read the characters inside the brackets as code
+  and reported three unclosed delimiters for the first name. BUGFIX.
+- **A delimiter of one kind inside another is reported.** `{(})` reports
+  the closing brace and the opening brace. The reference paired every kind
+  separately and reported nothing. STRICTER.
+- **An unterminated block comment is ordinary text.** `/* unterminated (`
+  no longer hides the rest of the expression: the delimiters after it are
+  checked, so a broken comment surfaces instead of passing unnoticed.
+  BUGFIX.
+- **An escaped quote inside a string is blanked as two spaces.** The
+  contents of a string literal are blanked and the length of the text
+  never changes; only the two quotes of the literal itself survive.
+  BUGFIX.
+- **A clean share of exactly 90% is not below the threshold.** Nine clean
+  expressions out of ten meet the 90% threshold: the share is compared as
+  a share, not as a floating-point percentage, so the boundary is not a
+  coin toss. BUGFIX.
+- **A model with no measures is an error, not a warning.** The parse
+  check failed on a model without measures, whether or not the model had
+  tables; the tool now says `<model>: no measures found (suspicious)` and
+  fails. STRICTER.
+- **A `--` line is a DAX comment.** A comparison written on a `--` line is
+  commented out, so the cross-fact key check does not report it. The
+  reference removed only `//` and `/* */` comments and reported the
+  comparison anyway. BUGFIX.
+- **A repaired file keeps its own line endings.** The reference rewrote
+  every file it touched with LF endings, so a CRLF file became LF
+  throughout and every line of a Windows checkout showed up as a change.
+  The tool writes the file in the style it already has: a CRLF file loses
+  exactly the line that was removed and stays CRLF. BUGFIX.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the
@@ -636,8 +733,27 @@ and rule wins; DESKTOP: Power BI Desktop evidence).
 - STRICTER: `test_dax_parsable::test_dax_comprehensive_syntax_check[one_unmatched_paren]`
   asserts the D001 error even though the clean share (90.9%) meets the
   threshold (earlier versions passed).
+- Existing test updated: `test_dax_parsable::test_dax_balanced_brackets` and
+  `::test_dax_comprehensive_syntax_check` find the measure and
+  calculated-column findings in the message; the object label is now
+  `Table[Object]`, with no kind in brackets.
+- Existing test updated: `test_dax_spec_cases::test_measureless_model_fails`
+  (was `test_measureless_model_warns`) expects the reference's error text.
+- Existing test updated: `test_dax::TestBalancedDelimiters::test_unterminated_string`
+  expects the quote wording (`Unmatched opening double quote at position 11`).
+- Existing test updated: `test_output::test_text_prints_scanned_summary`
+  looks for the scanned line in the output; the D001 summary note is
+  printed with the other notes, before the final count.
 - Existing test updated: `test_rules_dax::test_case_mismatch_resolves_but_is_an_error`
   (was `test_case_insensitive_resolution`) expects three casing errors.
+- Existing test updated: `test_rules_dax::test_missing_table_is_error` expects
+  the finding text `measure Sales Measures[Revenue] -> missing 'Orders'`.
+- Existing test updated: `test_rules_dax::test_ambiguous_measure_is_warning`
+  expects `Ambiguous: measure 'Units Sold' exists in multiple tables:`.
+- Existing test updated: `test_dax_spec_cases::test_qualified_measure_in_a_measure_is_a_warning`
+  expects `'Units' is a measure, not a column. Use NAMEOF([Units]) instead`.
+- Existing test updated: `test_calc_group_table_dax::test_calc_group_and_calc_table_dax_blocks_found`
+  expects the D010 finding as an error (it was a warning).
 - STRICTER (project decision): `test_relationships::test_relationship_endpoints_exist[rel_casing-fail]`
   expects the casing mismatch as an error that fails without `--strict`
   (a warning was expected before).

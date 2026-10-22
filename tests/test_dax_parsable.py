@@ -85,12 +85,23 @@ def test_dax_balanced_parentheses(stand_in, variant):
 
 # ==================== Balanced Brackets ====================
 
+def _expression_findings(payload):
+    """The D001 findings that name one measure or calculated column.
+
+    The object label is `Table[Object]`; the kind is in the message.
+    """
+    return [
+        v for v in violations(payload, "D001")
+        if "in measure expression" in v.get("message", "")
+        or "in calculated_column expression" in v.get("message", "")
+    ]
+
+
 def _brackets_gate(model_dir: Path):
     code, payload = run_check(model_dir, "D001")
     bracket_errors = [
-        v for v in violations(payload, "D001")
+        v for v in _expression_findings(payload)
         if "bracket" in v["message"].lower()
-        and any(k in (v.get("object") or "") for k in ("(measure)", "(calculated_column)"))
     ]
     assert not bracket_errors, (
         f"Found {len(bracket_errors)} expressions with unmatched brackets:\n"
@@ -132,10 +143,7 @@ def test_dax_comprehensive_syntax_check(stand_in, variant):
     model_dir = _materialize(stand_in, variant)
     total = len(_all_expressions(model_dir))
     code, payload = run_check(model_dir, "D001")
-    invalid_objects = {
-        v.get("object") for v in violations(payload, "D001")
-        if any(k in (v.get("object") or "") for k in ("(measure)", "(calculated_column)"))
-    }
+    invalid_objects = {v.get("object") for v in _expression_findings(payload)}
     success_rate = (total - len(invalid_objects)) / total if total else 0.0
     assert success_rate >= MIN_SUCCESS_RATE, (
         f"Success rate {success_rate:.1%} is below threshold {MIN_SUCCESS_RATE:.0%}."

@@ -244,7 +244,13 @@ class DaxBlock:
 
     @property
     def label(self) -> str:
-        return f"{self.table}[{self.name}] ({self.kind})"
+        if self.kind == "partition_source":
+            return f"{self.table} (partition source)"
+        if self.kind == "calculation_item":
+            return f"{self.table}[{self.name}] (calculationItem)"
+        if self.kind == "format_string_definition":
+            return f"{self.table} (formatStringDefinition)"
+        return f"{self.table}[{self.name}]"
 
 
 @dataclass
