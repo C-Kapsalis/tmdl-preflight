@@ -135,6 +135,15 @@ until configured.
   BUGFIX: the original's test hard-coded the window variable of one
   template; `window_markers = ["ir_dfilter"]` restores the original's exact
   test.
+- **F015** says which table is wrong and what is wrong with it: `No
+  partition found`, `Partition mode is '<mode>', expected 'import'` and
+  `Source does not follow tuple pattern with NAMEOF`. It reads an unfenced
+  source as well as a fenced one, so a table whose `source =` is followed by
+  the M rows is judged on them. The run also prints, per model, how many
+  axis tables were analysed, how many follow the pattern and how many do
+  not, and how many of the calculated tables carry a partition (with the
+  partition modes they declare). BUGFIX: the original printed the emoji
+  double-encoded; the tool prints the intended characters.
 - **M002** pairs ``` fences by structure (a fence opens after `=` and closes
   on the next line that starts with backticks), so backticks inside a fenced
   string literal are no longer an "unpaired fence". It also reports a

@@ -540,9 +540,24 @@ class SelectorBranchResolutionRule(Rule):
 # F015 axis partition shape (advisory)
 # ---------------------------------------------------------------------------
 
-_MODE_RE = re.compile(r"^\s*mode:\s*(import|directQuery)\b", re.IGNORECASE | re.MULTILINE)
-_TUPLE_RE = re.compile(r'\(\s*"(?:[^"]|"")*"\s*,\s*NAMEOF\b', re.IGNORECASE)
+_MODE_RE = re.compile(r"mode:\s*(import|directQuery)\b", re.IGNORECASE)
+_TUPLE_RE = re.compile(r'\(\s*"[^"]+"\s*,\s*NAMEOF')
 _FENCED_SOURCE_RE = re.compile(r"source\s*=\s*```(.*?)```", re.DOTALL)
+#: the unfenced M source: after the ``source =`` line, up to the next
+#: partition-level keyword or the next top-level block
+_UNFENCED_SOURCE_RE = re.compile(
+    r"source\s*=\s*\n(.+?)(?=\n\s*(?:annotation|changedProperty|queryGroup|mode)\b"
+    r"|\n(?:column|partition|table|measure|calculationGroup)\b|\Z)", re.DOTALL)
+_PARTITION_RE = re.compile(r"^\s*partition\s+\S", re.MULTILINE)
+#: the calculated tables the partition-coverage inventory looks at
+CALCULATED_TABLE_PATTERNS = ("x-Selector", "y-Selector", "z-Map", "z-Selector")
+
+
+def _partition_mode(text: str) -> str:
+    """The partition mode a file declares, lower-cased; 'unknown' when it
+    declares none."""
+    m = _MODE_RE.search(text)
+    return m.group(1).lower() if m else "unknown"
 
 
 class FieldParameterPartitionShapeRule(Rule):
@@ -554,11 +569,12 @@ class FieldParameterPartitionShapeRule(Rule):
                        "validate_field_parameter_pattern": True}
     description = (
         "Advisory shape check of the numbered axis tables: an import-mode "
-        "calculated partition whose fenced source lists (\"label\", "
-        "NAMEOF(...), ...) tuples. A DirectQuery or unknown mode, or a source "
-        "without such tuples, means the table is not the field parameter the "
-        "axis visuals expect. validate_field_parameter_pattern = false skips "
-        "the rule."
+        "calculated partition whose source lists (\"label\", NAMEOF(...), ...) "
+        "tuples. A DirectQuery or unknown mode, or a source without such "
+        "tuples, means the table is not the field parameter the axis visuals "
+        "expect. The run also reports, per model, how many axis tables were "
+        "analysed and how many of the calculated tables carry a partition. "
+        "validate_field_parameter_pattern = false skips the rule."
     )
 
     def disabled_by_policy(self) -> bool:
@@ -567,24 +583,93 @@ class FieldParameterPartitionShapeRule(Rule):
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for model in ctx.models:
+            issues: list[tuple[str, str]] = []
+            analyzed = 0
             for table in _matching(model, self.options["axis_globs"]):
+                analyzed += 1
                 tf = _read(table)
-                if tf is None:
-                    out.append(self.violation(f"'{table.name}': no partition (file unreadable)",
-                                              file=table.file, obj=table.name))
+                if tf is None or not _PARTITION_RE.search(tf.text):
+                    issues.append((table.name, "No partition found"))
                     continue
-                m = _MODE_RE.search(tf.text)
-                mode = m.group(1) if m else "unknown"
-                if mode.lower() != "import":
-                    out.append(self.violation(
-                        f"'{table.name}' partition mode is {mode}, not import; axis field "
-                        f"parameters are import-mode calculated tables.",
-                        file=table.file, obj=table.name))
+                mode = _partition_mode(tf.text)
+                if mode != "import":
+                    issues.append((table.name,
+                                   f"Partition mode is '{mode}', expected 'import'"))
                     continue
-                body = _FENCED_SOURCE_RE.search(tf.text)
-                if body is None or not _TUPLE_RE.search(body.group(1)):
-                    out.append(self.violation(
-                        f"'{table.name}' source has no (\"label\", NAMEOF(...), ...) tuple "
-                        f"(no tuple pattern); it is not a field parameter.",
-                        file=table.file, obj=table.name))
+                source = self._source(tf.text)
+                if not _TUPLE_RE.search(source):
+                    issues.append((table.name,
+                                   "Source does not follow tuple pattern with NAMEOF"))
+            ctx.notes.append(self._summary(analyzed, issues))
+            ctx.notes.append(self._coverage(model))
+            for name, issue in issues:
+                table = model.get_table(name)
+                out.append(self.violation(f"{name}: {issue}",
+                                           file=table.file if table else model.definition_path,
+                                           obj=name))
         return out
+
+    @staticmethod
+    def _source(text: str) -> str:
+        """The partition's source: the fenced body, or the unfenced M that
+        follows the ``source =`` line."""
+        fenced = _FENCED_SOURCE_RE.search(text)
+        if fenced:
+            return fenced.group(1).strip()
+        unfenced = _UNFENCED_SOURCE_RE.search(text)
+        return unfenced.group(1).strip() if unfenced else ""
+
+    @staticmethod
+    def _summary(analyzed: int, issues: list[tuple[str, str]]) -> str:
+        """The per-model summary of the partition-pattern check."""
+        out = [
+            "",
+            "📊 Field Parameter Partition Pattern Validation:",
+            f"Tables analyzed: {analyzed}",
+            f"Valid partitions: {analyzed - len(issues)}",
+            f"Violations: {len(issues)}",
+        ]
+        if issues:
+            out.append("")
+            out.append("⚠️  Partition pattern issues:")
+            for name, issue in issues:
+                out.append(f"  - {name}: {issue}")
+            out.append("")
+            out.append("Expected pattern: partition = calculated, mode: import, tuple source")
+        else:
+            out.append("✓ All field parameter tables follow standard partition pattern")
+        return "\n".join(out)
+
+    @staticmethod
+    def _coverage(model) -> str:
+        """The per-model inventory of the calculated tables' partitions."""
+        tables = [t for t in model.table_list
+                  if any(p in t.name for p in CALCULATED_TABLE_PATTERNS)]
+        total = len(tables)
+        with_partition = [t for t in tables if t.partitions]
+        without = [t for t in tables if not t.partitions]
+        pct = (len(with_partition) / total * 100) if total else 100.0
+        out = [
+            "",
+            "📊 Calculated Table Partition Coverage:",
+            f"Total calculated tables: {total}",
+            f"With partitions: {len(with_partition)} ({pct:.1f}%)",
+            f"Without partitions: {len(without)}",
+        ]
+        modes: dict[str, int] = {}
+        for table in with_partition:
+            mode = _partition_mode(_read(table).text if _read(table) else "")
+            modes[mode] = modes.get(mode, 0) + 1
+        if modes:
+            out.append("")
+            out.append("Partition modes:")
+            for mode, count in sorted(modes.items()):
+                out.append(f"  - {mode}: {count}")
+        if without:
+            out.append("")
+            out.append("💡 Tables without partitions:")
+            for table in without:
+                out.append(f"  - {table.name}")
+        else:
+            out.append("✓ All calculated tables have partition definitions")
+        return "\n".join(out)

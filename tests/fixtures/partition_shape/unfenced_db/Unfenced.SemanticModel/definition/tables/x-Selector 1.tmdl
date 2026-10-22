@@ -1,0 +1,14 @@
+table 'x-Selector 1'
+	lineageTag: 0ee70417-cd00-5b8f-891d-12e4e0350009
+
+	column 'x-Selector 1'
+		lineageTag: 0ee70417-cd00-5b8f-891d-12e4e0350010
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	partition 'x-Selector 1' = calculated
+		mode: import
+		source =
+			{
+				("Cups", NAMEOF([Cups Sold]), 0)
+			}
