@@ -372,6 +372,14 @@ until configured.
 
 ### Bug fixes
 
+- **An axis table that no measure reads is not a failure.** A model whose
+  `y-Selector` tables no measure references used to fail the
+  reference-integrity check with a division by zero; it now passes, because
+  there is no reference to check. BUGFIX.
+- **The axis tables are reference-checked in full.** Every expression of an
+  axis table is checked, not only the measures: a calculated column or a
+  partition source that names a table that does not exist is reported as
+  well. BUGFIX.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the
