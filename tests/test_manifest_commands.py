@@ -139,9 +139,9 @@ def test_refs_counts_anchored_shapes_by_layer(tmp_path):
     (old / "x.tmdl").write_text("[Margin]", encoding="utf-8")
     code, out, _ = run_cli("refs", "Margin", tmp_path, "--files")
     assert code == 0
-    assert "live: model 1, report 2, total 3 in 2 file(s)" in out
-    assert "history: model 1" in out
-    assert "report reference(s)" in out
-    assert "history file(s) hidden" in out
+    assert "  LIVE      model     1   report     2   total     3   files 2" in out
+    assert "  non-live  model     1   report     0   total     1   files 1" in out
+    assert "report bindings no model-side test checks" in out
+    assert "non-live file(s) hidden" in out
     code, out, _ = run_cli("refs", "Nothing", tmp_path)
-    assert code == 0 and "exact spelling" in out
+    assert code == 0 and "no references found" in out

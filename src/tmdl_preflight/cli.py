@@ -294,12 +294,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_refs2.add_argument("name", help="the object name, exact and case-sensitive")
     p_refs2.add_argument("paths", nargs="*", default=["."], help="folders to scan (default: .)")
     p_refs2.add_argument("--files", action="store_true", help="list the matching files")
-    p_refs2.add_argument("--include-history", action="store_true",
-                         help="with --files: list archived copies too")
+    p_refs2.add_argument("--include-nonlive", "--include-history", action="store_true",
+                         help="with --files: list the non-live files too")
     p_refs2.add_argument("--history", action="append", metavar="GLOB",
                          help="glob of archived paths (repeatable)")
     p_refs2.add_argument("--loose", action="store_true",
                          help="count NAME] and NAME\" (closing delimiter only; over-counts)")
+    p_refs2.add_argument("--targets", help="the target contract file: the live set is the "
+                                           "registered model paths")
 
     p_live = sub.add_parser("live", help="opt-in checks against the published dataset "
                                          "(Power BI REST; --replay answers from recordings)")
@@ -923,10 +925,13 @@ def _cmd_schema_check(args) -> int:
 
 
 def _cmd_refs(args) -> int:
-    from .refs import census, render
+    from .manifest import load_targets
+    from .refs import census, live_roots, render
 
-    counts = census(args.name, [Path(p) for p in args.paths], args.history, args.loose)
-    print(render(args.name, counts, args.loose, args.files, args.include_history))
+    targets = load_targets(Path(args.targets)) if args.targets else {}
+    live = live_roots(targets) if targets else None
+    counts = census(args.name, [Path(p) for p in args.paths], args.history, args.loose, live)
+    print(render(args.name, counts, args.loose, args.files, args.include_nonlive))
     return 0
 
 

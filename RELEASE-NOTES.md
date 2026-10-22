@@ -376,6 +376,21 @@ until configured.
   file is rewritten; the run says how many entries went and that the
   registry is a committed receipt.
 
+- **The reference census prints the report the contract describes.** The
+  live and the non-live counts, per layer, the number of files, the live
+  blast radius and the warning that report bindings are not covered by a
+  model-side test. With `--files` the matching files are listed, sorted by
+  how often they name the object, with the non-live ones hidden unless
+  they are asked for.
+- **A quoted reference may carry any dotted prefix.** `"a.b.Margin"` and
+  `".Margin"` count for `Margin`, the way a report binding writes it.
+- **A targets file defines the live set of the census.** The live set is
+  the first path segment of every registered model path; without a
+  targets file the archived-folder globs decide. `--include-nonlive`
+  shows the non-live files (`--include-history` still works).
+- **The census lists the files relative to the folder it scanned**, so
+  the same tree gives the same report wherever it is checked out.
+
 ### Bug fixes
 
 - **A star select is a star select.** `select distinct *` is not one, and

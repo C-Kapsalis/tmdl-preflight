@@ -17,7 +17,7 @@ def reference_pattern(name: str, loose: bool = False) -> re.Pattern:
     n = re.escape(name)
     if loose:
         return re.compile(n + r"\]|" + n + r'"')
-    return re.compile(r"\[" + n + r"\]" + r'|"' + n + r'"' + r'|"[^".]+\.' + n + r'"')
+    return re.compile(r"\[" + n + r"\]" + r'|"' + n + r'"' + r'|"[^"]*\.' + n + r'"')
 
 
 def _tracked(root: Path) -> Optional[list[Path]]:
@@ -29,17 +29,26 @@ def _tracked(root: Path) -> Optional[list[Path]]:
     return [root / p for p in out.split("\0") if p]
 
 
-def scan_files(paths: Iterable[Path]) -> list[Path]:
-    files: list[Path] = []
+def scan_files(paths: Iterable[Path]) -> list[tuple[Path, Path]]:
+    """``(file, root)`` for every candidate file under the given roots."""
+    files: list[tuple[Path, Path]] = []
     for root in paths:
         root = Path(root)
         if root.is_file():
-            files.append(root)
+            files.append((root, root.parent))
             continue
         tracked = _tracked(root)
         cands = tracked if tracked is not None else list(root.rglob("*"))
-        files.extend(p for p in cands if p.suffix in (".tmdl", ".json") and p.is_file())
+        files.extend((p, root) for p in cands
+                     if p.suffix in (".tmdl", ".json") and p.is_file())
     return sorted(set(files))
+
+
+def _relative(path: Path, root: Path) -> str:
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 @dataclass
@@ -47,15 +56,28 @@ class FileCount:
     path: Path
     count: int
     layer: str  # model | report
-    scope: str  # live | history
+    scope: str  # live | non-live
+    rel: str = ""
+
+
+def live_roots(targets: dict[str, dict]) -> set[str]:
+    """The first path segment of every registered model path: the live set."""
+    roots: set[str] = set()
+    for entry in targets.values():
+        for path in [entry.get("model_path")] + [s.get("path")
+                                                 for s in entry.get("secondary_models") or []]:
+            if path:
+                roots.add(str(path).replace("\\", "/").strip("/").split("/")[0])
+    return roots
 
 
 def census(name: str, paths: Iterable[Path], history: Optional[list[str]] = None,
-           loose: bool = False) -> list[FileCount]:
+           loose: bool = False, live: Optional[set[str]] = None) -> list[FileCount]:
+    """The files that name the object, with the layer and the scope."""
     rx = reference_pattern(name, loose)
     globs = history if history is not None else HISTORY_GLOBS
     out = []
-    for f in scan_files(paths):
+    for f, root in scan_files(paths):
         try:
             text = f.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -63,37 +85,44 @@ def census(name: str, paths: Iterable[Path], history: Optional[list[str]] = None
         n = len(rx.findall(text))
         if not n:
             continue
-        posix = f.as_posix()
-        layer = "report" if ".Report/" in posix else "model"
-        scope = "history" if any(fnmatchcase(posix, "*" + g if not g.startswith("*") else g)
-                                 for g in globs) else "live"
-        out.append(FileCount(f, n, layer, scope))
+        rel = _relative(f, root)
+        layer = "report" if ".Report/" in rel else "model"
+        if live is not None:
+            scope = "live" if rel.split("/")[0] in live else "non-live"
+        else:
+            scope = ("non-live" if any(fnmatchcase(rel, "*" + g if not g.startswith("*") else g)
+                                      for g in globs) else "live")
+        out.append(FileCount(f, n, layer, scope, rel))
     return out
 
 
 def render(name: str, counts: list[FileCount], loose: bool, files: bool,
-           include_history: bool) -> str:
-    shape = ("loose: NAME] or NAME\" (over-counts)" if loose
-             else '[NAME], "NAME" or "Table.NAME"')
-    lines = [f"references to {name!r} (shape: {shape})"]
-    for scope in ("live", "history"):
-        sel = [c for c in counts if c.scope == scope]
-        model = sum(c.count for c in sel if c.layer == "model")
-        report = sum(c.count for c in sel if c.layer == "report")
-        lines.append(f"{scope}: model {model}, report {report}, total {model + report} "
-                     f"in {len(sel)} file(s)")
+           include_nonlive: bool) -> str:
+    shape = (f'`{name}]` / `{name}"` — LOOSE, also counts measures whose name ENDS with this one'
+             if loose else f'`[{name}]`, `"{name}"` or `"Table.{name}"`')
     live = [c for c in counts if c.scope == "live"]
-    lines.append(f"live blast radius: {sum(c.count for c in live)}")
-    rep = sum(c.count for c in live if c.layer == "report")
-    if rep:
-        lines.append(f"warning: {rep} report reference(s); model-side checks cannot see them")
-    if not counts:
-        lines.append("no references found: check the exact spelling and case of the name")
+    other = [c for c in counts if c.scope == "non-live"]
+    lm = sum(c.count for c in live if c.layer == "model")
+    lr = sum(c.count for c in live if c.layer == "report")
+    nm = sum(c.count for c in other if c.layer == "model")
+    nr = sum(c.count for c in other if c.layer == "report")
+    warning = f"⚠ {lr} are report bindings no model-side test checks." if lr else ""
+    lines = ["", f'References to "{name}"  (matched as {shape})', "",
+             f"  LIVE      model {lm:>5}   report {lr:>5}   total {lm + lr:>5}   "
+             f"files {len(live)}",
+             f"  non-live  model {nm:>5}   report {nr:>5}   total {nm + nr:>5}   "
+             f"files {len(other)}",
+             "",
+             f"  Live blast radius: {lm + lr} reference(s). {warning}"]
+    if not (lm + lr + nm + nr):
+        lines.append("  (no references found — check the exact name, including case)")
     if files:
-        shown = [c for c in counts if include_history or c.scope == "live"]
-        for c in sorted(shown, key=lambda c: (-c.count, c.path.as_posix())):
-            lines.append(f"  {c.count:5d}  {c.scope:7s}  {c.layer:6s}  {c.path}")
-        hidden = len(counts) - len(shown)
-        if hidden:
-            lines.append(f"  ({hidden} history file(s) hidden; --include-history shows them)")
+        lines.append("")
+        shown = [c for c in counts if include_nonlive or c.scope == "live"]
+        for c in sorted(shown, key=lambda c: (-c.count, c.rel)):
+            lines.append(f"  {c.count:>4}  {c.scope:<8} {c.layer:<6} {c.rel}")
+        if not include_nonlive and (nm + nr):
+            lines.append("")
+            lines.append(f"  ({len(other)} non-live file(s) hidden — --include-nonlive to show)")
+    lines.append("")
     return "\n".join(lines)
