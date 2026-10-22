@@ -231,6 +231,13 @@ until configured.
   and reports every target a plot-specific table adds to the numbered
   levels on its own:
   `y-Plot Specific 1: NAMEOF(beans[farm]) absent from every numbered y-Selector level`.
+- **F013** says which table carries the measures and which family it
+  belongs to: `x-Selector 2 unexpectedly contains 1 measures. x-Selector tables should be dimension tables with columns only.`
+  A plot-specific table names the family it belongs to.
+- **M020** names the column and nothing else:
+  `x-Selector 2[Calc] has empty expression`. STRICTER: the check covers
+  every table of the model, not only the axis tables; a calculated column
+  with no expression is broken wherever it sits.
 
 ### Commands and options
 

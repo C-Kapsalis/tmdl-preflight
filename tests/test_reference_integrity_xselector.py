@@ -76,3 +76,63 @@ class TestXSelectorNoMeasures:
         found = violations(payload)
         assert len(found) == 1
         assert AXIS in found[0]["message"] and "1" in found[0]["message"]
+
+
+MEASURE_ON_AXIS = """table 'x-Selector 2'
+\tmeasure Stray = 1
+\t\tlineageTag: 7c6cd67a-9d37-5730-872a-78a386ad12c6
+
+\tcolumn 'x-Selector 2'
+\t\tsourceColumn: [Value1]
+
+\tpartition 'x-Selector 2' = calculated
+\t\tmode: import
+\t\tsource = ```
+\t\t\t\t{
+\t\t\t\t\t("Cups", NAMEOF([Cups]), 1, "g_x")
+\t\t\t\t}
+\t\t\t\t```
+"""
+
+EMPTY_EXPRESSION = """table 'x-Selector 2'
+\tcolumn 'x-Selector 2'
+\t\tsourceColumn: [Value1]
+
+\tcolumn 'Calc' =
+\t\tdataType: string
+
+\tpartition 'x-Selector 2' = calculated
+\t\tmode: import
+\t\tsource = ```
+\t\t\t\t{
+\t\t\t\t\t("Cups", NAMEOF([Cups]), 1, "g_x")
+\t\t\t\t}
+\t\t\t\t```
+"""
+
+
+def _axis_model(tmp_path, text):
+    tables = tmp_path / "Roastery.SemanticModel" / "definition" / "tables"
+    tables.mkdir(parents=True)
+    (tables / "x-Selector 2.tmdl").write_text(text, encoding="utf-8")
+    return tmp_path / "Roastery.SemanticModel"
+
+
+def test_measure_on_an_axis_table_is_named(tmp_path):
+    model = _axis_model(tmp_path, MEASURE_ON_AXIS)
+    code, payload = run_check(model, "field-parameter-table-no-measures")
+    assert code == 1, payload
+    found = violations(payload)
+    assert len(found) == 1
+    assert found[0]["message"] == (
+        "x-Selector 2 unexpectedly contains 1 measures. x-Selector tables "
+        "should be dimension tables with columns only.")
+
+
+def test_calculated_column_with_an_empty_expression_is_named(tmp_path):
+    model = _axis_model(tmp_path, EMPTY_EXPRESSION)
+    code, payload = run_check(model, "calculated-column-expression-present")
+    assert code == 1, payload
+    found = violations(payload)
+    assert len(found) == 1
+    assert found[0]["message"] == "x-Selector 2[Calc] has empty expression"

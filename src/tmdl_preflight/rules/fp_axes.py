@@ -318,6 +318,13 @@ def _table_number(name: str) -> int:
     return int(tail) if tail.isdigit() else 0
 
 
+def _axis_family(name: str) -> str:
+    """The axis family a table belongs to: x-Selector, y-Selector, or
+    "Field-parameter" for a table that is on no axis."""
+    m = re.match(r"^([xy])[- ]", name, re.IGNORECASE)
+    return f"{m.group(1).lower()}-Selector" if m else "Field-parameter"
+
+
 def _family_report(family: str, kind: str, rows: list[tuple[str, str]],
                    n_tables: int) -> str:
     """The report block of one axis family."""
@@ -512,11 +519,10 @@ class FieldParameterNoMeasuresRule(Rule):
             for table in field_parameter_files(model, self.options.get("axis_globs")):
                 if not table.measure_list:
                     continue
-                names = ", ".join(m.name for m in table.measure_list)
+                family = _axis_family(table.name)
                 out.append(self.violation(
-                    f"field-parameter table '{table.name}' declares "
-                    f"{len(table.measure_list)} measure(s) ({names}); they are lost when "
-                    f"the table is regenerated. Move them to a measures table.",
+                    f"{table.name} unexpectedly contains {len(table.measure_list)} measures. "
+                    f"{family} tables should be dimension tables with columns only.",
                     file=table.file, line=table.measure_list[0].line, obj=table.name,
                 ))
         return out
@@ -544,8 +550,7 @@ class CalculatedColumnExpressionRule(Rule):
             for col in model.all_columns():
                 if col.expression is not None and not col.expression.strip():
                     out.append(self.violation(
-                        f"calculated column {col.full_name} is declared with '=' but has an "
-                        f"empty expression; write the expression or remove the '='.",
+                        f"{col.full_name} has empty expression",
                         file=col.file, line=col.line, obj=col.full_name,
                     ))
         return out
