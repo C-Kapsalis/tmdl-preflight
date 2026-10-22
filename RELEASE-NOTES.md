@@ -178,12 +178,15 @@ until configured.
   `isHidden`, and the mapping table that is a relationship endpoint.
   `modelPermission:` may be written with any spacing (`modelPermission:read`
   is read). The mapping table is reported once, however many
-  relationships point at it.
+  relationships point at it. BUGFIX: the section numbers of the original's
+  guide are not printed; the tool does not ship that guide, so the
+  reference would point a reader at a document they do not have.
 - **L006** prints the inventory and the posture in the layout a reviewer
   reads: the roles directory, the role files with their model permission
   and the tables each may read, the user-mapping tables, and the posture
   (no RLS, static, dynamic via a mapping table, or incomplete) with the
-  service-side concerns a file check cannot settle.
+  service-side concerns a file check cannot settle. BUGFIX: the section
+  numbers of the original's guide are not printed, for the same reason.
 - **M002** pairs ``` fences by structure (a fence opens after `=` and closes
   on the next line that starts with backticks), so backticks inside a fenced
   string literal are no longer an "unpaired fence". It also reports a
