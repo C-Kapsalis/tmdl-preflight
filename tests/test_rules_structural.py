@@ -54,7 +54,7 @@ class TestTmdlWellFormed:
             encoding="utf-8",
         )
         violations = TmdlWellFormedRule().check(Context(project))
-        assert any("unpaired ``` expression fence" in v.message for v in violations)
+        assert any("unmatched DAX code fences" in v.message for v in violations)
 
     def test_null_bytes(self, project, definition):
         f = definition / "tables" / "Stores.tmdl"
@@ -290,7 +290,9 @@ class TestMetadataInExpression:
         )
         violations = MetadataInExpressionRule().check(Context(project))
         assert len(violations) == 1
-        assert "expression after '=' is missing" in violations[0].message
+        assert violations[0].message == (
+            "Units Sold: property right after `=` (line 22): formatString: #,0"
+        ), violations[0].message
 
     def test_keyword_inside_string_or_comment_is_fine(self, project, definition, replace_in):
         replace_in(
@@ -339,7 +341,8 @@ class TestPropertyAfterChildBlock:
             "\tcolumn 'Metric Selector Order'\n\t\tdisplayFolder: Hidden helpers\n"
             "\t\tisHidden\n" in text
         )
-        assert "\n\n\n" not in text
+        # the blank line that stood before the moved line stays where it was
+        assert "\t\tannotation SummarizationSetBy = Automatic\n\n" in text
         assert rule.check(Context(project)) == []
         assert rule.fix(Context(project)) == []
 

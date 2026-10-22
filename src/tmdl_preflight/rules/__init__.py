@@ -149,6 +149,7 @@ from .topology import (
     RelationshipCyclesRule,
     RelationshipsPresenceRule,
 )
+from .validation_notes import ModelValidationNotesRule
 
 ALL_RULES: list[type[Rule]] = [
     ModelStructureRule,
@@ -265,6 +266,7 @@ ALL_RULES: list[type[Rule]] = [
     GrainPolicyExceptionRule,
     RequiredCalcGroupsRule,
     FormatMinDecimalsRule,
+    ModelValidationNotesRule,
 ]
 
 

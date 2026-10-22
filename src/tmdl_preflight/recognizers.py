@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass
 from typing import Iterator, Optional
 
-from .parser import indent_level
+from .parser import indent_level, parse_object_name
 
 # ---------------------------------------------------------------------------
 # Fences
@@ -81,6 +81,7 @@ class DanglingDescription:
     start: int  # 0-based index of the first /// line of the run
     end: int  # 0-based index of the last /// line of the run
     at_eof: bool  # nothing but blank lines follows the run
+    text: str = ""  # the stripped text of the run's last /// line
 
 
 def find_dangling_descriptions(lines: list[str]) -> list[DanglingDescription]:
@@ -98,7 +99,7 @@ def find_dangling_descriptions(lines: list[str]) -> list[DanglingDescription]:
         nxt = lines[j + 1] if j + 1 < n else None
         if nxt is None or not nxt.strip():
             at_eof = all(not ln.strip() for ln in lines[j + 1 :])
-            out.append(DanglingDescription(i, j, at_eof))
+            out.append(DanglingDescription(i, j, at_eof, lines[j].strip()))
         i = j + 1
     return out
 
@@ -171,6 +172,16 @@ SIMPLE_PROPERTIES = frozenset(
         "sortByColumn", "sourceColumn", "sourceLineageTag", "summarizeBy",
     }
 )
+#: The properties the reference knew. The tool knows a few more (a source
+#: column, its lineage tag, a nullability flag and the MDX flag): they are
+#: properties in the same place, and the engine rejects them the same way.
+REFERENCE_SIMPLE_PROPERTIES = frozenset(
+    {
+        "dataCategory", "dataType", "displayFolder", "displayOrdinal",
+        "formatString", "isDefaultImage", "isDefaultLabel", "isHidden",
+        "isKey", "isNameInferred", "lineageTag", "sortByColumn", "summarizeBy",
+    }
+)
 # Nested sections of an object. Once one has started, the object's simple
 # properties may no longer follow.
 CHILD_BLOCKS = frozenset(
@@ -199,6 +210,9 @@ class MisorderedProperty:
     target: int  # 0-based index the line belongs in front of
     owner: str  # the declaration line it belongs to, stripped
     token: str
+    name: str = ""  # the object's own name
+    owner_line: int = -1  # 0-based index of the declaration itself
+    owner_level: int = 0  # the declaration's nesting level
 
 
 def _expression_end(lines: list[str], decl: int) -> int:
@@ -233,7 +247,7 @@ def find_properties_after_child_blocks(lines: list[str]) -> list[MisorderedPrope
     expression (or after the declaration when the expression is inline).
     """
     out: list[MisorderedProperty] = []
-    # level -> [decl text, section started?, decl index]
+    # level -> [decl text, section started?, decl index, object name]
     owners: dict[int, list] = {}
     for idx, line in iter_unfenced(lines):
         if not line.strip() or line.lstrip().startswith("///"):
@@ -243,7 +257,7 @@ def find_properties_after_child_blocks(lines: list[str]) -> list[MisorderedPrope
         if _OBJECT_DECL_RE.match(line):
             for lvl in [k for k in owners if k >= level]:
                 del owners[lvl]
-            owners[level] = [line.strip(), False, idx]
+            owners[level] = [line.strip(), False, idx, _object_name(line)]
             continue
         if tok in CHILD_BLOCKS:
             above = [k for k in owners if k < level]
@@ -255,14 +269,52 @@ def find_properties_after_child_blocks(lines: list[str]) -> list[MisorderedPrope
             continue
         if tok in SIMPLE_PROPERTIES and parent[1]:
             target = _expression_end(lines, parent[2]) + 1
-            out.append(MisorderedProperty(idx, target, parent[0], tok))
+            out.append(MisorderedProperty(idx, target, parent[0], tok, parent[3],
+                                          parent[2], level - 1))
     return out
+
+
+def _object_name(declaration: str) -> str:
+    """The name a declaration carries: ``measure 'Kg' = ...`` -> ``Kg``."""
+    rest = declaration.strip()
+    m = re.match(r"^[A-Za-z]+\s+(.*)$", rest)
+    if not m:
+        return rest
+    name, _ = parse_object_name(m.group(1))
+    return name or rest
+
+
+def same_lines(old: list[str], new: list[str]) -> bool:
+    """Do the two lists hold the same lines, up to the copies of a moved
+    property that were dropped?
+
+    A repair that moves a property may drop a copy of it: Power BI rejects
+    a duplicated property, so an object that carried the same flag twice
+    keeps one. Every other line must survive unchanged.
+    """
+    rest = list(old)
+    for line in new:
+        if line not in rest:
+            return False
+        rest.remove(line)
+    for line in rest:
+        token = first_token(line)
+        if token not in SIMPLE_PROPERTIES:
+            return False
+        if not any(first_token(other) == token for other in new):
+            return False
+    return True
 
 
 def move_properties_before_child_blocks(
     lines: list[str], limit: int = 200
 ) -> tuple[list[str], int]:
     """Move every misordered property to its object's first property slot.
+
+    The moved line keeps its own indentation, and a blank line that stood
+    before it stays where it was: the repair moves one line, it does not
+    reformat the block around it. An object that carries the same flag
+    twice keeps one copy, in its first property slot.
 
     Returns ``(lines, moved)``; ``moved`` is -1 when ``limit`` moves did not
     clear the file (the caller then writes nothing).
@@ -277,15 +329,25 @@ def move_properties_before_child_blocks(
             return lines, -1
         f = found[0]
         prop = lines.pop(f.line)
-        # removing the line may leave two blank lines in a row; keep one
-        if (
-            0 < f.line < len(lines)
-            and not lines[f.line - 1].strip()
-            and not lines[f.line].strip()
-        ):
-            lines.pop(f.line)
+        lines = _drop_duplicate_flag(lines, f, prop)
         lines.insert(f.target, prop)
         moved += 1
+
+
+def _drop_duplicate_flag(lines: list[str], finding: MisorderedProperty,
+                         prop: str) -> list[str]:
+    """Drop a copy of the property that is about to be moved, when the
+    object already carries it in its first property slot. Power BI rejects
+    a duplicated property, so only one copy may stay."""
+    key = first_token(prop)
+    for idx in range(finding.target, len(lines)):
+        if first_token(lines[idx]) != key:
+            continue
+        if indent_level(lines[idx]) != finding.owner_level + 1:
+            continue
+        del lines[idx]
+        break
+    return lines
 
 
 # ---------------------------------------------------------------------------

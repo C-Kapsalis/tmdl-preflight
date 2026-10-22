@@ -88,6 +88,7 @@ the example model with one defect each. Where that evidence and the
 | P001 | refresh-policy-repair | error | yes (unsafe; also adds P002's missing policies) |
 | M021 | culture-orphan-bindings | error | yes |
 | M022 | diagram-layout-blank (opt-in) | warning | yes |
+| M023 | model-validation-notes (opt-in) | info | no |
 | B005 | pages-metadata-schema (opt-in) | error | no |
 | B006 | hierarchy-level-binding-shape | error | no |
 | L001 | rls-role-grammar | error | no |
@@ -115,20 +116,31 @@ until configured.
   on the next line that starts with backticks), so backticks inside a fenced
   string literal are no longer an "unpaired fence". It also reports a
   broken quoted name (`'Rider's Name'`, an apostrophe not doubled) as an
-  error and an empty name as a warning.
+  error and an empty name as a warning. The messages now read
+  `File encoding error: <detail>`,
+  `<file>:<line> contains null bytes` and
+  `unmatched DAX code fences: <N> ``` markers (must be even)`.
 - **M003** keeps a shared tag on the occurrence that most plausibly owns
   it: table files first, then `relationships.tmdl`, `expressions.tmdl`,
   `cultures/`, everything else (path, then line, inside a class). Before, a
   column could lose its tag to an expression because `expressions.tmdl`
   sorts before `tables/`. Expression occurrences now name the expression.
   BUGFIX: the order is deterministic — the first file in directory-listing
-  order keeps the tag.
+  order keeps the tag. The message now reads
+  `Duplicate lineageTag '<tag>' found in files: <first file>, <duplicate file>`
+  and names the line and the object of each occurrence.
 - **M010** recognises `kpi`, `detailRows` and `relatedColumnDetails`, and in
   DAX bodies matches a metadata keyword as a whole word whatever follows it
   (`displayFolder` with no colon counts). Shared expressions are checked
   too; in M bodies only a line shaped like a property counts. STRICTER: a
   property-shaped line inside a string or a comment is not reported, and
-  partitions, calculation items and shared expressions are checked too.
+  partitions, calculation items and shared expressions are checked too. The
+  messages now name the object and quote the offending line:
+  `<object>: property right after `=` (line <N>): <text>`,
+  `<object>: property buried in expression (line <N>): <text>` and
+  `<object>: property inside ``` expression (line <N>): <text>`. BUGFIX: a
+  property-shaped line inside a multi-line string in a fenced body is not
+  reported; it is text, not a property.
 - **M011** knows the nested sections `kpi`, `detailRows`,
   `relatedColumnDetails` and `formatStringDefinition`, resets at `role`
   declarations, and its fixer moves the line to the object's first property
@@ -136,11 +148,48 @@ until configured.
   section. Valued properties move like flags; a file that would need more
   than 200 moves is left alone. STRICTER: the rule applies to any object,
   not only to measures and columns, and a valued property moves like a
-  flag.
+  flag. The repair moves the one line: the blank line that stood before it
+  stays where it was, the line keeps its own indentation, and an object
+  that carried the same flag twice keeps one copy, in its first property
+  slot (Power BI rejects a duplicated property). BUGFIX: the file keeps
+  the final newline it had, and a file that mixes its line endings is now
+  reported as a refused repair (it was silently left alone). STRICTER: the
+  rule knows a few more simple properties than the reference
+  (`sourceColumn`, `sourceLineageTag`, `isNullable`,
+  `isAvailableInMdx`) and wants the property one level under its owner,
+  where the reference wanted any depth.
 - **M013** fix removes the run and the one blank line directly after it, at
   the end of the file too; blank lines before a run are never touched. New
   option `fix_mode = "attach"` deletes the blank lines between a
-  description and its object instead, keeping the documentation.
+  description and its object instead, keeping the documentation. The attach
+  mode works on the table files only, and its report counts the occurrences
+  in a dry run and the blank lines it removed in a live run.
+- **M001** and **M016** name what is missing:
+  `<model>: required directories missing: [<names>]` and
+  `<model>: required files missing: [<names>]`. M016's other messages read
+  `Model file must start with 'model' declaration`,
+  `Table file must start with 'table' declaration`,
+  `Measure '<name>' has empty DAX expression`,
+  `<file>: Windows line endings (CRLF)`,
+  `line <N>: root-level comment is indented` and
+  `unmatched DAX code fences: <N> ``` markers (must be even)`.
+- **M004** says `LineageTag '<tag>' is not a canonically-formatted UUID
+  (expected 8-4-4-4-12 hex)`.
+- **M020** says `<Table>[<Column>] has empty expression` for a calculated
+  column whose expression is blank, and
+  `<Table>[<Column>] is marked as calculated but has no expression` when the
+  `=` has nothing at all.
+- **M023** (new, opt-in) carries the notes the file validator raised
+  without failing on them: `Missing recommended model property: <p>`,
+  `Column '<c>' missing dataType`,
+  `Column '<c>' has unknown summarizeBy: <v> (valid: none, sum, min, max,
+  count, distinctCount, average, standardDeviation, variance)`,
+  `Calculation group has no explicit precedence (defaults to 0)` and
+  `Calculation item should typically use SELECTEDMEASURE or
+  ISSELECTEDMEASURE`. The rule is off by default: the notes are advice,
+  and a run never fails because of one. The measure-prefix and
+  selector-table naming notes of the reference are tied to one template and
+  are not carried over.
 - **R001** messages say "not found"; an endpoint spelled with different
   casing is an error; new option `min_endpoint_success_rate` (default 0.95)
   notes a low share of valid relationships (each broken endpoint is an
@@ -184,6 +233,32 @@ until configured.
   left unchanged and listed under `refused_fixes`); other files are still
   repaired.
 
+### Console reports
+
+Four rules came from scripts that printed a report of their own instead of
+a list of findings. When such a rule is the one rule the run selected
+(`--select`), the tool prints that report in front of its own summary, in
+the same layout and with the same wording:
+
+- **M003** (the lineage repair) prints the model it works on, whether the
+  run is live or a dry run, every duplicated tag with its locations, the
+  fresh tag every occurrence gets, and the footer. A run over more than one
+  model also prints the repository scan and its summary.
+- **M011** (the misordered-property repair) prints, per file, the
+  properties it moved and the object they belong to, and the footer.
+- **M013** (the dangling-description sweep) prints, per file, the run it
+  found and the comment text it holds. In attach mode it prints the
+  comment-spacing cleanup's report instead.
+- **M017** (the TMDL file validation) prints the validation header, the
+  files it checked, the validation summary and the model's own counts
+  (files, valid files, invalid files, measures, tables, lineage tags,
+  duplicate tags, success rate). A repair the tool could not prove is
+  reported on standard error as `ERROR <path>: <reason>`, and the run
+  exits 2.
+
+The tool's own report follows, so the exit code and the JSON payload are
+unchanged.
+
 ### Commands and options
 
 - `exclude` globs match the path relative to the scan root (the folder you
@@ -197,6 +272,8 @@ until configured.
 - A bare `definition/` folder is accepted as a model when it holds
   `tables/`, `model.tmdl` or `expressions.tmdl`.
 - `fix --dry-run` reports what would be repaired and writes nothing.
+- `fix --verbose` lists every file a dry run would change (the attach mode
+  of M013 lists its files only with this flag).
 - `fix --clear-cache` deletes `<Model>.SemanticModel/.pbi/cache.abf` after
   lineage tags changed; without it the tool prints a hint when the cache
   exists.
@@ -529,7 +606,11 @@ stop a model from opening or deploying, so a baseline can never hide them.
 
 - The CLI invocation (`tmdl-preflight check <path>`) and the exit codes
   (`0` clean, `1` violations, `2` usage or path error) are unchanged. Exit
-  code `2` now also covers configuration and baseline errors.
+  code `2` now also covers configuration and baseline errors. BUGFIX: a
+  single-rule run exits `1` when the rule found something, where the
+  reference exited with the number of offending files. The tool's contract
+  is `0` clean, `1` violations, `2` a problem with the invocation, and a
+  caller can read the count from the report.
 - JSON output is additive only: `summary` gains `excluded`, `exempted` and
   `baselined`; the payload gains `scanned`, and `exemptions` / `baseline`
   when they apply; each violation gains `path` (project-relative). Existing

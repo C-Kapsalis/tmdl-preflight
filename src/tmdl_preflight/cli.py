@@ -37,7 +37,7 @@ from .config import Config, ConfigError, load_config
 from .engine import PreflightReport, apply_policy, check, fix
 from .output import FORMATS, render
 from .rules import default_ruleset, full_ruleset
-from .rules.base import Context, RuleSet
+from .rules.base import Context, RuleSet, Violation
 from .stats import collect_stats, render_stats
 
 
@@ -144,6 +144,8 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "fix":
             p.add_argument("--dry-run", action="store_true",
                            help="report what fix would change; write nothing")
+            p.add_argument("--verbose", action="store_true",
+                           help="list every file a dry run would change")
             p.add_argument("--clear-cache", action="store_true",
                            help="after lineage tags change, delete the model's "
                                 ".pbi/cache.abf so Desktop does not reuse old tags")
@@ -430,17 +432,56 @@ def _run(args, mode: str) -> tuple[PreflightReport, RuleSet, Config, Context]:
     apply_policy(report, cfg, ctx=ctx)
     ran = {r.id for r in ruleset.rules}
     report.unused_exemptions = [e for e in report.unused_exemptions if e.rule in ran]
+    report.console = _console_report(args, report, ruleset, ctx)
     return report, ruleset, cfg, ctx
 
+
+def _console_report(args, report: PreflightReport, ruleset: RuleSet,
+                    ctx: Context) -> list[str]:
+    """The rules that came from scripts with a report of their own print it
+    when they are the one rule the run selected."""
+    from . import console
+
+    selected = _parse_id_list(getattr(args, "select", None)) or set()
+    if not selected:
+        return []
+    dry_run = bool(getattr(args, "dry_run", False))
+    checking = args.command != "fix"
+    lines: list[str] = []
+    for rule in ruleset.rules:
+        if rule.id.lower() not in selected and rule.name.lower() not in selected:
+            continue
+        if rule.id == "M003":
+            lines.extend(console.lineage_report(ctx, rule, dry_run))
+        elif rule.id == "M011":
+            lines.extend(console.misordered_report(
+                ctx, _found(report, "M011"), dry_run))
+        elif rule.id == "M013":
+            if rule.options.get("fix_mode") == "attach":
+                lines.extend(console.attach_report(
+                    ctx, rule, dry_run, bool(getattr(args, "verbose", False))))
+            else:
+                lines.extend(console.dangling_report(
+                    ctx, _found(report, "M013"), not dry_run and not checking))
+        elif rule.id == "M017":
+            lines.extend(console.validation_report(ctx, report.violations))
+    return lines
+
+
+def _found(report: PreflightReport, rule_id: str) -> list[Violation]:
+    """The findings of one rule: the ones the first pass found when a fixer
+    ran, the ones still on the report otherwise."""
+    found = [v for v in report.found if v.rule_id == rule_id]
+    return found or [v for v in report.violations if v.rule_id == rule_id]
 
 def _cmd_check(args) -> int:
     if args.json and args.format not in (None, "json"):
         raise UsageError(f"--json conflicts with --format {args.format}")
-    report, ruleset, cfg, _ctx = _run(args, args.command)
+    report, ruleset, cfg, ctx = _run(args, args.command)
+    fmt = "json" if args.json else (args.format or "text")
     if args.command == "fix" and getattr(args, "check", False):
         pending = {(v.rule_id, v.obj or v.path or "") for v in report.violations
                    if v.fixable and v.severity.value != "info"}
-        fmt = "json" if args.json else (args.format or "text")
         print(render(fmt, report, Path(args.path), ruleset))
         return min(len(pending), 255)
     if args.baseline:
@@ -452,10 +493,29 @@ def _cmd_check(args) -> int:
             report.violations, known, ruleset, {r.id for r in ruleset.rules}
         )
     if args.command == "fix" and not getattr(args, "dry_run", False):
-        _after_fix_cache(args, report, _ctx)
-    fmt = "json" if args.json else (args.format or "text")
+        _after_fix_cache(args, report, ctx)
+    if fmt == "text":
+        for line in report.console:
+            print(line)
+        _refused_lines(report)
     print(render(fmt, report, Path(args.path), ruleset))
     return report.exit_code(strict=args.strict or cfg.strict)
+
+
+def _refused_lines(report: PreflightReport) -> None:
+    """A repair the tool could not prove is reported on standard error, the
+    way the reference reported it."""
+    from . import console
+
+    for line in console.refused_report(report.refused_fixes):
+        print(line, file=sys.stderr)
+
+
+def _found(report: PreflightReport, rule_id: str) -> list[Violation]:
+    """The findings of one rule: the ones the first pass found when a fixer
+    ran, the ones still on the report otherwise."""
+    found = [v for v in report.found if v.rule_id == rule_id]
+    return found or [v for v in report.violations if v.rule_id == rule_id]
 
 
 def _after_fix_cache(args, report: PreflightReport, ctx: Context) -> None:
