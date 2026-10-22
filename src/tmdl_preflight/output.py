@@ -94,6 +94,9 @@ def render_text(report: PreflightReport, root: Path) -> str:
     if report.fixes_applied or report.would_fix or report.skipped_fixers or report.refused_fixes:
         out.append("")
     for v in _sorted(report.violations):
+        if v.grouped:
+            # the rule prints its findings as a block of its own
+            continue
         loc = _display_path(v.file, root)
         if loc and v.line:
             loc += f":{v.line}"
@@ -117,7 +120,8 @@ def render_text(report: PreflightReport, root: Path) -> str:
 def _notes(report: PreflightReport) -> list[str]:
     notes: list[str] = list(report.notes)
     for name in report.skipped:
-        notes.append(f"skipped: {name} (turned off by its policy option)")
+        why = report.skip_reasons.get(name, "turned off by its policy option")
+        notes.append(f"skipped: {name} ({why})")
     if report.excluded:
         notes.append(f"excluded: {len(report.excluded)} violation(s) in excluded paths")
     if report.exempted:

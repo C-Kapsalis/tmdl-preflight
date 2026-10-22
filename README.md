@@ -228,7 +228,9 @@ Details, scopes, examples and severity semantics: see the generated
 [documentation](#documentation) below. Print the same catalog from the
 tool: `tmdl-preflight rules` (or `--json`, or `--format markdown --out
 FILE`, with `--check` to fail when a committed copy is stale). Opt-in rules
-run only when named in `--select` or the configuration's `select`.
+run only when named in `--select` or the configuration's `select`; the
+generated catalog lists the whole opt-in set as a `select` line you can
+paste into your configuration file.
 
 ## Selecting rules and other flags
 
@@ -359,6 +361,11 @@ or delete.
 `tmdl-preflight comment-refs <path>` counts ticket references (`#365`) in
 comments per model; `--floors FILE --tighten` lowers a ratchet file to
 today's counts and never raises it (rule S004 gates on the same file).
+
+`tmdl-preflight dead-facts <path>` lists the fact tables no measure reads.
+`--capture FILE` records them as the floor the dead-fact gate compares
+against (rule O007): a JSON object of model key to the sorted list of dead
+fact tables, with the models that have none left out.
 
 ## In CI and pre-commit
 

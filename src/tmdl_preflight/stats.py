@@ -69,9 +69,6 @@ def measure_summary(ctx: Context, field_parameter_tables=None, options=None) -> 
     The summary is PER MODEL: a folder with two models prints two
     summaries, each with its own totals. A sum across models would hide
     which model is the problem."""
-    from .measure_classes import classify_measure_name
-    from .roles import surfaced_measures
-
     per_model = []
     for model in ctx.models:
         per_model.append(
@@ -100,15 +97,20 @@ def measure_summary(ctx: Context, field_parameter_tables=None, options=None) -> 
 def _model_measure_summary(model, field_parameter_tables, options) -> dict[str, Any]:
     """The measure organisation of ONE model."""
     from .measure_classes import classify_measure_name
-    from .roles import surfaced_measures
+    from .roles import axis_surfaced_measures
 
     measures = list(model.all_measures())
     classes = [classify_measure_name(m.name, options) for m in measures]
     user = {c.name for c in classes if not c.is_helper}
-    surfaced = surfaced_measures(model, field_parameter_tables)
+    surfaced = axis_surfaced_measures(model, field_parameter_tables)
     subcats = Counter(c.subcategory or "unknown_helper"
                       for c in classes if c.is_helper)
+    # by count, descending; a tie keeps the order the kinds were seen in
+    kinds = sorted(subcats.items(), key=lambda kv: -kv[1])
     per_table = Counter(m.table for m in measures)
+    # the busiest tables, by count, descending; a tie keeps the order the
+    # tables were seen in
+    top = sorted(per_table.items(), key=lambda kv: -kv[1])[:10]
     dash = [m for m in measures if m.name.startswith("-")]
     total = len(measures)
     users = sum(1 for c in classes if not c.is_helper)
@@ -124,10 +126,9 @@ def _model_measure_summary(model, field_parameter_tables, options) -> dict[str, 
         "surfaced_user_facing": inter,
         "not_surfaced": len(user - surfaced),
         "advisory": bool(users) and inter < users * 0.5,
-        "subcategories": dict(sorted(subcats.items(),
-                                     key=lambda kv: (-kv[1], kv[0]))),
-        "top_tables": [[name, n] for name, n in sorted(
-            per_table.items(), key=lambda kv: (-kv[1], kv[0]))[:10]],
+        "subcategories": dict(kinds),
+        "helper_kinds": dict(kinds),
+        "top_tables": [[name, n] for name, n in top],
         "dash_helpers": len(dash),
         "dash_helpers_described": sum(
             1 for m in dash if (m.description or "").strip()),
@@ -145,15 +146,28 @@ def render_measure_summary(s: dict[str, Any]) -> str:
     dash = s.get("dash_helpers") or 0
     described = s.get("dash_helpers_described") or 0
     block = "\n".join(blocks)
+    block += (
+        "\n\nHelper Measure Analysis:"
+        f"\n   Total helper measures (- prefix): {dash}")
     if dash:
         share = f"{100.0 * described / dash:.1f}%"
         block += (
-            "\n\nHelper Measure Analysis:"
-            f"\n   Total helper measures (- prefix): {dash}"
             f"\n   With description: {described} ({share})"
-            f"\n   Without description: {dash - described} ({100.0 * (dash - described) / dash:.1f}%)"
-            "\n\n   Descriptions are optional for helper measures (P2)")
+            f"\n   Without description: {dash - described} "
+            f"({100.0 * (dash - described) / dash:.1f}%)")
+    block += "\n\n   Descriptions are optional for helper measures (P2)"
     return block
+
+
+#: What each kind of helper is, in the wording of the inventory.
+HELPER_KIND_DESCRIPTIONS = {
+    "intermediary_helper": "'-Foo'  hidden building-block in a domain Measures table; feeds final measures",
+    "slicer_helper": "'f-Foo' visual-level filter (0/1 flag) lives in f-Filters",
+    "diagnostic_helper": "'i-Foo' consumed by visuals (tooltips, dynamic titles, applied-filter labels)",
+    "measure_helper": "'-helper Foo' reusable DAX subroutine for complex measures",
+    "visual_helper": "'-Visual Foo' affects plot elements; 'w-' interacts with plot colors",
+    "test_measure": "",
+}
 
 
 def _render_model_summary(s: dict[str, Any], rule: str) -> str:
@@ -183,6 +197,14 @@ def _render_model_summary(s: dict[str, Any], rule: str) -> str:
     lines.append("Helper subcategories:")
     for name, n in s["subcategories"].items():
         lines.append(f"  {name:<22}: {n:>4} ({pct(n)})")
+    kinds = s.get("helper_kinds") or {}
+    if kinds:
+        lines.append("")
+        lines.append(f"Total helper-named measures: {s['helpers']}")
+        lines.append("By subcategory:")
+        for name, n in kinds.items():
+            desc = HELPER_KIND_DESCRIPTIONS.get(name, "")
+            lines.append(f"  {name:<22}: {n:>4}  {desc}")
     lines.append("")
     lines.append("Top 10 tables by measure count:")
     for name, n in s["top_tables"]:

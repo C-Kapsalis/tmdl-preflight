@@ -48,6 +48,9 @@ class Violation:
     line: Optional[int] = None
     obj: Optional[str] = None
     fixable: bool = False
+    # True for a finding the text report shows inside a block of its rule
+    # rather than as its own line.
+    grouped: bool = False
 
     @property
     def path(self) -> Optional[str]:
@@ -254,6 +257,10 @@ class Rule:
         engine then lists it under ``skipped`` instead of running it."""
         return False
 
+    def skip_reason(self) -> str:
+        """Why the rule did not run (shown beside its name in the report)."""
+        return "turned off by its policy option"
+
     def configure(self, options: dict[str, Any]) -> None:
         """Apply per-rule options (already validated by the config loader)."""
         self.options.update(options)
@@ -274,6 +281,7 @@ class Rule:
         line: Optional[int] = None,
         obj: Optional[str] = None,
         severity: Optional[Severity] = None,
+        grouped: bool = False,
     ) -> Violation:
         return Violation(
             rule_id=self.id,
@@ -283,6 +291,7 @@ class Rule:
             line=line,
             obj=obj,
             fixable=self.fixable,
+            grouped=grouped,
         )
 
 

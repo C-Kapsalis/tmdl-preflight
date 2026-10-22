@@ -67,6 +67,7 @@ class UserOnlyTablePurityRule(Rule):
 # O002: helpers in the table their kind belongs to
 # ---------------------------------------------------------------------------
 
+#: The guidance the strict profile prints for each subcategory.
 _GUIDANCE = {
     "measure_helper": "the helper table",
     "visual_helper": "the helper table or a visual (w-) table",
@@ -75,6 +76,59 @@ _GUIDANCE = {
     "intermediary_helper": "a '<Domain> Measures' table next to the measures it feeds",
     "test_measure": "a helper or diagnostic table",
 }
+
+#: The guidance of the strict report, one block per subcategory.
+_STRICT_BLOCK = {
+    "measure_helper":
+        "'-helper *' / '_*' measures must live in 'Helper Measures' with a "
+        "displayFolder named after the analysis category they support (e.g. "
+        "'Helpers Time Intelligence', 'Helpers SEO Debugging'). They are a "
+        "specific kind of helper - do not scatter them across domain <X> "
+        "Measures tables.",
+    "visual_helper":
+        "'-Visual *' / 'w-*' measures live in 'Helper Measures' or in a "
+        "`w-*` table (e.g. 'w-Titles', 'w-Colors', 'w-Visuals Filters').",
+    "diagnostic_helper":
+        "'i-*' measures live in 'Helper Measures' or a table containing "
+        "'Diagnostic' in its name (e.g. 'Diagnostic Measures').",
+    "slicer_helper":
+        "'f-*' measures live in 'f-Filters' (slicer-level filters) or in a "
+        "`w-*` table (non-slicer-level visual filters, e.g. 'w-Visuals "
+        "Filters').",
+    "intermediary_helper":
+        "Other '-*' and '<letter>-*' helpers live next to the user-facing "
+        "measures they support, in a `<Domain> Measure(s)` table (e.g. 'GA "
+        "Measures', 'Time Intelligence Measures', 'Dynamic Measure'), OR in a "
+        "`w-*` table when they back a visual element (e.g. 'w-Titles' for "
+        "cluster-name title helpers).",
+    "test_measure":
+        "Test measures (any name containing whole-word 'test', "
+        "case-insensitive) belong in 'Helper Measures' or 'Diagnostic "
+        "Measures'. If it's not a real test, rename to drop 'test'.",
+}
+
+#: The four buckets the lenient profile counts, with the table each helper
+#: belongs in.
+_LENIENT_BUCKETS = (
+    ("slicer_helper", "f- measures outside f-Filters / w-*",
+     "f- measures in wrong table",
+     "'f-Filters' or any 'w-*' table"),
+    ("measure_helper", "-helper * outside 'Helper Measures'",
+     "-helper * measures in wrong table",
+     "'Helper Measures' (with displayFolder named by analysis category)"),
+    ("visual_helper", "-Visual * / w-* outside Helper Measures / w-*",
+     "-Visual * / w-* measures in wrong table",
+     "'Helper Measures' or any 'w-*' table"),
+    ("diagnostic_helper", "i- measures outside Helper / Diagnostic",
+     "i- measures in wrong table",
+     "'Helper Measures' or 'Diagnostic Measures'"),
+)
+
+#: The table each kind of helper belongs in, in the wording of a finding.
+_LENIENT_EXPECTED = {sub: expected for sub, _c, _l, expected in _LENIENT_BUCKETS}
+
+#: The width the count labels line up in.
+_LENIENT_LABEL_WIDTH = max(len(count) for _s, count, _l, _e in _LENIENT_BUCKETS)
 
 
 class HelperMeasurePlacementRule(Rule):
@@ -86,7 +140,8 @@ class HelperMeasurePlacementRule(Rule):
         "helper_table": "Helper Measures",
         "slicer_table": "f-Filters",
         "visual_table_prefix": "w-",
-        "field_parameter_prefixes": [],
+        "field_parameter_prefixes": ["x-Selector", "y-Selector",
+                                     "x-Plot Specific", "y-Plot Specific"],
         "user_facing_letters": ["z"],
         "user_only_table_prefix": "#",
         "dimension_prefix": "_",
@@ -100,9 +155,10 @@ class HelperMeasurePlacementRule(Rule):
         "diagnostics in a helper or diagnostic table, slicer helpers in the "
         "slicer table, intermediary helpers in a measures table. Profile "
         "'strict' (warnings) also bans helpers from user-only (#) and "
-        "dimension (_) tables and exempts field-parameter tables; profile "
-        "'lenient' (infos) judges only slicer, '-helper', visual and "
-        "diagnostic helpers. Opt-in; the symptom is a confusing field list."
+        "dimension (_) tables and exempts the axis field-parameter tables; "
+        "profile 'lenient' (infos) judges only slicer, '-helper', visual and "
+        "diagnostic helpers and prints a per-model summary. Opt-in; the "
+        "symptom is a confusing field list."
     )
 
     def _allowed(self, sub: str, host: str) -> bool:
@@ -126,6 +182,8 @@ class HelperMeasurePlacementRule(Rule):
         o = self.options
         lenient = o.get("profile") == "lenient"
         for model in ctx.models:
+            strict: dict[str, list[tuple[str, str]]] = {}
+            lenient_buckets: dict[str, list[tuple[str, str]]] = {}
             for t in model.table_list:
                 host = t.name
                 for m in t.measure_list:
@@ -139,9 +197,12 @@ class HelperMeasurePlacementRule(Rule):
                         )
                         if not judged or self._allowed(sub, host):
                             continue
+                        lenient_buckets.setdefault(sub, []).append((host, m.name))
                         out.append(self.violation(
-                            f"{host}[{m.name}] [{sub}] (expected: {_GUIDANCE[sub]})",
-                            file=m.file, line=m.line, obj=m.full_name, severity=Severity.INFO,
+                            f"{host}[{m.name}] [{sub}] (expected: "
+                            f"{_LENIENT_EXPECTED[sub]})",
+                            file=m.file, line=m.line, obj=m.full_name,
+                            severity=Severity.INFO,
                         ))
                         continue
                     if host.startswith(o["user_only_table_prefix"]) or host.startswith(o["dimension_prefix"]):
@@ -150,7 +211,9 @@ class HelperMeasurePlacementRule(Rule):
                             f"{host}[{m.name}] [{sub}] is a helper in a {reason} table; move it "
                             f"to {_GUIDANCE.get(sub, 'a helper table')}.",
                             file=m.file, line=m.line, obj=m.full_name,
+                            grouped=True,
                         ))
+                        strict.setdefault(sub, []).append((host, m.name))
                         continue
                     if any(host.startswith(p) for p in o["field_parameter_prefixes"]):
                         continue
@@ -159,8 +222,53 @@ class HelperMeasurePlacementRule(Rule):
                             f"{host}[{m.name}] [{sub}] is in the wrong table; move it to "
                             f"{_GUIDANCE.get(sub, 'a helper table')}.",
                             file=m.file, line=m.line, obj=m.full_name,
+                            grouped=True,
                         ))
+                        strict.setdefault(sub, []).append((host, m.name))
+            if lenient:
+                ctx.notes.append(self._lenient_report(ctx, model, lenient_buckets))
+            else:
+                block = self._strict_report(strict)
+                if block:
+                    ctx.notes.append(block)
         return out
+
+    def _strict_report(self, grouped: dict[str, list[tuple[str, str]]]) -> str:
+        """The strict report: one block per subcategory, in sorted order."""
+        if not grouped:
+            return ""
+        total = sum(len(v) for v in grouped.values())
+        lines = [f"Found {total} helper measure(s) in wrong table(s), "
+                 f"grouped by subcategory:"]
+        for sub in sorted(grouped):
+            items = grouped[sub]
+            lines.append("")
+            lines.append(f"  [{sub}] - {len(items)} violation(s)")
+            lines.append(f"    Rule: {_STRICT_BLOCK.get(sub, '(no per-subcategory guidance)')}")
+            for table, name in items:
+                lines.append(f"      - {table}[{name}]")
+        return "\n".join(lines)
+
+    def _lenient_report(self, ctx: Context, model,
+                        buckets: dict[str, list[tuple[str, str]]]) -> str:
+        """The lenient report: the four counts and the lists under them."""
+        key = ctx.model_key(model)
+        lines = [f"Measure Organization ({key}):"]
+        for sub, count_label, _list_label, _expected in _LENIENT_BUCKETS:
+            items = buckets.get(sub) or []
+            lines.append(f"{count_label + ':':<{_LENIENT_LABEL_WIDTH + 1}} {len(items)}")
+        for sub, _count_label, list_label, expected in _LENIENT_BUCKETS:
+            items = buckets.get(sub) or []
+            if not items:
+                continue
+            lines.append("")
+            lines.append(f"{list_label} ({len(items)}):")
+            for table, name in items:
+                lines.append(f"  - {table}[{name}]  (expected: {expected})")
+        if not any(buckets.get(sub) for sub, _c, _l, _e in _LENIENT_BUCKETS):
+            lines.append("")
+            lines.append("All helper-family measures live in expected tables.")
+        return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +324,7 @@ class MeasuresInFactTablesRule(Rule):
     opt_in = True
     option_defaults = {
         "surfacing_tables": [],
-        "internal_name_tokens": [],
+        "internal_name_tokens": ["ga4traf", "ga4users", "ga4convs", "related"],
         "diagnostic_tokens": ["countrows", "count ", "diagnostic", "debug", "helper"],
     }
     description = (
@@ -224,8 +332,26 @@ class MeasuresInFactTablesRule(Rule):
         "field parameter surfaces, or a visible measure whose name is not a "
         "diagnostic, test, helper or lowercase name) is a warning; any other "
         "measure on a fact is listed as info with the reason it was not "
-        "counted. Facts follow the shared table-role law. Opt-in."
+        "counted. A name that carries one of the internal_name_tokens is "
+        "advisory too; the token itself is not a tag. Facts follow the shared "
+        "table-role law. Opt-in."
     )
+
+    def _tags(self, m, diag: list[str]) -> list[str]:
+        """The advisory tags of a measure, in the reference's order."""
+        low = m.name.lower()
+        tags = []
+        if m.is_hidden:
+            tags.append("hidden")
+        if low.startswith("test"):
+            tags.append("test")
+        if m.name.startswith("-"):
+            tags.append("helper")
+        if any(d in low for d in diag):
+            tags.append("diagnostic")
+        if m.name[:1].islower():
+            tags.append("lowercase")
+        return tags
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
@@ -233,38 +359,59 @@ class MeasuresInFactTablesRule(Rule):
         internal = [t.lower() for t in self.options["internal_name_tokens"]]
         for model in ctx.models:
             surfaced = surfaced_measures(model, self.options["surfacing_tables"] or None)
+            warnings: list[tuple[str, str, bool]] = []
+            advisories: list[tuple[str, str, str]] = []
             for name in fact_tables(model):
                 t = model.tables[name]
                 for m in t.measure_list:
                     low = m.name.lower()
-                    tags = []
-                    if m.is_hidden:
-                        tags.append("hidden")
-                    if low.startswith("test"):
-                        tags.append("test")
-                    if m.name.startswith("-") or "helper" in low:
-                        tags.append("helper")
-                    if any(d in low for d in diag if d != "helper"):
-                        tags.append("diagnostic")
-                    if m.name[:1].islower():
-                        tags.append("lowercase")
-                    if any(tok in low for tok in internal):
-                        tags.append("internal")
-                    if m.name in surfaced or not tags:
+                    tags = self._tags(m, diag)
+                    is_internal = any(tok in low for tok in internal)
+                    if m.name in surfaced or not (tags or is_internal):
                         why = "a field parameter surfaces it" if m.name in surfaced else "it is visible"
                         out.append(self.violation(
                             f"user-facing measure {t.name}[{m.name}] is homed on a fact "
                             f"table ({why}); move it into a measures table.",
                             file=m.file, line=m.line, obj=m.full_name,
                         ))
-                    else:
-                        out.append(self.violation(
-                            f"{t.name}[{m.name}] [{', '.join(tags)}] sits on a fact table "
-                            f"(advisory).",
-                            file=m.file, line=m.line, obj=m.full_name, severity=Severity.INFO,
-                        ))
+                        warnings.append((t.name, m.name, m.name in surfaced))
+                        continue
+                    group = ", ".join(tags)
+                    advisories.append((t.name, m.name, group))
+                    out.append(self.violation(
+                        f"{t.name}[{m.name}]"
+                        + (f" [{group}]" if group else "")
+                        + " sits on a fact table (advisory).",
+                        file=m.file, line=m.line, obj=m.full_name, severity=Severity.INFO,
+                    ))
+            ctx.notes.extend(self._report(ctx, model, warnings, advisories))
         return out
 
+    def _report(self, ctx: Context, model, warnings: list, advisories: list) -> list[str]:
+        """The per-model block the text report shows beside the findings."""
+        out: list[str] = []
+        if warnings:
+            out.append(f"Found {len(warnings)} USER-FACING measures in fact tables")
+            for table, name, surfaced in warnings:
+                out.append(f"   Table: {table}")
+                out.append(f"      - {name}" + (" (IN x-Selector!)" if surfaced else ""))
+            out.append("")
+        if advisories:
+            out.append(
+                f"ADVISORY: Found {len(advisories)} hidden/diagnostic measures "
+                f"in fact tables")
+            for table, name, group in advisories:
+                out.append(f"   • {table}[{name}]"
+                           + (f" [{group}]" if group else ""))
+            out.append("   Recommended actions:")
+            out.append("   - Move diagnostic measures to 'Diagnostic Measures' table")
+            out.append("   - Delete test measures (leftover from development)")
+            out.append("   - Priority: P2 (cleanup when convenient, not urgent)")
+            out.append("")
+        if not warnings and not advisories:
+            out.append("No measures in fact tables")
+            out.append("")
+        return out
 
 # ---------------------------------------------------------------------------
 # O005, O006, S003: advisory listings
@@ -408,6 +555,21 @@ def table_reads(name: str, expressions: list[str]) -> tuple[int, int]:
     return data, sensor
 
 
+def dead_fact_tables(model) -> list[tuple[str, int]]:
+    """``(table, sensor references)`` of every fact no measure reads.
+
+    A fact whose only mentions are filter-context sensors is dead: sensing
+    makes it look owned, so it is never dropped and keeps loading.
+    """
+    exprs = [m.expression for m in model.all_measures() if m.expression]
+    out = []
+    for name in fact_tables(model):
+        data, sensor = table_reads(name, exprs)
+        if data == 0:
+            out.append((name, sensor))
+    return out
+
+
 class DeadFactTablesRule(Rule):
     id = "O007"
     name = "dead-fact-tables"
@@ -435,6 +597,25 @@ class DeadFactTablesRule(Rule):
                     f"{exc}; record the accepted dead tables (or an empty object) "
                     f"before relying on this gate.",
                 )]
+        current: dict[str, list[str]] = {}
+        for model in ctx.models:
+            current[ctx.model_key(model)] = sorted(
+                name for name, _s in dead_fact_tables(model))
+        # every floor entry that is not dead now: the table came back, or the
+        # model was not scanned, or it does not exist any more
+        stale: list[str] = []
+        if floors is not None:
+            for key, value in floors.items():
+                entry = value if isinstance(value, list) else []
+                found, alive = entry_for(current, key)
+                for name in entry:
+                    if not found or name not in (alive or []):
+                        stale.append(f"{key}: {name}")
+        if stale:
+            ctx.notes.append(
+                "[dead-fact-table floor] entries no longer dead — tighten the "
+                "floor (tmdl-preflight dead-facts --capture):\n  "
+                + "\n  ".join(sorted(stale)))
         for model in ctx.models:
             exprs = [m.expression for m in model.all_measures() if m.expression]
             key = ctx.model_key(model)
@@ -447,7 +628,7 @@ class DeadFactTablesRule(Rule):
                 data, sensor = table_reads(name, exprs)
                 if data == 0:
                     dead.append((name, sensor))
-            dead_names = {n for n, _ in dead}
+            growth = [name for name, _s in dead if name not in accepted]
             for name, sensor in dead:
                 if name in accepted:
                     continue
@@ -458,11 +639,12 @@ class DeadFactTablesRule(Rule):
                     f"baseline with a reason.",
                     file=t.file, line=t.line, obj=name,
                 ))
-            for name in sorted(accepted - dead_names):
+            if growth and floors is not None:
                 ctx.notes.append(
-                    f"dead-fact-tables: {key}: {name} is recorded in the baseline but no "
-                    f"longer dead; tighten the baseline by removing it."
-                )
+                    f"{len(growth)} NEW dead fact table(s) beyond the committed "
+                    f"floor — no measure reads them; either finish the drop or "
+                    f"accept them into {self.options['baseline']} with a reason:\n  "
+                    + "\n  ".join(f"{key}: {name}" for name in sorted(growth)))
         return out
 
 

@@ -15,7 +15,8 @@ container*; anything else is a *fact candidate*.
 *Structure law*: a fact candidate is a fact only if it has at least one
 column, is not a calculation group, is not a field parameter, its first
 partition is an M partition, and its file does not author rows inline
-(``Table.FromRows`` or ``#table(``).
+(``Table.FromRows`` or ``#table(``, in the case M spells them: M is
+case-sensitive, so another spelling is a different function).
 """
 
 from __future__ import annotations
@@ -29,7 +30,9 @@ from .model import SemanticModel, Table
 _SELECTOR_RE = re.compile(r"^[A-Za-z]-")
 _MEASURES_WORD_RE = re.compile(r"\bmeasures?\b", re.IGNORECASE)
 _FIELD_PARAM_SOURCE_RE = re.compile(r"sourceColumn:\s*\[Value\d+\]")
-_INLINE_ROWS_RE = re.compile(r"Table\.FromRows|#table\s*\(", re.IGNORECASE)
+#: M spells the row constructors in one case only; another spelling is a
+#: different function, so it does not author the table's rows.
+_INLINE_ROWS_RE = re.compile(r"Table\.FromRows|#table\s*\(")
 
 DISTINCT = "distinct"
 SELECTOR = "selector"
@@ -135,7 +138,36 @@ def surfaced_measures(model: SemanticModel, patterns: Optional[Iterable[str]] = 
     return out
 
 
+def axis_surfaced_measures(model: SemanticModel,
+                           patterns: Optional[Iterable[str]] = None) -> set[str]:
+    """The measures the NUMBERED x-axis and y-axis tables surface.
+
+    With no ``patterns`` the set comes from ``x-Selector 1`` to
+    ``x-Selector 9`` and ``y-Selector 1`` to ``y-Selector 9``: the summary
+    of the measure organisation asks what the report offers on either
+    axis. A plot-specific table is not one of them.
+    """
+    out: set[str] = set()
+    for t in field_parameter_tables(model, patterns):
+        if patterns is None and not _numbered_axis(t.name):
+            continue
+        text = _file_text(t)
+        if text is None:
+            continue
+        for table, member, _line in extract_nameof_references(text):
+            if table is None:
+                out.add(member)
+    return out
+
+
 def _numbered_x_axis(name: str) -> bool:
     """Is this table one of ``x-Selector 1`` … ``x-Selector 9``?"""
     m = re.fullmatch(r"x-Selector ([1-9])", name.strip())
+    return m is not None
+
+
+def _numbered_axis(name: str) -> bool:
+    """Is this table one of ``x-Selector 1`` … ``x-Selector 9`` or
+    ``y-Selector 1`` … ``y-Selector 9``?"""
+    m = re.fullmatch(r"[xy]-Selector ([1-9])", name.strip())
     return m is not None

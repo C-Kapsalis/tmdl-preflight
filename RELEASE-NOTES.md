@@ -293,6 +293,10 @@ unchanged.
 - `comment-refs <path> [--list] [--json] [--floors FILE] [--tighten]`
   counts ticket references in comments; `--tighten` only ever lowers floors
   and drops all-zero entries.
+- `dead-facts <path> [--capture FILE] [--json]` lists the fact tables no
+  measure reads. `--capture FILE` records them as the floor the dead-fact
+  gate compares against (a JSON object of model key to the sorted list of
+  dead fact tables, the models with none left out).
 - Ratchet files for O007, R008 and S004 keep the shape teams already use: a
   JSON object keyed by the `*.SemanticModel` folder relative to the scanned
   root (with or without the suffix). Recorded entries that no longer fail
@@ -360,6 +364,75 @@ unchanged.
 
 ### Changed
 
+- **The opt-in rules say so, and the catalog lists how to enable them.**
+  Every rule that encodes one team's conventions (the organisation, naming
+  and coverage rules, the required calculation groups and the format
+  inference naming) now says in its description that it is opt-in, and
+  the generated catalog prints the `select` line that turns the whole
+  opt-in set on.
+- **The unused-helper check prints the reference's inventory.** It reports
+  per model how many TMDL and report files it scanned, how many helper
+  measures there are, how many are used and how many are not, the helpers
+  that five or more references point at (with the TMDL and JSON counts) and
+  the ones nothing references. A report file is matched by its extension
+  whatever its case.
+- **An inline-row table is recognised only in the case M spells it.** M is
+  case-sensitive, so a source that says `table.fromrows(` calls a
+  different function and does not author the table's rows: such a table
+  is a fact like any other, and the dead-fact gate can report it.
+- **The measure-organisation summary reads the y-axis tables and counts the
+  helpers by kind.** The surfacing set of the summary is now the numbered
+  x-axis *and* y-axis tables (`x-Selector 1` to `x-Selector 9` and
+  `y-Selector 1` to `y-Selector 9`); the option still overrides it. The
+  summary lists the helper measures by kind, each with a line that says
+  what that kind of helper is, and the dash-helper block leaves out the
+  two description lines when there is no dash helper at all.
+- **The visibility and coverage checks print their reports.** The
+  helper-visibility check reports per model how many helper measures there
+  are, how many are hidden and which visible ones need hiding; the
+  user-facing-visibility check reports the same for the user-facing names
+  (with the scaffolding names counted apart) and, when one is hidden, the
+  judgment note that says what to do with it. The folder, description and
+  table-description checks print the coverage of the model with one
+  decimal, and the list of the measures or tables that are missing it. A
+  display folder counts when the property is there and not empty as
+  written, so a whitespace-only value is a folder; the rule that wants a
+  display folder on an intermediary helper still treats whitespace as
+  empty.
+- **The required-calculation-group check prints a summary and an
+  inventory.** Per model it says how many calculation groups are required,
+  how many are present and how many are missing, and lists each of them.
+  The inventory of the `z-Selector` tables (their columns and measures, and
+  the measures that use `SELECTEDMEASURENAME()`) is report output only,
+  never a finding.
+- **A skipped rule says why it did not run.** The description check that
+  is turned off reports `Description validation disabled`; the
+  calculation-group check with all its switches off reports `Calculation
+  group validation disabled in policy`. The `skipped` list of the JSON
+  output still holds the rule names; the reasons are in `skip_reasons`.
+- **The helper-placement rule frees the axis field-parameter tables and
+  prints its reports.** The default `field_parameter_prefixes` are
+  `x-Selector`, `y-Selector`, `x-Plot Specific` and `y-Plot Specific`, so a
+  helper in one of them is never a finding in the strict profile (the `#`
+  and `_` host bans still come first). STRICTER: a helper in a user-only
+  (`#`) or dimension (`_`) table is still a finding even when the table is
+  an axis table, so the two bans cannot hide each other. The strict text
+  output groups the findings by subcategory, with the guidance of each
+  kind; the JSON output keeps one record per finding. The lenient profile
+  prints, per model, the four counts (f-, `-helper`, `-Visual`/`w-`, i-),
+  the list under each non-empty one with the table the helper belongs in,
+  and an all-clear line when nothing is misplaced.
+- **The measures-on-facts check reads the reference's internal-name list and
+  prints its report blocks.** A measure whose name carries one of
+  `ga4traf`, `ga4users`, `ga4convs` or `related` is advisory, never a
+  warning; the token itself is not a tag. The tool's list was empty
+  before, so such a measure was a warning; the option still overrides the
+  list. The advisory tags follow the reference: `hidden`, `test`, `helper`
+  (a name that starts with `-` only), `diagnostic` and `lowercase`, in that
+  order, and no bracket group when there is none. The text report now
+  prints, per model, the user-facing measures it found on a fact (with the
+  field parameter that surfaces one) and the advisory ones with the
+  recommended actions.
 - **`stats --measures` prints one summary per model.** A folder with two
   models prints two summaries, each with its own totals, in the layout a
   reviewer reads: the totals, the user-facing and helper split, the
@@ -381,6 +454,23 @@ unchanged.
 
 ### Bug fixes
 
+- **An inline-row table is recognised only in the case M spells it.** M is
+  case-sensitive, so a source that says `table.fromrows(` calls a
+  different function and does not author the table's rows. The tool
+  ignored the case before, so such a table was no longer a fact and the
+  dead-fact gate could not report it. BUGFIX: the tool now matches the
+  case the reference matched.
+- **A measure whose name only mentions "helper" is a diagnostic, not a
+  helper.** The tool tagged every name that contains "helper" as a helper
+  before, so the advisory line of a measure on a fact said the wrong
+  thing. The reference tags a name that starts with `-` as a helper and a
+  name that contains "helper" as a diagnostic; the tool now does the
+  same. BUGFIX.
+- **The dead-fact gate reports the whole floor, not one table at a time.**
+  A floor entry that is no longer dead now produces one tighten block that
+  covers every such entry, including the ones of a model that was not
+  scanned or does not exist any more. A new dead fact table beyond the
+  floor produces a summary that names every one of them.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the

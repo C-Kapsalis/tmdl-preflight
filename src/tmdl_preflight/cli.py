@@ -7,7 +7,8 @@ Usage:
                             [--baseline FILE]
     tmdl-preflight fix      <path> (same options as check)
     tmdl-preflight baseline <path> [--output FILE] [--update] [--accept-new]
-                            [--config FILE] [--profile NAME] [--no-config]
+                             [--config FILE] [--profile NAME] [--no-config]
+    tmdl-preflight dead-facts <path> [--capture FILE] [--json]
     tmdl-preflight stats    <path> [--json]
     tmdl-preflight rules    [--json]
 
@@ -184,6 +185,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_stats.add_argument("--field-parameter-tables", metavar="NAMES",
                          help="comma-separated table names or globs whose NAMEOF rows "
                               "count as surfaced (default: detected field parameters)")
+
+    p_dead = sub.add_parser(
+        "dead-facts",
+        help="report the fact tables no measure reads, and record them as a floor")
+    p_dead.add_argument("path", help=path_help)
+    p_dead.add_argument("--capture", metavar="FILE",
+                        help="write the current dead fact tables to FILE as the "
+                             "floor (a JSON object of model key to table list)")
+    p_dead.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_config_options(p_dead)
 
     p_refs = sub.add_parser("comment-refs",
                             help="count ticket references (#123) in model comments")
@@ -987,6 +998,32 @@ def _parse_list(raw: Optional[str]) -> Optional[list[str]]:
     return [x.strip() for x in raw.split(",") if x.strip()]
 
 
+def _cmd_dead_facts(args) -> int:
+    from .ratchet import write_floors
+    from .rules.organization import dead_fact_tables
+
+    ctx = _context(args.path)
+    current: dict[str, list[str]] = {}
+    for model in ctx.models:
+        dead = sorted(name for name, _s in dead_fact_tables(model))
+        if dead:
+            current[ctx.model_key(model)] = dead
+    if args.capture:
+        target = Path(args.capture)
+        write_floors(target, current)
+        entries = sum(len(v) for v in current.values())
+        print(f"[dead-fact-table floor] captured {entries} entries across "
+              f"{len(current)} models -> {target}")
+        return 0
+    if args.json:
+        print(json.dumps(current, indent=2))
+        return 0
+    for key in sorted(current):
+        for name in current[key]:
+            print(f"{key}: {name}")
+    return 0
+
+
 def _cmd_comment_refs(args) -> int:
     from .ratchet import RatchetFileError, load_floors, write_floors
     from .rules.comments import CLASSES, count_by_class, model_ticket_refs
@@ -1051,6 +1088,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     handlers = {"check": _cmd_check, "fix": _cmd_check, "baseline": _cmd_baseline,
                 "stats": _cmd_stats, "comment-refs": _cmd_comment_refs,
+                "dead-facts": _cmd_dead_facts,
                 "report": _cmd_report, "format-resolve": _cmd_format_resolve,
                 "grain": _cmd_grain, "info": _cmd_info, "fieldparam": _cmd_fieldparam,
                 "manifest": _cmd_manifest, "schema-check": _cmd_schema_check, "refs": _cmd_refs, "live": _cmd_live}
