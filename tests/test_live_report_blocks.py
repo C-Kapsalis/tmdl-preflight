@@ -517,3 +517,177 @@ def test_the_smoke_suite_passes_when_enough_passes():
     # one item fails, but the suite passes on the rate
     assert "Failed tests:" in out
     assert "pass   live-smoke: 9 of 10 smoke items passed" in out
+
+
+# ---------------------------------------------------------------------------
+# PB160: the calendar full scan
+# ---------------------------------------------------------------------------
+
+def test_the_calendar_scan_block():
+    code, out = live_text("calendar-scan-1", "live-calendar-scan")
+    assert code == 1
+    lines = out.splitlines()
+    assert lines[1:9] == [
+        "",
+        "=== Large Table Full Scan Test ===",
+        "",
+        "Testing __Calendar table (should have 365+ rows)...",
+        "COUNTROWS('__Calendar'): 1",
+        "TOPN(50, '__Calendar'): 1 rows returned",
+        "",
+        "Sample dates from __Calendar:",
+    ]
+    assert lines[9].startswith("  Row 1: 2025-01-01T00:00:00")
+    assert lines[10] == ""
+    assert lines[11] == "=" * 80
+    assert lines[12] == "ASSESSMENT"
+    assert lines[13] == "=" * 80
+    assert lines[14] == "🔴 CRITICAL: __Calendar has only 1 row!"
+    assert "   ACTION REQUIRED:" in lines
+    assert lines[-1] == ("fail   live-calendar-scan: __Calendar should have 365+ rows but has "
+                         "only 1. This indicates RLS or filter context is limiting data access.")
+
+
+def test_the_calendar_scan_samples_the_first_value_without_a_date_column():
+    code, out = live_text("calendar-scan-nodate", "live-calendar-scan")
+    assert code == 0
+    assert "  Row 1: 0" in out
+    assert "  Row 2: 1" in out
+    assert "  Row 3: 2" in out
+
+
+def test_a_calendar_count_of_zero_is_an_error():
+    code, payload = live("calendar-scan-zero", "live-calendar-scan")
+    result = check_result(payload, "live-calendar-scan")
+    assert result["outcome"] == "error"
+    assert result["message"] == "the calendar count came back BLANK or 0"
+    assert code == 1
+
+
+# ---------------------------------------------------------------------------
+# PB161: the identity block
+# ---------------------------------------------------------------------------
+
+def test_the_identity_block():
+    code, out = live_text("filter-compare", "live-identity")
+    assert code == 0
+    lines = out.splitlines()
+    assert lines[1:4] == [
+        "",
+        "=== RLS Detection Test ===",
+        "",
+    ]
+    assert lines[4].startswith("Query executed in ")
+    assert lines[4].endswith("ms")
+    assert lines[5] == "Row count: 1"
+    assert lines[6] == ""
+    assert lines[7] == "User Identity:"
+    assert lines[8] == "  [UserPrincipalName]: reader@example.com"
+    assert "  [UserName]: reader@example.com" in lines
+    assert "  [UserObjectId]: 00000000-0000-0000-0000-000000000001" in lines
+    assert "Dataset: Coffee" in lines
+    assert "Is Refreshable: True" in lines
+    assert "Target Storage Mode: Import" in lines
+    assert "✅ User identity retrieved" in lines
+    assert ("⚠️  Cannot directly query RLS roles (requires admin). Check manually in Fabric "
+            "workspace.") in lines
+
+
+# ---------------------------------------------------------------------------
+# PB162: the filter comparison
+# ---------------------------------------------------------------------------
+
+def test_the_filter_compare_rows():
+    code, out = live_text("filter-compare", "live-filter-compare")
+    assert code == 0
+    lines = out.splitlines()
+    assert "--- Testing table: _Accounts ---" in lines
+    assert "COUNTROWS('_Accounts'): 1" in lines
+    assert "EVALUATE TOPN(10, '_Accounts'): 1 rows returned" in lines
+    assert "COUNTROWS with ALL('_Accounts'): 40" in lines
+    header = f"{'Table':<30} {'COUNTROWS':<15} {'TOPN Actual':<15} {'ALL()':<15} {'Filter?':<10}"
+    assert header in lines
+    row = f"{'_Accounts':<30} {'1':<15} {'1':<15} {'40':<15} {'⚠️ YES':<10}"
+    assert row in lines
+    clean = f"{'_Campaigns':<30} {'25':<15} {'10':<15} {'25':<15} {'✅ NO':<10}"
+    assert clean in lines
+    assert "⚠️  WARNING: Filter context or RLS detected!" in lines
+    assert "   1 tables show different counts with/without ALL()" in lines
+    assert "   This suggests Row-Level Security or implicit filters are active." in lines
+
+
+# ---------------------------------------------------------------------------
+# PB163: the metadata block
+# ---------------------------------------------------------------------------
+
+def test_the_metadata_block():
+    code, out = live_text("filter-compare", "live-metadata")
+    assert code == 0
+    lines = out.splitlines()
+    assert lines[1:5] == [
+        "",
+        "=== Connection Metadata Investigation ===",
+        "",
+        "Dataset Properties:",
+    ]
+    assert "  id: ds-coffee" in lines
+    assert "  name: Coffee" in lines
+    assert "  configured_by: owner@example.com" in lines
+    assert "  is_refreshable: True" in lines
+    assert "  target_storage_mode: Import" in lines
+    assert "  workspace_id: ws-coffee" in lines
+    assert "  workspace_name: Coffee Roastery" in lines
+    assert "Refresh History (last 5):" in lines
+    assert "  1. Status: Completed, End: 2026-10-18T10:00:00Z, ID: r1" in lines
+    assert "Datasources:" in lines
+    assert "  1. Connection: {'datasourceType': 'Sql', 'connectionDetails': "
+    assert "✅ Metadata investigation complete" in lines
+
+
+# ---------------------------------------------------------------------------
+# PB164: the filter diagnostic
+# ---------------------------------------------------------------------------
+
+def test_the_filter_diagnostic_block():
+    code, out = live_text("diag-calendar-one", "live-filter-diagnostic")
+    assert code == 1
+    lines = out.splitlines()
+    assert lines[1:6] == [
+        "",
+        "=" * 80,
+        "COMPREHENSIVE FILTER CONTEXT DIAGNOSTIC REPORT",
+        "=" * 80,
+        "",
+    ]
+    assert "1. User Identity Check..." in lines
+    assert "   ✅ User: reader@example.com" in lines
+    assert "2. Calendar Table Row Count..." in lines
+    assert "   🔴 CRITICAL: Only 1 row (expected 365+)" in lines
+    assert "3. Filter Context Check (COUNTROWS vs ALL)..." in lines
+    assert "   ✅ OK: No filter context (1 rows)" in lines
+    assert "4. Dataset Refresh Status..." in lines
+    assert "    ✅ Last refresh: Completed" in lines
+    assert "🔴 CRITICAL ISSUES:" in lines
+    assert "   - Calendar Rows: 1" in lines
+    assert "1. Check Row-Level Security (RLS) settings in Fabric workspace:" in lines
+    assert lines[-1] == ("fail   live-filter-diagnostic: Critical issues detected: Calendar "
+                         "Rows. Row-Level Security or filter context is likely limiting data "
+                         "access.")
+
+
+def test_an_error_finding_alone_needs_no_recommendation():
+    code, out = live_text("diag-calendar-error", "live-filter-diagnostic")
+    assert code == 0
+    assert "❌ ERRORS:" in out
+    assert "   - Calendar Rows: ERROR: Table '__Calendar' cannot be queried" in out
+    assert "✅ No action required - data access appears unrestricted" in out
+    assert "1. Check Row-Level Security" not in out
+    assert "pass   live-filter-diagnostic: 4 diagnostic finding(s)" in out
+
+
+def test_the_diagnostic_keeps_the_json_keys():
+    code, payload = live("diag-calendar-one", "live-filter-diagnostic")
+    findings = check_result(payload, "live-filter-diagnostic")["details"]["findings"]
+    assert [f["name"] for f in findings] == ["User Identity", "Calendar Rows", "Filter Context",
+                                              "Refresh Status"]
+    assert [f["level"] for f in findings] == ["INFO", "CRITICAL", "OK", "OK"]

@@ -286,6 +286,15 @@ until configured.
 
 ### Changed
 
+- **The live diagnostics print the original's blocks.** The calendar scan
+  prints the full-scan block, the sample dates and the assessment (a
+  calendar that holds one row is a critical finding); the identity check
+  prints the RLS detection block; the filter comparison prints every table,
+  the summary table with its columns and the closing lines; the metadata
+  check prints the connection investigation; the filter diagnostic prints
+  its four checks, the summary groups and the recommendations. A calendar
+  count of zero is an error instead of a crash, and a finding that is an
+  error alone no longer asks for action. BUGFIX.
 - **The live row, measure, refresh and smoke checks print the original's
   lines.** A probed table prints `✅ PASS Table 'Sales' has data: Table
   'Sales' has 5,000 rows (12.34ms)` and a failed one `❌ FAIL ...`; the

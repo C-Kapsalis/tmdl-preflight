@@ -573,29 +573,68 @@ def check_dimension_multirow(c: LiveContext) -> CheckResult:
     return CheckResult(cid, "pass", "dimension tables hold several rows", details, report)
 
 
+def _sample_value(row: dict) -> Any:
+    for key, value in row.items():
+        if "date" in key.lower() and value not in (None, ""):
+            return value
+    if row:
+        return next(iter(row.values()))
+    return "N/A"
+
+
 def check_calendar_scan(c: LiveContext) -> CheckResult:
     cid, cal = "live-calendar-scan", c.cfg["calendar_table"]
-    r = c.client.execute(f'EVALUATE ROW("RowCount", COUNTROWS({quote_table(cal)}))')
+    quoted = quote_table(cal)
+    r = c.client.execute(f'EVALUATE ROW("RowCount", COUNTROWS({quoted}))')
     if r.error:
         return CheckResult(cid, "error", f"calendar count failed: {r.error}")
     raw = scalar(r.first, "RowCount")
-    if raw is None:
-        return CheckResult(cid, "error", "the calendar count came back BLANK or 0")
+    report = ["", "=== Large Table Full Scan Test ===", "",
+              f"Testing {cal} table (should have 365+ rows)...",
+              f"COUNTROWS({quoted}): {raw}"]
+    if raw is None or int(raw) == 0:
+        return CheckResult(cid, "error", "the calendar count came back BLANK or 0", {}, report)
     n = int(raw)
-    top = c.client.execute(f"EVALUATE TOPN(50, {quote_table(cal)})")
-    rows = top.rows if not top.error else []
-    date_key = next((k for k in (rows[0] if rows else {}) if "date" in k.lower()), None)
-    samples = [row.get(date_key) for row in rows[:5]] if date_key else []
-    details = {"row_count": n, "returned_rows": len(rows), "sample_values": samples}
+    top = c.client.execute(f"EVALUATE TOPN(50, {quoted})")
     if top.error:
-        details["topn_error"] = top.error
+        report.append(f"❌ Error querying {cal}: {top.error[:100]}")
+        return CheckResult(cid, "error", f"calendar sample failed: {top.error}",
+                           {"topn_error": top.error}, report)
+    rows = top.rows
+    report.append(f"TOPN(50, {quoted}): {len(rows)} rows returned")
+    samples = []
+    if rows:
+        report.append("")
+        report.append(f"Sample dates from {cal}:")
+        for i, row in enumerate(rows[:5], 1):
+            value = _sample_value(row)
+            samples.append(value)
+            report.append(f"  Row {i}: {value}")
+    report += ["", "=" * 80, "ASSESSMENT", "=" * 80]
+    details = {"row_count": n, "returned_rows": len(rows), "sample_values": samples}
     if n == 1:
-        return CheckResult(cid, "fail", "the calendar should hold 365+ rows but holds one; "
-                                        "row-level security, a filter or a row limit is "
-                                        "restricting data", details)
+        report += [f"🔴 CRITICAL: {cal} has only 1 row!",
+                   "   This is HIGHLY SUSPICIOUS for a calendar table.",
+                   "   Likely causes:",
+                   "   1. Row-Level Security (RLS) is filtering to 1 row",
+                   "   2. Global filter context is applied",
+                   "   3. Service principal has restricted data access",
+                   "",
+                   "   ACTION REQUIRED:",
+                   "   - Check RLS roles in Fabric workspace",
+                   "   - Verify service principal permissions",
+                   "   - Review any filter context in model"]
+        return CheckResult(cid, "fail",
+                           f"{cal} should have 365+ rows but has only 1. This indicates RLS or "
+                           "filter context is limiting data access.", details, report)
     if n < 100:
-        return CheckResult(cid, "pass", f"warning: the calendar holds only {n} rows", details)
-    return CheckResult(cid, "pass", f"{n} calendar rows", details)
+        report += [f"⚠️  WARNING: {cal} has only {n} rows",
+                   "   This seems low for a calendar table.",
+                   "   May indicate limited date range or filter applied."]
+        return CheckResult(cid, "pass", f"{n} calendar rows", details, report)
+    report += [f"✅ {cal} has {n} rows (healthy)",
+               "   No obvious filter context limiting data."]
+    return CheckResult(cid, "pass", f"{n} calendar rows", details, report)
 
 
 def _date_param(value: Optional[str]) -> Optional[str]:
@@ -959,100 +998,242 @@ def check_smoke(c: LiveContext) -> CheckResult:
                        f"{c.cfg['suite_pass_rate']:.0%}). {failed} tests failed.", details, report)
 
 
+DATASET_PROPERTIES = (("id", "id"), ("name", "name"), ("configuredBy", "configured_by"),
+                      ("isRefreshable", "is_refreshable"),
+                      ("targetStorageMode", "target_storage_mode"),
+                      ("workspaceId", "workspace_id"), ("workspaceName", "workspace_name"))
+
+
+def _dataset_properties(client: _Client) -> dict:
+    data = client.dataset()
+    return {label: data.get(key) for key, label in DATASET_PROPERTIES}
+
+
 def check_identity(c: LiveContext) -> CheckResult:
+    cid = "live-identity"
     r = c.client.execute('EVALUATE ROW( "UserPrincipalName", USERPRINCIPALNAME(), '
                          '"UserName", USERNAME(), "UserObjectId", USEROBJECTID() )')
     if r.error:
-        return CheckResult("live-identity", "error", f"identity query failed: {r.error}")
-    ds = c.client.dataset()
+        return CheckResult(cid, "error", f"identity query failed: {r.error}")
+    props = _dataset_properties(c.client)
     details = {"user_principal_name": scalar(r.first, "UserPrincipalName"),
                "user_name": scalar(r.first, "UserName"),
                "user_object_id": scalar(r.first, "UserObjectId"),
-               "dataset_name": ds.get("name"), "is_refreshable": ds.get("isRefreshable"),
-               "storage_mode": ds.get("targetStorageMode"),
+               "dataset_name": props["name"], "is_refreshable": props["is_refreshable"],
+               "storage_mode": props["target_storage_mode"],
                "note": "role membership cannot be read without admin rights"}
-    return CheckResult("live-identity", "pass",
-                       f"querying as {details['user_principal_name']}", details)
+    report = ["", "=== RLS Detection Test ===", "",
+              f"Query executed in {r.elapsed_ms:.2f}ms",
+              f"Row count: {len(r.rows)}",
+              "", "User Identity:"]
+    for row in r.rows:
+        report += [f"  {key}: {value}" for key, value in row.items()]
+    report += ["", f"Dataset: {props['name']}",
+               f"Is Refreshable: {props['is_refreshable']}",
+               f"Target Storage Mode: {props['target_storage_mode']}",
+               "", "✅ User identity retrieved",
+               "⚠️  Cannot directly query RLS roles (requires admin). "
+               "Check manually in Fabric workspace."]
+    return CheckResult(cid, "pass",
+                       f"querying as {details['user_principal_name']}", details, report)
 
 
 def check_filter_compare(c: LiveContext) -> CheckResult:
-    rows, flagged = [], []
+    cid = "live-filter-compare"
+    rows: list[dict[str, Any]] = []
+    flagged: list[str] = []
+    report: list[str] = []
     for t in c.cfg["filter_probe_tables"]:
         n, err = c.table_count(t, "RowCount")
+        report += ["", f"--- Testing table: {t} ---"]
         if err:
-            return CheckResult("live-filter-compare", "error", f"COUNTROWS({t}) failed: {err}")
+            return CheckResult(cid, "error", f"COUNTROWS({t}) failed: {err}", {}, report)
+        report.append(f"COUNTROWS({quote_table(t)}): {n}")
         entry: dict[str, Any] = {"table": t, "countrows": n}
         top = c.client.execute(f"EVALUATE TOPN(10, {quote_table(t)})")
-        entry["topn_rows"] = None if top.error else len(top.rows)
         if top.error:
-            entry["topn_error"] = top.error
+            report.append(f"❌ Error querying {t}: {top.error[:100]}")
+            entry["topn_actual"] = "ERROR"
+            entry["countrows_all"] = "ERROR"
+            entry["error"] = top.error[:100]
+            rows.append(entry)
+            continue
+        entry["topn_actual"] = len(top.rows)
+        report.append(f"EVALUATE TOPN(10, {quote_table(t)}): {len(top.rows)} rows returned")
         tot = c.client.execute(f'EVALUATE ROW( "TotalRows", CALCULATE(COUNTROWS({quote_table(t)}), '
                                f'ALL({quote_table(t)})) )')
-        entry["countrows_all"] = None if tot.error else count(tot.first, "TotalRows")
         if tot.error:
-            entry["all_error"] = tot.error
-        if entry["countrows_all"] is not None and entry["countrows_all"] != n:
-            entry["note"] = "filter context or RLS detected"
+            report.append(f"❌ Error querying {t}: {tot.error[:100]}")
+            entry["countrows_all"] = "ERROR"
+            entry["error"] = tot.error[:100]
+            rows.append(entry)
+            continue
+        all_count = count(tot.first, "TotalRows")
+        entry["countrows_all"] = all_count
+        report.append(f"COUNTROWS with ALL({quote_table(t)}): {all_count}")
+        if top.rows:
+            report += ["", f"Sample data from {t} (first row):"]
+            report += [f"  {key}: {value}" for key, value in list(top.rows[0].items())[:5]]
+        if all_count != n:
+            entry["discrepancy"] = True
             flagged.append(t)
         rows.append(entry)
-    return CheckResult("live-filter-compare", "pass",
+    report += ["", "=" * 80, "SUMMARY", "=" * 80,
+               f"{'Table':<30} {'COUNTROWS':<15} {'TOPN Actual':<15} {'ALL()':<15} "
+               f"{'Filter?':<10}", "-" * 80]
+    for entry in rows:
+        indicator = "⚠️ YES" if entry.get("discrepancy") else "✅ NO"
+        report.append(f"{entry['table']:<30} {str(entry['countrows']):<15} "
+                      f"{str(entry['topn_actual']):<15} {str(entry['countrows_all']):<15} "
+                      f"{indicator:<10}")
+    if flagged:
+        report += ["", "⚠️  WARNING: Filter context or RLS detected!",
+                   f"   {len(flagged)} tables show different counts with/without ALL()",
+                   "   This suggests Row-Level Security or implicit filters are active."]
+    else:
+        report += ["", "✅ No filter context detected",
+                   "   COUNTROWS and COUNTROWS with ALL() return same values"]
+    return CheckResult(cid, "pass",
                        f"{len(flagged)} table(s) count differently with ALL()",
-                       {"tables": rows, "flagged": flagged})
+                       {"tables": rows, "flagged": flagged}, report)
 
 
 def check_metadata(c: LiveContext) -> CheckResult:
-    refreshes = [{k: r.get(k) for k in ("status", "endTime", "requestId")} for r in c.client.refreshes(5)]
-    details = {"dataset": c.client.dataset(), "refreshes": refreshes,
-               "datasources": c.client.datasources()}
-    return CheckResult("live-metadata", "pass", "dataset metadata collected", details)
+    cid = "live-metadata"
+    props = _dataset_properties(c.client)
+    refreshes = c.client.refreshes(5)
+    datasources = c.client.datasources()
+    report = ["", "=== Connection Metadata Investigation ===", "", "Dataset Properties:"]
+    report += [f"  {key}: {value}" for key, value in props.items()]
+    report += ["", "Refresh History (last 5):"]
+    for i, refresh in enumerate(refreshes, 1):
+        report.append(f"  {i}. Status: {refresh.get('status', 'Unknown')}, "
+                      f"End: {refresh.get('endTime', 'Unknown')}, "
+                      f"ID: {refresh.get('requestId', 'Unknown')}")
+    report += ["", "Datasources:"]
+    for i, source in enumerate(datasources, 1):
+        report.append(f"  {i}. Connection: {source}")
+    report += ["", "✅ Metadata investigation complete"]
+    details = {"dataset": c.client.dataset(),
+               "refreshes": [{k: r.get(k) for k in ("status", "endTime", "requestId")}
+                             for r in refreshes],
+               "datasources": datasources}
+    return CheckResult(cid, "pass", "dataset metadata collected", details, report)
 
 
 def check_filter_diagnostic(c: LiveContext) -> CheckResult:
-    findings: list[dict] = []
+    cid = "live-filter-diagnostic"
+    findings: list[dict[str, Any]] = []
+    report = ["", "=" * 80, "COMPREHENSIVE FILTER CONTEXT DIAGNOSTIC REPORT", "=" * 80, "",
+              "1. User Identity Check..."]
     who = c.client.execute('EVALUATE ROW("User", USERPRINCIPALNAME())')
     if who.error:
-        findings.append({"level": "ERROR", "item": "identity", "message": who.error})
+        value = f"ERROR: {who.error[:50]}"
+        findings.append({"name": "User Identity", "value": value, "level": "ERROR"})
+        report.append(f"   ❌ Error: {who.error[:50]}")
     else:
-        findings.append({"level": "INFO", "item": "identity",
-                         "message": f"querying as {scalar(who.first, 'User')}"})
+        user = scalar(who.first, "User")
+        findings.append({"name": "User Identity", "value": user, "level": "INFO"})
+        report.append(f"   ✅ User: {user}")
+    report += ["", "2. Calendar Table Row Count..."]
     cal = c.cfg["calendar_table"]
     r = c.client.execute(f'EVALUATE ROW("Count", COUNTROWS({quote_table(cal)}))')
     raw = None if r.error else scalar(r.first, "Count")
-    if r.error or raw is None:
-        findings.append({"level": "ERROR", "item": "calendar",
-                         "message": r.error or "the calendar count came back BLANK"})
+    if r.error:
+        value = f"ERROR: {r.error[:50]}"
+        findings.append({"name": "Calendar Rows", "value": value, "level": "ERROR"})
+        report.append(f"   ❌ Error: {r.error[:50]}")
+    elif raw is None or int(raw) == 0:
+        value = "ERROR: count is BLANK or 0"
+        findings.append({"name": "Calendar Rows", "value": value, "level": "ERROR"})
+        report.append("   ❌ Error: count is BLANK or 0")
     else:
         n = int(raw)
-        level = "CRITICAL" if n == 1 else ("WARNING" if n < 100 else "OK")
-        findings.append({"level": level, "item": "calendar", "message": f"{n} calendar rows"})
+        if n == 1:
+            level = "CRITICAL"
+            report.append(f"   🔴 CRITICAL: Only {n} row (expected 365+)")
+        elif n < 100:
+            level = "WARNING"
+            report.append(f"   ⚠️  WARNING: Only {n} rows (expected 365+)")
+        else:
+            level = "OK"
+            report.append(f"   ✅ OK: {n} rows")
+        findings.append({"name": "Calendar Rows", "value": n, "level": level})
+    report += ["", "3. Filter Context Check (COUNTROWS vs ALL)..."]
     dims = [t for t in c.cfg["filter_probe_tables"] if t.startswith(c.cfg["dimension_prefix"])
             and t != cal]
     if dims:
-        d = quote_table(dims[0])
+        table = dims[0]
+        d = quote_table(table)
         cmp_ = c.client.execute(f'EVALUATE ROW( "Normal", COUNTROWS({d}), '
                                 f'"WithALL", CALCULATE(COUNTROWS({d}), ALL({d})) )')
         if cmp_.error:
-            findings.append({"level": "ERROR", "item": dims[0], "message": cmp_.error})
+            value = f"ERROR: {cmp_.error[:50]}"
+            findings.append({"name": "Filter Context", "value": value, "level": "ERROR"})
+            report.append(f"   ❌ Error: {cmp_.error[:50]}")
         else:
             a, b = count(cmp_.first, "Normal"), count(cmp_.first, "WithALL")
-            findings.append({"level": "WARNING" if a != b else "OK", "item": dims[0],
-                             "message": f"{a} rows, {b} with ALL()"})
+            if a != b:
+                value = f"DETECTED: {a} vs {b}"
+                findings.append({"name": "Filter Context", "value": value, "level": "WARNING"})
+                report.append(f"   ⚠️  WARNING: Filter detected ({a} vs {b})")
+            else:
+                value = "None detected"
+                findings.append({"name": "Filter Context", "value": value, "level": "OK"})
+                report.append(f"   ✅ OK: No filter context ({a} rows)")
+    report += ["", "4. Dataset Refresh Status..."]
     hist = c.client.refreshes(1)
     if not hist:
-        findings.append({"level": "INFO", "item": "refresh", "message": "no refresh history"})
+        findings.append({"name": "Refresh Status", "value": "No history", "level": "INFO"})
+        report.append("   ⚠️  No refresh history found")
     else:
-        status = hist[0].get("status") or "Unknown"
-        findings.append({"level": "OK" if status == "Completed" else "WARNING", "item": "refresh",
-                         "message": f"last refresh {status}"})
+        status = hist[0].get("status")
+        level = "OK" if status == "Completed" else "WARNING"
+        findings.append({"name": "Refresh Status", "value": status, "level": level})
+        if status == "Completed":
+            report.append("    ✅ Last refresh: Completed")
+        else:
+            report.append(f"   ⚠️  Last refresh: {status}")
+    report += ["", "=" * 80, "DIAGNOSTIC SUMMARY", "=" * 80]
+    groups = (("CRITICAL", "🔴 CRITICAL ISSUES:"), ("WARNING", "⚠️  WARNINGS:"),
+              ("ERROR", "❌ ERRORS:"))
+    counted = {level: [f for f in findings if f["level"] == level] for level, _ in groups}
+    for level, title in groups:
+        if counted[level]:
+            report += ["", title]
+            report += [f"   - {f['name']}: {f['value']}" for f in counted[level]]
+    if not any(counted[level] for level, _ in groups):
+        report += ["", "✅ All diagnostics passed - no filter context or RLS detected"]
+    report += ["", "=" * 80, "RECOMMENDATIONS", "=" * 80]
+    critical = counted["CRITICAL"]
+    warnings = counted["WARNING"]
+    if critical or warnings:
+        report += ["", "1. Check Row-Level Security (RLS) settings in Fabric workspace:",
+                   "   - Navigate to the dataset in Fabric",
+                   "   - Check Security > Row-Level Security",
+                   "   - Verify service principal is not assigned restrictive roles",
+                   "", "2. Verify service principal permissions:",
+                   "   - Ensure service principal has 'Read' access to workspace",
+                   "   - Check if any workspace-level filters are applied",
+                   "", "3. Review model for implicit filters:",
+                   "   - Check calculation groups",
+                   "   - Review any model-level filter expressions"]
+    else:
+        report += ["", "✅ No action required - data access appears unrestricted"]
+    report += ["", "=" * 80]
     recs = []
-    if any(f["level"] in ("CRITICAL", "WARNING", "ERROR") for f in findings):
+    if critical or warnings:
         recs = ["check the RLS roles and the account the query runs as",
                 "check the service principal's access to the workspace",
                 "check calculation groups and model-level filters"]
-    critical = any(f["level"] == "CRITICAL" for f in findings)
-    return CheckResult("live-filter-diagnostic", "fail" if critical else "pass",
-                       f"{len(findings)} diagnostic finding(s)",
-                       {"findings": findings, "recommendations": recs})
+    if critical:
+        names = ", ".join(f["name"] for f in critical)
+        return CheckResult(cid, "fail",
+                           f"Critical issues detected: {names}. Row-Level Security or filter "
+                           "context is likely limiting data access.",
+                           {"findings": findings, "recommendations": recs}, report)
+    return CheckResult(cid, "pass", f"{len(findings)} diagnostic finding(s)",
+                       {"findings": findings, "recommendations": recs}, report)
 
 
 # ---------------------------------------------------------------------------
