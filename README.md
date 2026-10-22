@@ -240,6 +240,11 @@ its key columns, a filter measure that fits no known shape — is a
 warning. So a plain run fails on the P0 checks only, and `--strict` is
 the full run: it fails on the P1 checks too.
 
+A check that cannot run (a model without an `f-Filters` table, an `f-All`
+that is absent or non-canonical, a mapping table that yields no category)
+is listed under `skipped` in the JSON output, with the model and the
+reason, and it never fails the run.
+
 ## Selecting rules and other flags
 
 `check` and `fix` take the same options:
