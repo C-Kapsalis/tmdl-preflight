@@ -132,6 +132,11 @@ def _notes(report: PreflightReport) -> list[str]:
         else:
             where = f"{entry['model']}: " if entry.get("model") else ""
             notes.append(f"skipped: {entry['rule']} ({where}{entry['reason']})")
+    if report.excluded_files:
+        # a whole model or report folder the exclusions skipped is said,
+        # so a run that looked at less than the path holds shows it
+        notes.append(f"excluded: {report.excluded_files} file(s) in excluded paths "
+                     f"were not scanned")
     if report.excluded:
         notes.append(f"excluded: {len(report.excluded)} violation(s) in excluded paths")
     if report.exempted:

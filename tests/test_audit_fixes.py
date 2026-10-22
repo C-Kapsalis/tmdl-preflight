@@ -378,3 +378,16 @@ def test_grain_check_without_guard_table_is_a_usage_error(project):
     code, out, err = run_cli("grain", project, "--check")
     assert code == 2, (code, out, err)
     assert "--check needs --guard-table" in err, err
+
+
+def test_the_text_report_names_excluded_files(tmp_path):
+    _model(tmp_path / "live", BEANS, "Cafe")
+    _model(tmp_path / "old_legacy", BEANS, "Old")
+    code, out, err = run_cli("check", tmp_path, "--no-config")
+    assert "excluded: 2 file(s) in excluded paths" in out, out
+
+
+def test_no_exclusion_note_when_nothing_was_excluded(tmp_path):
+    _model(tmp_path, BEANS)
+    code, out, err = run_cli("check", tmp_path, "--no-config")
+    assert "excluded:" not in out, out
