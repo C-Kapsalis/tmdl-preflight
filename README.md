@@ -452,7 +452,7 @@ fact tables, with the models that have none left out.
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/c-kapsalis/tmdl-preflight
-    rev: v1.1.0
+    rev: v1.2.0
     hooks:
       - id: tmdl-preflight
 ```
