@@ -1,0 +1,16 @@
+table _Cities
+	lineageTag: 59860761-33a9-55ca-b100-be4b2b72edef
+
+	column Key
+		dataType: int64
+		lineageTag: 7b4aacd6-f9ce-52b7-908a-8d002c356b5b
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition _Cities = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

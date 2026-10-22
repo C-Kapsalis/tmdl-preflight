@@ -1,0 +1,17 @@
+table _Queries
+	lineageTag: 0000b4b1-0000-0000-0000-000000000026
+
+	column query
+		dataType: string
+		lineageTag: 0000b4b1-0000-0000-0000-000000000025
+		summarizeBy: none
+		sourceColumn: query
+
+	partition _Queries = m
+		mode: import
+		source =
+			let
+			    Source = source_filter_dates("queries_n", "date")
+			in
+			    Source
+

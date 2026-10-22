@@ -1,0 +1,25 @@
+table 'z-Selector Format'
+	lineageTag: 0000b4b1-0000-0000-0000-00000000001a
+
+	calculationGroup
+
+		calculationItem Current = SELECTEDMEASURE()
+
+	measure 'Selector Currency Measure' = "EUR"
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000019
+
+	column Name
+		dataType: string
+		lineageTag: 0000b4b1-0000-0000-0000-00000000001b
+		summarizeBy: none
+		sourceColumn: Name
+		sortByColumn: Ordinal
+
+	column Ordinal
+		dataType: int64
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-00000000001c
+		summarizeBy: sum
+		sourceColumn: Ordinal
+

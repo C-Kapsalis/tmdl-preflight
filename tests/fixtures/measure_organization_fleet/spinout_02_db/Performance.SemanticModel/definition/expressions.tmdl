@@ -1,0 +1,9 @@
+expression v-BQ_project = "example-project-2" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+	lineageTag: 0000b4b1-0000-0000-0000-000000000037
+
+expression v-db = "spinout_02_db" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+	lineageTag: 0000b4b1-0000-0000-0000-000000000038
+
+expression source_filter_dates =
+		let f = (t as text, d as text) => GoogleBigQuery.Database() in f
+	lineageTag: 0000b4b1-0000-0000-0000-000000000039

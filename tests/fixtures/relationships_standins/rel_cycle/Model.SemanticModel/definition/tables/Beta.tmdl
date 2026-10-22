@@ -1,0 +1,19 @@
+table Beta
+	lineageTag: a8834820-4298-5cfa-9cac-d7c3af4aa184
+
+	column id
+		dataType: int64
+		lineageTag: 2ea7399a-5944-581f-9584-4b0adb976c82
+		summarizeBy: none
+		sourceColumn: id
+
+	column next_id
+		dataType: int64
+		lineageTag: 52673a60-4cfc-5d45-a85d-cefdf016d008
+		summarizeBy: none
+		sourceColumn: next_id
+
+	partition Beta = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

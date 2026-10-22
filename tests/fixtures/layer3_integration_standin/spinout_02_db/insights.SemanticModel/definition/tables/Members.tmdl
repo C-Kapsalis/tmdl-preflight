@@ -1,0 +1,24 @@
+table Members
+	isHidden
+	lineageTag: e4beafb3-ba75-5ee8-9e6e-c321e3ecd56a
+
+	column member_id
+		dataType: int64
+		lineageTag: ee225687-beed-57af-b916-97b2e8cd79c5
+		summarizeBy: none
+		sourceColumn: member_id
+
+	column joined_date
+		dataType: dateTime
+		lineageTag: aa63e655-3306-552c-ba27-be18515e3ca6
+		summarizeBy: none
+		sourceColumn: joined_date
+
+	partition 'Members' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

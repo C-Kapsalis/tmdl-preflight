@@ -1,0 +1,17 @@
+table '_Report Attribution Resolved'
+	lineageTag: 5eed0000-0000-0000-0000-000000000211
+
+	column m_main_attribution_resolved
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-000000000212
+		summarizeBy: none
+		sourceColumn: m_main_attribution_resolved
+
+	partition '_Report Attribution Resolved' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

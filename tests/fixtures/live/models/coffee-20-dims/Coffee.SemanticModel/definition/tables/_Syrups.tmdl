@@ -1,0 +1,16 @@
+table _Syrups
+	lineageTag: e1a4910d-edf1-5d8e-9fe7-c908203b7356
+
+	column Key
+		dataType: int64
+		lineageTag: 19aebabe-78be-5d65-a10b-b25cfb66d0a7
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition _Syrups = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

@@ -1,0 +1,14 @@
+table 'EC003 Nested Quotes'
+	lineageTag: a446b3a6-c286-5417-9cc7-a4c1de3320ff
+
+	measure Greeting = "Say ""hello"" to [Nobody]"
+		formatString: #,0
+		lineageTag: 59c5bc76-e3d6-5c06-a247-9826eb4d069d
+
+	partition 'EC003 Nested Quotes' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

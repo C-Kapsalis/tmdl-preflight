@@ -1,0 +1,17 @@
+table Sales
+	lineageTag: 5eed0000-0000-0000-0000-00000000023c
+
+	column event_date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-00000000023d
+		summarizeBy: none
+		sourceColumn: event_date
+
+	partition Sales = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

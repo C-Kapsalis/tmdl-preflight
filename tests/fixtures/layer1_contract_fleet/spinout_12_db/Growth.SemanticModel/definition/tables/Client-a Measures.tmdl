@@ -1,0 +1,722 @@
+table 'Client-a Measures'
+	lineageTag: 5eed0000-0000-0000-0000-00000000011c
+
+	/// True when the current filter cannot reach the fact.
+	measure '-helper Slicer Cannot Reach Users' = ```
+			VAR _miss =
+			    ISFILTERED ( '_Accounts' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Accounts'[account_id] ) )
+			    || ISFILTERED ( '_Ads' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Ads'[ad_id] ) )
+			    || ISFILTERED ( '_Assets' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Assets'[asset_id] ) )
+			    || ISFILTERED ( '_Campaigns' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Campaigns'[ad_group_x_id] ) )
+			    || ISFILTERED ( '_Content' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Content'[content_group_id] ) )
+			    || ISFILTERED ( '_Countries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Countries'[country_id] ) )
+			    || ISFILTERED ( '_Devices' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Devices'[device_id] ) )
+			    || ISFILTERED ( '_Keywords' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Keywords'[keyword_id] ) )
+			    || ISFILTERED ( '_Landing Pages' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Landing Pages'[landing_page_x_id] ) )
+			    || ISFILTERED ( '_Offers' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Offers'[offer_id] ) )
+			    || ISFILTERED ( '_Queries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Queries'[query_id] ) )
+			    || ISFILTERED ( '_Users' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Users'[user_id] ) )
+			    || ISFILTERED ( '_Cluster Mappings' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Cluster Mappings'[Cluster Value] ) )
+			RETURN _miss
+			```
+		lineageTag: 5eed0000-0000-0000-0000-00000000011d
+
+	/// True when the current filter cannot reach the fact.
+	measure '-helper Slicer Cannot Reach Transactions' = ```
+			VAR _miss =
+			    ISFILTERED ( '_Accounts' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Accounts'[account_id] ) )
+			    || ISFILTERED ( '_Ads' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Ads'[ad_id] ) )
+			    || ISFILTERED ( '_Assets' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Assets'[asset_id] ) )
+			    || ISFILTERED ( '_Campaigns' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Campaigns'[ad_group_x_id] ) )
+			    || ISFILTERED ( '_Content' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Content'[content_group_id] ) )
+			    || ISFILTERED ( '_Countries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Countries'[country_id] ) )
+			    || ISFILTERED ( '_Devices' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Devices'[device_id] ) )
+			    || ISFILTERED ( '_Keywords' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Keywords'[keyword_id] ) )
+			    || ISFILTERED ( '_Landing Pages' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Landing Pages'[landing_page_x_id] ) )
+			    || ISFILTERED ( '_Offers' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Offers'[offer_id] ) )
+			    || ISFILTERED ( '_Queries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Queries'[query_id] ) )
+			    || ISFILTERED ( '_Users' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Users'[user_id] ) )
+			    || ISFILTERED ( '_Cluster Mappings' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Cluster Mappings'[Cluster Value] ) )
+			RETURN _miss
+			```
+		lineageTag: 5eed0000-0000-0000-0000-00000000011e
+
+	/// True when the current filter cannot reach the fact.
+	measure '-helper Filter Misses User Views' = ```
+			VAR _miss =
+			    ISFILTERED ( '_Accounts' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Accounts'[account_id] ) )
+			    || ISFILTERED ( '_Ads' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Ads'[ad_id] ) )
+			    || ISFILTERED ( '_Assets' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Assets'[asset_id] ) )
+			    || ISFILTERED ( '_Campaigns' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Campaigns'[ad_group_x_id] ) )
+			    || ISFILTERED ( '_Content' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Content'[content_group_id] ) )
+			    || ISFILTERED ( '_Countries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Countries'[country_id] ) )
+			    || ISFILTERED ( '_Devices' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Devices'[device_id] ) )
+			    || ISFILTERED ( '_Keywords' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Keywords'[keyword_id] ) )
+			    || ISFILTERED ( '_Landing Pages' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Landing Pages'[landing_page_x_id] ) )
+			    || ISFILTERED ( '_Offers' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Offers'[offer_id] ) )
+			    || ISFILTERED ( '_Queries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Queries'[query_id] ) )
+			    || ISFILTERED ( '_Users' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Users'[user_id] ) )
+			    || ISFILTERED ( '_Cluster Mappings' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Cluster Mappings'[Cluster Value] ) )
+			RETURN _miss
+			```
+		lineageTag: 5eed0000-0000-0000-0000-00000000011f
+
+	/// True when the current filter cannot reach the fact.
+	measure '-helper Filter Misses GA4 Traffic Acquisition' = ```
+			VAR _miss =
+			    ISFILTERED ( '_Accounts' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Accounts'[account_id] ) )
+			    || ISFILTERED ( '_Ads' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Ads'[ad_id] ) )
+			    || ISFILTERED ( '_Assets' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Assets'[asset_id] ) )
+			    || ISFILTERED ( '_Campaigns' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Campaigns'[ad_group_x_id] ) )
+			    || ISFILTERED ( '_Content' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Content'[content_group_id] ) )
+			    || ISFILTERED ( '_Countries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Countries'[country_id] ) )
+			    || ISFILTERED ( '_Devices' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Devices'[device_id] ) )
+			    || ISFILTERED ( '_Keywords' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Keywords'[keyword_id] ) )
+			    || ISFILTERED ( '_Landing Pages' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Landing Pages'[landing_page_x_id] ) )
+			    || ISFILTERED ( '_Offers' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Offers'[offer_id] ) )
+			    || ISFILTERED ( '_Queries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Queries'[query_id] ) )
+			    || ISFILTERED ( '_Users' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Users'[user_id] ) )
+			    || ISFILTERED ( '_Cluster Mappings' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Cluster Mappings'[Cluster Value] ) )
+			RETURN _miss
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000120
+
+	/// True when the current filter cannot reach the fact.
+	measure '-helper Filter Misses GA4 Conversions' = ```
+			VAR _miss =
+			    ISFILTERED ( '_Accounts' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Accounts'[account_id] ) )
+			    || ISFILTERED ( '_Ads' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Ads'[ad_id] ) )
+			    || ISFILTERED ( '_Assets' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Assets'[asset_id] ) )
+			    || ISFILTERED ( '_Campaigns' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Campaigns'[ad_group_x_id] ) )
+			    || ISFILTERED ( '_Content' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Content'[content_group_id] ) )
+			    || ISFILTERED ( '_Countries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Countries'[country_id] ) )
+			    || ISFILTERED ( '_Devices' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Devices'[device_id] ) )
+			    || ISFILTERED ( '_Keywords' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Keywords'[keyword_id] ) )
+			    || ISFILTERED ( '_Landing Pages' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Landing Pages'[landing_page_x_id] ) )
+			    || ISFILTERED ( '_Offers' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Offers'[offer_id] ) )
+			    || ISFILTERED ( '_Queries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Queries'[query_id] ) )
+			    || ISFILTERED ( '_Users' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Users'[user_id] ) )
+			    || ISFILTERED ( '_Cluster Mappings' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Cluster Mappings'[Cluster Value] ) )
+			RETURN _miss
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000121
+
+	/// True when the current filter cannot reach the fact.
+	measure '-helper Filter Misses Email Campaigns' = ```
+			VAR _miss =
+			    ISFILTERED ( '_Accounts' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Accounts'[account_id] ) )
+			    || ISFILTERED ( '_Ads' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Ads'[ad_id] ) )
+			    || ISFILTERED ( '_Assets' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Assets'[asset_id] ) )
+			    || ISFILTERED ( '_Campaigns' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Campaigns'[ad_group_x_id] ) )
+			    || ISFILTERED ( '_Content' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Content'[content_group_id] ) )
+			    || ISFILTERED ( '_Countries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Countries'[country_id] ) )
+			    || ISFILTERED ( '_Devices' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Devices'[device_id] ) )
+			    || ISFILTERED ( '_Keywords' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Keywords'[keyword_id] ) )
+			    || ISFILTERED ( '_Landing Pages' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Landing Pages'[landing_page_x_id] ) )
+			    || ISFILTERED ( '_Offers' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Offers'[offer_id] ) )
+			    || ISFILTERED ( '_Queries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Queries'[query_id] ) )
+			    || ISFILTERED ( '_Users' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Users'[user_id] ) )
+			    || ISFILTERED ( '_Cluster Mappings' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Cluster Mappings'[Cluster Value] ) )
+			RETURN _miss
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000122
+
+	/// True when the current filter cannot reach the fact.
+	measure '-helper Filter Misses Email Lists' = ```
+			VAR _miss =
+			    ISFILTERED ( '_Accounts' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Accounts'[account_id] ) )
+			    || ISFILTERED ( '_Ads' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Ads'[ad_id] ) )
+			    || ISFILTERED ( '_Assets' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Assets'[asset_id] ) )
+			    || ISFILTERED ( '_Campaigns' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Campaigns'[ad_group_x_id] ) )
+			    || ISFILTERED ( '_Content' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Content'[content_group_id] ) )
+			    || ISFILTERED ( '_Countries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Countries'[country_id] ) )
+			    || ISFILTERED ( '_Devices' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Devices'[device_id] ) )
+			    || ISFILTERED ( '_Keywords' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Keywords'[keyword_id] ) )
+			    || ISFILTERED ( '_Landing Pages' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Landing Pages'[landing_page_x_id] ) )
+			    || ISFILTERED ( '_Offers' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Offers'[offer_id] ) )
+			    || ISFILTERED ( '_Queries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Queries'[query_id] ) )
+			    || ISFILTERED ( '_Users' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Users'[user_id] ) )
+			    || ISFILTERED ( '_Cluster Mappings' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Cluster Mappings'[Cluster Value] ) )
+			RETURN _miss
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000123
+
+	/// True when the current filter cannot reach the fact.
+	measure '-helper Filter Misses Content' = ```
+			VAR _miss =
+			    ISFILTERED ( '_Accounts' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Accounts'[account_id] ) )
+			    || ISFILTERED ( '_Ads' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Ads'[ad_id] ) )
+			    || ISFILTERED ( '_Assets' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Assets'[asset_id] ) )
+			    || ISFILTERED ( '_Campaigns' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Campaigns'[ad_group_x_id] ) )
+			    || ISFILTERED ( '_Content' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Content'[content_group_id] ) )
+			    || ISFILTERED ( '_Countries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Countries'[country_id] ) )
+			    || ISFILTERED ( '_Devices' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Devices'[device_id] ) )
+			    || ISFILTERED ( '_Keywords' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Keywords'[keyword_id] ) )
+			    || ISFILTERED ( '_Landing Pages' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Landing Pages'[landing_page_x_id] ) )
+			    || ISFILTERED ( '_Offers' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Offers'[offer_id] ) )
+			    || ISFILTERED ( '_Queries' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Queries'[query_id] ) )
+			    || ISFILTERED ( '_Users' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Users'[user_id] ) )
+			    || ISFILTERED ( '_Cluster Mappings' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Cluster Mappings'[Cluster Value] ) )
+			RETURN _miss
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000124
+
+	/// Spend.
+	measure Cost = SUM ( 'Ads Report'[cost] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000125
+
+	/// Spend, cost-layer masked.
+	measure '^Cost' = CALCULATE ( [Cost] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000126
+
+	/// Accounts on the selected attribution basis.
+	measure 'Accounts #' = ```
+			VAR _basis = SELECTEDVALUE ( 'z-Selector Attribution Basis'[Basis], "00. Measured" )
+			RETURN IF ( [-helper Slicer Cannot Reach Users], BLANK (), DISTINCTCOUNT ( 'Subscriptions'[user_id] ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000127
+
+	/// New clients on the selected attribution basis.
+	measure 'New Clients #' = ```
+			VAR _basis = SELECTEDVALUE ( 'z-Selector Attribution Basis'[Basis], "00. Measured" )
+			RETURN IF ( [-helper Slicer Cannot Reach Transactions], BLANK (), CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_new] > 0 ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000128
+
+	/// Population count.
+	measure 'Paying Subscriptions from New Accounts #' = ```
+			IF ( [-helper Slicer Cannot Reach Users], BLANK (), COUNTROWS ( Subscriptions ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000129
+
+	/// Population count.
+	measure 'Trial Starts from New Accounts #' = ```
+			IF ( [-helper Slicer Cannot Reach Users], BLANK (), COUNTROWS ( Subscriptions ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-00000000012a
+
+	/// Population count.
+	measure 'Never Started from New Accounts #' = ```
+			IF ( [-helper Slicer Cannot Reach Users], BLANK (), COUNTROWS ( Subscriptions ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-00000000012b
+
+	/// Cost per count, blank outside the enhanced window.
+	measure 'Cost/ New Client' = ```
+			IF ( [-helper Enhanced Window Unallocated], BLANK (),
+			    IF ( [-helper Cost Grain Valid], DIVIDE ( [Cost], [New Clients #] ) ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-00000000012c
+
+	/// Cost per count, blank outside the enhanced window.
+	measure '^Cost/ New Client' = ```
+			IF ( [-helper Enhanced Window Unallocated], BLANK (),
+			    IF ( [-helper Cost Grain Valid], DIVIDE ( [^Cost], [New Clients #] ) ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-00000000012d
+
+	/// Cost per count, blank outside the enhanced window.
+	measure 'Cost/ Account' = ```
+			IF ( [-helper Enhanced Window Unallocated], BLANK (),
+			    IF ( [-helper Cost Grain Valid], DIVIDE ( [Cost], [Accounts #] ) ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-00000000012e
+
+	/// Cost per count, blank outside the enhanced window.
+	measure '^Cost/ Account' = ```
+			IF ( [-helper Enhanced Window Unallocated], BLANK (),
+			    IF ( [-helper Cost Grain Valid], DIVIDE ( [^Cost], [Accounts #] ) ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-00000000012f
+
+	/// True when the window starts before the enhanced allocation.
+	measure '-helper Enhanced Window Unallocated' = ```
+			VAR _basis = SELECTEDVALUE ( 'z-Selector Attribution Basis'[Basis], "00. Measured" )
+			RETURN
+			    SWITCH ( TRUE (),
+			        _basis = "00. Measured", FALSE (),
+			        MIN ( '__Calendar'[Date] ) < [-helper Enhanced Allocation Start] )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000130
+
+	/// First date carrying an enhanced allocation.
+	measure '-helper Enhanced Allocation Start' = ```
+			CALCULATE ( MIN ( Subscriptions[event_date] ),
+			    'z-Selector Attribution Basis'[Basis] = "01. Enhanced (allocated)",
+			    FILTER ( VALUES ( Subscriptions[event_date] ), [Accounts #] > 0 ) )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000131
+
+	/// False at grains where cost and the count do not scope together.
+	measure '-helper Cost Grain Valid' = ```
+			VAR blockedTables = ISFILTERED ( '_Offers' ) || ISFILTERED ( '_Accounts' ) || ISFILTERED ( '_Campaigns' ) || ISFILTERED ( '_Devices' ) || ISFILTERED ( '_Landing Pages' ) || ISFILTERED ( '_Keywords' ) || ISFILTERED ( '_Queries' ) || ISFILTERED ( '_Countries' ) || ISFILTERED ( '_Ads' ) || ISFILTERED ( '_Crawl' ) || ISFILTERED ( '_Assets' ) || ISFILTERED ( '_Competitors' ) || ISFILTERED ( '_Email Marketing Lists' ) || ISFILTERED ( '_FB Organic Comments' ) || ISFILTERED ( '_FB Organic Pages' ) || ISFILTERED ( '_FB Organic Posts' ) || ISFILTERED ( '_Youtube Channel' ) || ISFILTERED ( '_Youtube Playlist' ) || ISFILTERED ( '_Youtube Video' )
+			VAR blockedCols = ISINSCOPE ( '_Campaigns'[campaign_name] ) || ISINSCOPE ( '_Devices'[device] ) || ISINSCOPE ( '_Countries'[country] )
+			VAR blockedOwnedRate = ISINSCOPE ( '_Users'[segment] ) && SELECTEDVALUE ( '_Users'[segment] ) = "Gifted"
+			RETURN NOT ( blockedTables || blockedCols || blockedOwnedRate )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-000000000132
+
+	/// Legacy form compared has_return] = 1; never compare a count flag to one.
+	measure 'Flagged Subscriptions 01 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_new] > 0 )
+		lineageTag: 5eed0000-0000-0000-0000-000000000133
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 02 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_new] = 0 )
+		lineageTag: 5eed0000-0000-0000-0000-000000000134
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 03 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_return] > 0 )
+		lineageTag: 5eed0000-0000-0000-0000-000000000135
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 04 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_return] = 0 )
+		lineageTag: 5eed0000-0000-0000-0000-000000000136
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 05 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_renewal] > 0 )
+		lineageTag: 5eed0000-0000-0000-0000-000000000137
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 06 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_renewal] = 0 )
+		lineageTag: 5eed0000-0000-0000-0000-000000000138
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 07 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_churn] = TRUE )
+		lineageTag: 5eed0000-0000-0000-0000-000000000139
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 08 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_churn] = FALSE() )
+		lineageTag: 5eed0000-0000-0000-0000-00000000013a
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 09 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_churn] = TRUE () )
+		lineageTag: 5eed0000-0000-0000-0000-00000000013b
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 10 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_limbo] = TRUE )
+		lineageTag: 5eed0000-0000-0000-0000-00000000013c
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 11 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_limbo] = FALSE() )
+		lineageTag: 5eed0000-0000-0000-0000-00000000013d
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 12 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_limbo] = TRUE () )
+		lineageTag: 5eed0000-0000-0000-0000-00000000013e
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 13 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_ar_on] = TRUE )
+		lineageTag: 5eed0000-0000-0000-0000-00000000013f
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 14 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_ar_on] = FALSE() )
+		lineageTag: 5eed0000-0000-0000-0000-000000000140
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 15 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_ar_on] = TRUE () )
+		lineageTag: 5eed0000-0000-0000-0000-000000000141
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 16 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_new]>0 )
+		lineageTag: 5eed0000-0000-0000-0000-000000000142
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 17 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_return] >0 )
+		lineageTag: 5eed0000-0000-0000-0000-000000000143
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 18 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_churn]=TRUE )
+		lineageTag: 5eed0000-0000-0000-0000-000000000144
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 19 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_limbo] = FALSE )
+		lineageTag: 5eed0000-0000-0000-0000-000000000145
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 20 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_ar_on] = TRUE )
+		lineageTag: 5eed0000-0000-0000-0000-000000000146
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 21 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_renewal] = 0 )
+		lineageTag: 5eed0000-0000-0000-0000-000000000147
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 22 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_new] > 0 )
+		lineageTag: 5eed0000-0000-0000-0000-000000000148
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 23 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_renewal] > 0 )
+		lineageTag: 5eed0000-0000-0000-0000-000000000149
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 24 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_churn] = FALSE )
+		lineageTag: 5eed0000-0000-0000-0000-00000000014a
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 25 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_return] = 0 )
+		lineageTag: 5eed0000-0000-0000-0000-00000000014b
+
+	/// Flagged subscriptions.
+	measure 'Flagged Subscriptions 26 #' = CALCULATE ( COUNTROWS ( Subscriptions ), Subscriptions[has_ar_on] = FALSE ( ) )
+		lineageTag: 5eed0000-0000-0000-0000-00000000014c
+
+	/// Filler metric.
+	measure 'Metric 001' = SUM ( 'Traffic Report'[value_001] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000014d
+
+	/// Filler metric.
+	measure 'Metric 002' = SUM ( 'Traffic Report'[value_002] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000014e
+
+	/// Filler metric.
+	measure 'Metric 003' = SUM ( 'Traffic Report'[value_003] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000014f
+
+	/// Filler metric.
+	measure 'Metric 004' = SUM ( 'Traffic Report'[value_004] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000150
+
+	/// Filler metric.
+	measure 'Metric 005' = SUM ( 'Traffic Report'[value_005] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000151
+
+	/// Filler metric.
+	measure 'Metric 006' = SUM ( 'Traffic Report'[value_006] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000152
+
+	/// Filler metric.
+	measure 'Metric 007' = SUM ( 'Traffic Report'[value_007] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000153
+
+	/// Filler metric.
+	measure 'Metric 008' = SUM ( 'Traffic Report'[value_008] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000154
+
+	/// Filler metric.
+	measure 'Metric 009' = SUM ( 'Traffic Report'[value_009] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000155
+
+	/// Filler metric.
+	measure 'Metric 010' = SUM ( 'Traffic Report'[value_010] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000156
+
+	/// Filler metric.
+	measure 'Metric 011' = SUM ( 'Traffic Report'[value_011] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000157
+
+	/// Filler metric.
+	measure 'Metric 012' = SUM ( 'Traffic Report'[value_012] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000158
+
+	/// Filler metric.
+	measure 'Metric 013' = SUM ( 'Traffic Report'[value_013] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000159
+
+	/// Filler metric.
+	measure 'Metric 014' = SUM ( 'Traffic Report'[value_014] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000015a
+
+	/// Filler metric.
+	measure 'Metric 015' = SUM ( 'Traffic Report'[value_015] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000015b
+
+	/// Filler metric.
+	measure 'Metric 016' = SUM ( 'Traffic Report'[value_016] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000015c
+
+	/// Filler metric.
+	measure 'Metric 017' = SUM ( 'Traffic Report'[value_017] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000015d
+
+	/// Filler metric.
+	measure 'Metric 018' = SUM ( 'Traffic Report'[value_018] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000015e
+
+	/// Filler metric.
+	measure 'Metric 019' = SUM ( 'Traffic Report'[value_019] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000015f
+
+	/// Filler metric.
+	measure 'Metric 020' = SUM ( 'Traffic Report'[value_020] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000160
+
+	/// Filler metric.
+	measure 'Metric 021' = SUM ( 'Traffic Report'[value_021] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000161
+
+	/// Filler metric.
+	measure 'Metric 022' = SUM ( 'Traffic Report'[value_022] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000162
+
+	/// Filler metric.
+	measure 'Metric 023' = SUM ( 'Traffic Report'[value_023] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000163
+
+	/// Filler metric.
+	measure 'Metric 024' = SUM ( 'Traffic Report'[value_024] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000164
+
+	/// Filler metric.
+	measure 'Metric 025' = SUM ( 'Traffic Report'[value_025] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000165
+
+	/// Filler metric.
+	measure 'Metric 026' = SUM ( 'Traffic Report'[value_026] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000166
+
+	/// Filler metric.
+	measure 'Metric 027' = SUM ( 'Traffic Report'[value_027] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000167
+
+	/// Filler metric.
+	measure 'Metric 028' = SUM ( 'Traffic Report'[value_028] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000168
+
+	/// Filler metric.
+	measure 'Metric 029' = SUM ( 'Traffic Report'[value_029] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000169
+
+	/// Filler metric.
+	measure 'Metric 030' = SUM ( 'Traffic Report'[value_030] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000016a
+
+	/// Filler metric.
+	measure 'Metric 031' = SUM ( 'Traffic Report'[value_031] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000016b
+
+	/// Filler metric.
+	measure 'Metric 032' = SUM ( 'Traffic Report'[value_032] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000016c
+
+	/// Filler metric.
+	measure 'Metric 033' = SUM ( 'Traffic Report'[value_033] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000016d
+
+	/// Filler metric.
+	measure 'Metric 034' = SUM ( 'Traffic Report'[value_034] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000016e
+
+	/// Filler metric.
+	measure 'Metric 035' = SUM ( 'Traffic Report'[value_035] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000016f
+
+	/// Filler metric.
+	measure 'Metric 036' = SUM ( 'Traffic Report'[value_036] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000170
+
+	/// Filler metric.
+	measure 'Metric 037' = SUM ( 'Traffic Report'[value_037] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000171
+
+	/// Filler metric.
+	measure 'Metric 038' = SUM ( 'Traffic Report'[value_038] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000172
+
+	/// Filler metric.
+	measure 'Metric 039' = SUM ( 'Traffic Report'[value_039] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000173
+
+	/// Filler metric.
+	measure 'Metric 040' = SUM ( 'Traffic Report'[value_040] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000174
+
+	/// Filler metric.
+	measure 'Metric 041' = SUM ( 'Traffic Report'[value_041] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000175
+
+	/// Filler metric.
+	measure 'Metric 042' = SUM ( 'Traffic Report'[value_042] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000176
+
+	/// Filler metric.
+	measure 'Metric 043' = SUM ( 'Traffic Report'[value_043] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000177
+
+	/// Filler metric.
+	measure 'Metric 044' = SUM ( 'Traffic Report'[value_044] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000178
+
+	/// Filler metric.
+	measure 'Metric 045' = SUM ( 'Traffic Report'[value_045] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000179
+
+	/// Filler metric.
+	measure 'Metric 046' = SUM ( 'Traffic Report'[value_046] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000017a
+
+	/// Filler metric.
+	measure 'Metric 047' = SUM ( 'Traffic Report'[value_047] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000017b
+
+	/// Filler metric.
+	measure 'Metric 048' = SUM ( 'Traffic Report'[value_048] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000017c
+
+	/// Filler metric.
+	measure 'Metric 049' = SUM ( 'Traffic Report'[value_049] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000017d
+
+	/// Filler metric.
+	measure 'Metric 050' = SUM ( 'Traffic Report'[value_050] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000017e
+
+	/// Filler metric.
+	measure 'Metric 051' = SUM ( 'Traffic Report'[value_051] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000017f
+
+	/// Filler metric.
+	measure 'Metric 052' = SUM ( 'Traffic Report'[value_052] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000180
+
+	/// Filler metric.
+	measure 'Metric 053' = SUM ( 'Traffic Report'[value_053] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000181
+
+	/// Filler metric.
+	measure 'Metric 054' = SUM ( 'Traffic Report'[value_054] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000182
+
+	/// Filler metric.
+	measure 'Metric 055' = SUM ( 'Traffic Report'[value_055] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000183
+
+	/// Filler metric.
+	measure 'Metric 056' = SUM ( 'Traffic Report'[value_056] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000184
+
+	/// Filler metric.
+	measure 'Metric 057' = SUM ( 'Traffic Report'[value_057] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000185
+
+	/// Filler metric.
+	measure 'Metric 058' = SUM ( 'Traffic Report'[value_058] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000186
+
+	/// Filler metric.
+	measure 'Metric 059' = SUM ( 'Traffic Report'[value_059] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000187
+
+	/// Filler metric.
+	measure 'Metric 060' = SUM ( 'Traffic Report'[value_060] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000188
+
+	/// Filler metric.
+	measure 'Metric 061' = SUM ( 'Traffic Report'[value_061] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000189
+
+	/// Filler metric.
+	measure 'Metric 062' = SUM ( 'Traffic Report'[value_062] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000018a
+
+	/// Filler metric.
+	measure 'Metric 063' = SUM ( 'Traffic Report'[value_063] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000018b
+
+	/// Filler metric.
+	measure 'Metric 064' = SUM ( 'Traffic Report'[value_064] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000018c
+
+	/// Filler metric.
+	measure 'Metric 065' = SUM ( 'Traffic Report'[value_065] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000018d
+
+	/// Filler metric.
+	measure 'Metric 066' = SUM ( 'Traffic Report'[value_066] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000018e
+
+	/// Filler metric.
+	measure 'Metric 067' = SUM ( 'Traffic Report'[value_067] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000018f
+
+	/// Filler metric.
+	measure 'Metric 068' = SUM ( 'Traffic Report'[value_068] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000190
+
+	/// Filler metric.
+	measure 'Metric 069' = SUM ( 'Traffic Report'[value_069] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000191
+
+	/// Filler metric.
+	measure 'Metric 070' = SUM ( 'Traffic Report'[value_070] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000192
+
+	/// Filler metric.
+	measure 'Metric 071' = SUM ( 'Traffic Report'[value_071] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000193
+
+	/// Filler metric.
+	measure 'Metric 072' = SUM ( 'Traffic Report'[value_072] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000194
+
+	/// Filler metric.
+	measure 'Metric 073' = SUM ( 'Traffic Report'[value_073] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000195
+
+	/// Filler metric.
+	measure 'Metric 074' = SUM ( 'Traffic Report'[value_074] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000196
+
+	/// Filler metric.
+	measure 'Metric 075' = SUM ( 'Traffic Report'[value_075] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000197
+
+	/// Filler metric.
+	measure 'Metric 076' = SUM ( 'Traffic Report'[value_076] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000198
+
+	/// Filler metric.
+	measure 'Metric 077' = SUM ( 'Traffic Report'[value_077] )
+		lineageTag: 5eed0000-0000-0000-0000-000000000199
+
+	/// Filler metric.
+	measure 'Metric 078' = SUM ( 'Traffic Report'[value_078] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000019a
+
+	/// Filler metric.
+	measure 'Metric 079' = SUM ( 'Traffic Report'[value_079] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000019b
+
+	/// Filler metric.
+	measure 'Metric 080' = SUM ( 'Traffic Report'[value_080] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000019c
+
+	/// Filler metric.
+	measure 'Metric 081' = SUM ( 'Traffic Report'[value_081] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000019d
+
+	/// Filler metric.
+	measure 'Metric 082' = SUM ( 'Traffic Report'[value_082] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000019e
+
+	/// Filler metric.
+	measure 'Metric 083' = SUM ( 'Traffic Report'[value_083] )
+		lineageTag: 5eed0000-0000-0000-0000-00000000019f
+
+	/// Filler metric.
+	measure 'Metric 084' = SUM ( 'Traffic Report'[value_084] )
+		lineageTag: 5eed0000-0000-0000-0000-0000000001a0
+
+	/// Filler metric.
+	measure 'Metric 085' = SUM ( 'Traffic Report'[value_085] )
+		lineageTag: 5eed0000-0000-0000-0000-0000000001a1
+
+	/// Filler metric.
+	measure 'Metric 086' = SUM ( 'Traffic Report'[value_086] )
+		lineageTag: 5eed0000-0000-0000-0000-0000000001a2
+
+	/// Filler metric.
+	measure 'Metric 087' = SUM ( 'Traffic Report'[value_087] )
+		lineageTag: 5eed0000-0000-0000-0000-0000000001a3
+
+	/// Filler metric.
+	measure 'Metric 088' = SUM ( 'Traffic Report'[value_088] )
+		lineageTag: 5eed0000-0000-0000-0000-0000000001a4
+
+	/// Filler metric.
+	measure 'Metric 089' = SUM ( 'Traffic Report'[value_089] )
+		lineageTag: 5eed0000-0000-0000-0000-0000000001a5
+
+	/// Filler metric.
+	measure 'Metric 090' = SUM ( 'Traffic Report'[value_090] )
+		lineageTag: 5eed0000-0000-0000-0000-0000000001a6
+

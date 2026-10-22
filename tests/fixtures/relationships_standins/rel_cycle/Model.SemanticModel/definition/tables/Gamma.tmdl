@@ -1,0 +1,19 @@
+table Gamma
+	lineageTag: 7bc96880-6b26-5cbd-9de3-32b443ee8fa2
+
+	column id
+		dataType: int64
+		lineageTag: c165f313-773e-519c-96f9-9eca2211b82f
+		summarizeBy: none
+		sourceColumn: id
+
+	column next_id
+		dataType: int64
+		lineageTag: b8c4f43f-fe86-5c20-94e7-cba2f4042a3d
+		summarizeBy: none
+		sourceColumn: next_id
+
+	partition Gamma = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

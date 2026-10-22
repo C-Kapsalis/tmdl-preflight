@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from typing import Callable
@@ -15,6 +16,7 @@ from ..dax import (
     scan_table_constructors,
 )
 from ..edits import EditRefused, read_text_file, verified_write
+from ..fieldparams import no_axis_files_note
 from .base import Context, Rule, Severity, Violation
 
 
@@ -23,79 +25,6 @@ def _calculated_partitions(model):
         for p in table.partitions:
             if p.kind == "calculated" and p.source:
                 yield table, p
-
-
-class FieldParameterCommaRunsRule(Rule):
-    id = "F001"
-    name = "fieldparam-comma-runs"
-    severity = Severity.ERROR
-    fixable = True
-    description = (
-        "Calculated-table sources (which include field-parameter tables) must "
-        "not contain stray structural commas: two or more commas separated "
-        "only by whitespace, typically left behind when a row was removed but "
-        "its separator was not. One stray comma makes the whole source "
-        "unparseable. Commas inside -- or // comments are exempt. Auto-fix "
-        "keeps each run's first comma and deletes the orphans."
-    )
-
-    def check(self, ctx: Context) -> list[Violation]:
-        out: list[Violation] = []
-        for model in ctx.models:
-            for table, part in _calculated_partitions(model):
-                for rel_line, orphans in find_comma_runs(part.source):
-                    line = (part.source_start_line or part.line) + rel_line - 1
-                    out.append(
-                        self.violation(
-                            f"stray comma run ({orphans} orphan comma(s)) in "
-                            f"calculated partition source",
-                            file=part.file,
-                            line=line,
-                            obj=f"{table.name} (partition source)",
-                        )
-                    )
-        return out
-
-    def fix(self, ctx: Context) -> list[str]:
-        applied: list[str] = []
-        for model in ctx.models:
-            for table, part in _calculated_partitions(model):
-                if not find_comma_runs(part.source):
-                    continue
-                if part.source_start_line is None or part.source_end_line is None:
-                    continue
-                applied.extend(
-                    _collapse_in_file(
-                        part.file, part.source_start_line, part.source_end_line, table.name
-                    )
-                )
-        return applied
-
-
-def _collapse_in_file(file: Path, start: int, end: int, table_name: str) -> list[str]:
-    """Collapse comma runs inside a 1-based inclusive line range of ``file``,
-    leaving every other byte untouched."""
-    original = read_text_file(file)
-    lines = original.lines()
-    lo, hi = start - 1, min(end, len(lines))
-    block = original.join(lines[lo:hi])
-    new_block, removed = collapse_comma_runs(block)
-    if not removed:
-        return []
-    lines[lo:hi] = new_block.split(original.newline)
-
-    def verify(old: str, new: str) -> None:
-        if old.replace(",", "") != new.replace(",", ""):
-            raise EditRefused("comma-run repair changed more than commas")
-
-    try:
-        verified_write(original, original.join(lines), verify)
-    except EditRefused:
-        return []
-    return [
-        f"{file.name}: removed {removed} orphan comma(s) from "
-        f"'{table_name}' partition source"
-    ]
 
 
 def _repair_block(
@@ -153,6 +82,10 @@ class _ConstructorRuleBase(Rule):
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
+        for model in ctx.models:
+            note = no_axis_files_note(model)
+            if note:
+                ctx.notes.append(note)
         for table, part, issue in self._issues(ctx):
             out.append(
                 self.violation(
@@ -167,6 +100,8 @@ class _ConstructorRuleBase(Rule):
     def _fix_with(self, ctx: Context, repair, label: str) -> list[str]:
         applied: list[str] = []
         done: set[tuple] = set()
+        touched: set[Path] = set()
+        total = 0
         for table, part, _issue in list(self._issues(ctx)):
             key = (part.file, part.source_start_line)
             if key in done or part.source_start_line is None or part.source_end_line is None:
@@ -177,8 +112,24 @@ class _ConstructorRuleBase(Rule):
                 self.issue_kind,
             )
             if changed:
-                applied.append(f"{part.file.name}: {label} {changed} comma(s) in '{table.name}' partition source")
+                applied.append(f"{part.file.name}: {label.format(changed)}")
+                total += changed
+                touched.add(part.file)
+        if total:
+            ctx.blocks.append(
+                f"Repaired {total} separator defect(s) across {len(touched)} file(s). Commit "
+                f"the changes and re-sync + FULL-refresh the affected workspace(s) - an "
+                f"incremental refresh will not rebuild a calculated table that previously "
+                f"failed to evaluate.")
         return applied
+
+
+#: The Desktop symptom of a separator defect is expected to match F001, but it
+#: was never observed for this defect on its own.
+DESKTOP_UNVERIFIED = (
+    "The Desktop symptom is expected to match F001 (the model opens, visuals on "
+    "the table fail), but it has not been observed for this defect on its own."
+)
 
 
 class MissingRowSeparatorRule(_ConstructorRuleBase):
@@ -191,20 +142,20 @@ class MissingRowSeparatorRule(_ConstructorRuleBase):
         "Rows of a { (...), (...) } table constructor (field parameters, "
         "calculated tables) must be separated by commas. A row appended after "
         "the previous last row without adding its comma makes the whole "
-        "source unparseable; the table then loads empty. Auto-fix inserts "
-        "the comma after the previous row."
+        "source unparseable. The Desktop symptom is expected to match F001 "
+        "(the model opens, visuals on the table fail), but it has not been "
+        "observed for this defect on its own. Auto-fix inserts the comma "
+        "after the previous row."
     )
 
     def _message(self, issue) -> str:
         return (
-            "two rows of the table constructor have no comma between them, "
-            "so the calculated partition source cannot be parsed and the "
-            "table loads empty. Add a comma after the previous row (the "
-            "auto-fix does)."
+            f"tuple closes with no ',' before the next tuple. {DESKTOP_UNVERIFIED} "
+            f"Add a comma after the previous row (the auto-fix does)."
         )
 
     def fix(self, ctx: Context) -> list[str]:
-        return self._fix_with(ctx, insert_missing_row_separators, "inserted")
+        return self._fix_with(ctx, insert_missing_row_separators, "added {0} separator comma(s)")
 
 
 class TrailingRowCommaRule(_ConstructorRuleBase):
@@ -217,38 +168,82 @@ class TrailingRowCommaRule(_ConstructorRuleBase):
         "The last row of a { (...), (...) } table constructor must not be "
         "followed by a comma. A trailing comma before the closing brace, "
         "typically left behind when the last row is deleted, makes the "
-        "source unparseable. Auto-fix deletes the comma."
+        "source unparseable; the Desktop symptom is expected to match F001 "
+        "but has not been observed for this defect alone. Auto-fix deletes "
+        "the comma."
     )
 
     def _message(self, issue) -> str:
         return (
-            "the table constructor ends with a comma before its closing "
-            "brace, so the calculated partition source cannot be parsed. "
-            "Delete the trailing comma (the auto-fix does)."
+            "last row before '}' has a trailing ',' -> DAX: \"Table constructor "
+            f"cannot have optional argument\". {DESKTOP_UNVERIFIED} "
+            f"Delete the trailing comma (the auto-fix does)."
         )
 
     def fix(self, ctx: Context) -> list[str]:
-        return self._fix_with(ctx, remove_trailing_row_commas, "removed")
+        return self._fix_with(ctx, remove_trailing_row_commas, "removed {0} trailing comma(s)")
 
 
-class RaggedRowWidthRule(_ConstructorRuleBase):
-    id = "F004"
-    name = "fieldparam-ragged-rows"
-    severity = Severity.WARNING
-    issue_kind = "ragged"
+_THREE_FIELD_RE = re.compile(r'\(\s*"(?P<label>[^"]*)"\s*,\s*NAMEOF\s*\([^()]*\)\s*,\s*-?\d+\s*\)')
+_FOUR_FIELD_RE = re.compile(
+    r'\(\s*"(?P<label>[^"]*)"\s*,\s*NAMEOF\s*\([^()]*\)\s*,\s*-?\d+,\s*"[^"]*"\s*\)'
+)
+
+
+class FieldParameterCategoryColumnRule(Rule):
+    id = "F005"
+    name = "fieldparam-category-column"
+    severity = Severity.ERROR
+    option_defaults = {"category_column_tables": [f"x-Selector {i}" for i in range(1, 10)],
+                       "category_position": 4}
     description = (
-        "Every row of a { (...), (...) } table constructor should have the "
-        "same number of values. A row with one value too many or too few "
-        "usually means a missing or extra comma inside the row, which "
-        "shifts values into the wrong columns or fails the source. Not "
-        "auto-fixable: only a human knows which value is wrong."
+        "All x-Selector field parameters must have 4th parameter (category_x_id). "
+        "A 3-field row (label, NAMEOF, order) whose label has no 4-field twin in "
+        "the same table silently drops out of every category filter. Only fenced "
+        "calculated sources are read. Not auto-fixable: the category is a business "
+        "decision. The tables to read are named by the category_column_tables "
+        "option (names or globs); by default the numbered x tables x-Selector 1 to "
+        "x-Selector 9."
     )
 
-    def _message(self, issue) -> str:
-        widths = sorted(set(issue.widths))
-        counts = {w: issue.widths.count(w) for w in widths}
-        detail = ", ".join(f"{counts[w]} row(s) with {w}" for w in widths)
-        return (
-            f"rows of this table constructor have different widths ({detail}). "
-            f"Check the odd row(s) for a missing or extra value."
-        )
+    def check(self, ctx: Context) -> list[Violation]:
+        from fnmatch import fnmatchcase
+
+        patterns = self.options.get("category_column_tables") or []
+        if not patterns:
+            return []
+        out: list[Violation] = []
+        for model in ctx.models:
+            for table in model.table_list:
+                if not any(fnmatchcase(table.name, p) for p in patterns):
+                    continue
+                part = next((p for p in table.partitions if p.kind == "calculated" and p.source), None)
+                if part is None or not _is_fenced(part):
+                    continue
+                four = {m.group("label") for m in _FOUR_FIELD_RE.finditer(part.source)}
+                for m in _THREE_FIELD_RE.finditer(part.source):
+                    if m.group("label") in four:
+                        continue
+                    # the fenced body starts on the line after 'source = ```'
+                    line = (part.source_start_line or part.line) + 1 + part.source.count("\n", 0, m.start())
+                    out.append(self.violation(
+                        f'{table.name}: "{m.group("label")}"',
+                        file=part.file, line=line, obj=f"{table.name}[{m.group('label')}]",
+                    ))
+        return out
+
+
+def _is_fenced(part) -> bool:
+    try:
+        lines = part.file.read_text(encoding="utf-8-sig").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return False
+    for idx in range(part.line - 1, min(len(lines), (part.source_start_line or part.line) + 1)):
+        if lines[idx].strip().startswith("source") and "```" in lines[idx]:
+            return True
+    return False
+
+
+# F001 and F004 moved to fp_rows (whole-file scope and row-level fixers);
+# keep them importable from here.
+from .fp_rows import FieldParameterCommaRunsRule, RaggedRowWidthRule  # noqa: E402,F401

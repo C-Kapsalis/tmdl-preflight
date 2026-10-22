@@ -1,0 +1,235 @@
+[
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('__Calendar'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 60
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE TOPN(50, '__Calendar')",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "__Calendar[Date]": "2025-01-01T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-02T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-03T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-04T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-05T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-06T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-07T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-08T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-09T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-10T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-11T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-12T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-13T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-14T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-15T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-16T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-17T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-18T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-19T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-20T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-21T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-22T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-23T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-24T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-25T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-26T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-27T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-28T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-29T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-30T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-31T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-32T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-33T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-34T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-35T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-36T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-37T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-38T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-39T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-40T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-41T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-42T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-43T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-44T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-45T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-46T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-47T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-48T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-49T00:00:00",
+                  "__Calendar[Year]": 2025
+                },
+                {
+                  "__Calendar[Date]": "2025-01-50T00:00:00",
+                  "__Calendar[Year]": 2025
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

@@ -1,0 +1,41 @@
+[
+  {
+    "query": "EVALUATE ROW( \"MinDate\", MIN('__Calendar'[Date]), \"MaxDate\", MAX('__Calendar'[Date]), \"RowCount\", COUNTROWS('__Calendar') )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[MinDate]": "2024-01-01T00:00:00",
+                  "[MaxDate]": "2025-12-30T00:00:00",
+                  "[RowCount]": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"CalendarRows\", COUNTROWS('__Calendar'), \"AccountsRows\", COUNTROWS('_Accounts') )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[CalendarRows]": 1,
+                  "[AccountsRows]": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

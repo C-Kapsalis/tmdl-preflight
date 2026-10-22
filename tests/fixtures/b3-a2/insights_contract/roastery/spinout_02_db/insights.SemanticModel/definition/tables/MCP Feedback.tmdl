@@ -1,0 +1,91 @@
+table 'MCP Feedback'
+	lineageTag: f4b91dce-e23c-5027-b2e5-ecf397033b1a
+
+	column feedback_id
+		dataType: int64
+		lineageTag: 6fa3be26-8284-5245-ae28-e4460caa0db4
+		summarizeBy: none
+		sourceColumn: feedback_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column user_id
+		dataType: string
+		lineageTag: 55105972-d25c-5995-81d9-f017887d1003
+		summarizeBy: none
+		sourceColumn: user_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column last_tool_call_id
+		dataType: int64
+		lineageTag: 8513001a-dd29-5624-b616-0bfa1e4cea52
+		summarizeBy: none
+		sourceColumn: last_tool_call_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column date
+		dataType: dateTime
+		lineageTag: 241ce0bd-ea9e-5310-8e3e-1290f0681795
+		summarizeBy: none
+		sourceColumn: date
+
+		annotation SummarizationSetBy = Automatic
+
+	column created_at
+		dataType: dateTime
+		lineageTag: c0a3dd2f-4fb0-539c-9c97-2747292e1248
+		summarizeBy: none
+		sourceColumn: created_at
+
+		annotation SummarizationSetBy = Automatic
+
+	column kind
+		dataType: string
+		lineageTag: 3b797ec7-dc33-53ef-b8ab-c0391e664050
+		summarizeBy: none
+		sourceColumn: kind
+
+		annotation SummarizationSetBy = Automatic
+
+	column status
+		dataType: string
+		lineageTag: c567e5ea-07d4-5f58-bf96-7eaf653b26b7
+		summarizeBy: none
+		sourceColumn: status
+
+		annotation SummarizationSetBy = Automatic
+
+	column org_id
+		dataType: int64
+		lineageTag: d0a83f56-4e92-5adb-9001-9be4412a2bb8
+		summarizeBy: none
+		sourceColumn: org_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Session Key' = LOOKUPVALUE('MCP Tool Calls'[session_id], 'MCP Tool Calls'[id], 'MCP Feedback'[last_tool_call_id])
+		dataType: int64
+		lineageTag: 3f6bad65-2f28-518b-b2f8-a2903dfedd9d
+		summarizeBy: none
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Analysis Category at Submit' =
+			VAR SubmittedAt = 'MCP Feedback'[created_at]
+			VAR LastCall = TOPN(1, FILTER('MCP Tool Calls', 'MCP Tool Calls'[session_id] = 'MCP Feedback'[Session Key] && 'MCP Tool Calls'[created_at] < SubmittedAt && NOT ISBLANK('MCP Tool Calls'[Analysis Category])), 'MCP Tool Calls'[created_at], DESC, 'MCP Tool Calls'[id], DESC)
+			RETURN MAXX(LastCall, 'MCP Tool Calls'[Analysis Category])
+		dataType: string
+		lineageTag: a667279f-c2f6-5ff1-9fa8-618902d5de58
+		summarizeBy: none
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'MCP Feedback' = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from feedback")
+				in
+				    Source

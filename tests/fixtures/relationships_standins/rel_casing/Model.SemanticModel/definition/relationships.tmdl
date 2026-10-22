@@ -1,0 +1,3 @@
+relationship rel-sales-stores-0001
+	fromColumn: Sales.store_id
+	toColumn: _Stores.Store_ID

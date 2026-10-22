@@ -26,7 +26,7 @@ class TestFieldParameterCommaRuns:
         _inject_orphan_comma(definition)
         violations = FieldParameterCommaRunsRule().check(Context(project))
         assert len(violations) == 1
-        assert "stray comma run" in violations[0].message
+        assert violations[0].message.startswith("1 orphan comma(s).")
         assert violations[0].fixable
 
     def test_fix_collapses_run_and_keeps_live_rows(self, project, definition):
@@ -157,5 +157,6 @@ class TestRaggedRows:
         )
         violations = RaggedRowWidthRule().check(Context(project))
         assert len(violations) == 1
-        assert violations[0].severity == Severity.WARNING and not violations[0].fixable
-        assert "1 row(s) with 2, 3 row(s) with 3" in violations[0].message
+        # an error with a fixer since 1.2 (the engine refuses uneven rows)
+        assert violations[0].severity == Severity.ERROR and violations[0].fixable
+        assert violations[0].message == '"Orders #" has 2 fields, norm is 3'

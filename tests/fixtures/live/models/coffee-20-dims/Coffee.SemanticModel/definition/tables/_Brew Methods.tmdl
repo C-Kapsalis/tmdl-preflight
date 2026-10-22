@@ -1,0 +1,16 @@
+table '_Brew Methods'
+	lineageTag: e8954f0e-cab2-5a2a-825a-470fef8e5655
+
+	column Key
+		dataType: int64
+		lineageTag: 104649ba-b3e8-5f0a-8de8-414455dbafec
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition '_Brew Methods' = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

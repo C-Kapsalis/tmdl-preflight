@@ -1,0 +1,62 @@
+table 'x-Selector 1'
+	lineageTag: d184ce53-8560-5107-bbb9-234a4602c957
+
+	column 'x-Selector 1'
+		lineageTag: d472638a-20c2-5002-8453-e35a5d0481b8
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+		relatedColumnDetails
+			groupByColumn: 'x-Selector 1 Fields'
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'x-Selector 1 Fields'
+		lineageTag: bdc5e9ad-7d5b-53dd-b07a-9d0700d83897
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+		extendedProperty ParameterMetadata =
+				{
+				  "version": 3,
+				  "kind": 2
+				}
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'x-Selector 1 Order'
+		lineageTag: 240daef5-cdb3-56b8-864f-669a4b04697b
+		summarizeBy: none
+		sourceColumn: [Value3]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'x-Selector 1 Group'
+		lineageTag: 629b1874-05a6-5524-8d71-343bfa6a499d
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'x-Selector 1 Category'
+		lineageTag: 2a765b7d-76e6-5565-b2a8-eff28922e316
+		summarizeBy: none
+		sourceColumn: [Value5]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'x-Selector 1 Extra 6'
+		lineageTag: ece8b3fd-bd3b-5efe-b80d-f0aa83e6e86d
+		summarizeBy: none
+		sourceColumn: [Value6]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'x-Selector 1' = calculated
+		mode: import
+		source = ```
+				{
+				("Cups Sold", NAMEOF([Cups Sold]), 1, "beans_x", "Other", "No"),
+				("Kg Roasted", NAMEOF([Kg Roasted]), 2, "beans_x", "Other", "No")
+				}
+				```

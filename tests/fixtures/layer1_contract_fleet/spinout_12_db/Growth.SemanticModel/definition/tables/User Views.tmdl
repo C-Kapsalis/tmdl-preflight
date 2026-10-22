@@ -1,0 +1,29 @@
+table 'User Views'
+	lineageTag: 5eed0000-0000-0000-0000-0000000000fa
+
+	column asset_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000fb
+		summarizeBy: none
+		sourceColumn: asset_id
+
+	column event_date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-0000000000fc
+		summarizeBy: none
+		sourceColumn: event_date
+
+	column user_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000fd
+		summarizeBy: none
+		sourceColumn: user_id
+
+	partition 'User Views' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

@@ -1,0 +1,28 @@
+table Sitemap
+	lineageTag: dfacb7fc-661c-5a70-a245-ee84fce1b464
+
+	column landing_page_x_id
+		dataType: int64
+		lineageTag: d7b2e1b0-fa0d-54a8-826b-b7d11024383a
+		summarizeBy: none
+		sourceColumn: landing_page_x_id
+
+	column account_x_id
+		dataType: int64
+		lineageTag: 99e99731-641d-512b-8c14-4900aa2b445f
+		summarizeBy: none
+		sourceColumn: account_x_id
+
+	column url
+		dataType: string
+		lineageTag: 162e128d-931b-580a-b316-139d7032c8a5
+		summarizeBy: none
+		sourceColumn: url
+
+	partition Sitemap = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

@@ -1,0 +1,14 @@
+table 'M010 g correct placement'
+	lineageTag: dfe2be1b-4120-5324-adfa-82babbc3e124
+
+	measure 'Cups Sold' =
+			VAR c = SUM(Brews[cups])
+			RETURN
+			c
+		isHidden
+		displayFolder: Brewing
+		lineageTag: efa81319-f611-52ac-a79a-2c559d065ccb
+
+	partition 'M010 g correct placement' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})

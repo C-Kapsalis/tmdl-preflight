@@ -1,0 +1,18 @@
+relationship 923a9ade-f4ea-5f19-bdfe-02b7b9edc92e
+	fromColumn: 'MCP Tool Calls'.session_id
+	toColumn: 'MCP Activity'.id
+
+relationship fcef8b98-d063-5b98-b642-09d2170da177
+	fromColumn: 'MCP Feedback'.last_tool_call_id
+	toColumn: 'MCP Tool Calls'.id
+
+relationship dcda16f4-0523-56a5-b857-702032e657a5
+	isActive: false
+	fromColumn: 'MCP Feedback'.date
+	toColumn: __Calendar.Date
+
+relationship ed84c155-fd55-53fb-ad71-3719afe5330b
+	isActive: false
+	fromColumn: 'MCP Feedback'.org_id
+	toColumn: 'MCP Activity'.id
+

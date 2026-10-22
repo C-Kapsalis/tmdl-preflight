@@ -1,0 +1,35 @@
+table _Campaigns
+	lineageTag: 5eed0000-0000-0000-0000-00000000009f
+
+	column 'Campaign Type'
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-0000000000a0
+		summarizeBy: none
+		sourceColumn: Campaign Type
+
+	column ad_group_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000a1
+		summarizeBy: none
+		sourceColumn: ad_group_x_id
+
+	column campaign_name
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-0000000000a2
+		summarizeBy: none
+		sourceColumn: campaign_name
+
+	column content_group_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000a3
+		summarizeBy: none
+		sourceColumn: content_group_id
+
+	partition _Campaigns = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

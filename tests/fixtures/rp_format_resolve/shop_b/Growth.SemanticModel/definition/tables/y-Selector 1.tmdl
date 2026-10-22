@@ -1,0 +1,14 @@
+table 'y-Selector 1'
+	lineageTag: 00000000-0000-0000-0000-830137163079
+
+	measure 'YL' = NAMEOF('_Products'[product_id])
+
+	column 'y-Selector 1'
+		dataType: string
+		sourceColumn: [Value1]
+
+	partition 'y-Selector 1' = m
+		mode: import
+		source = ```
+			let x = 1 in x
+			```

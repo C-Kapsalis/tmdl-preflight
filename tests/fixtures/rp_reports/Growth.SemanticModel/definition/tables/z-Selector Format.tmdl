@@ -1,0 +1,25 @@
+table 'z-Selector Format'
+	lineageTag: 11111111-0000-0000-0000-000000000001
+
+	calculationGroup
+
+		calculationItem Format = SELECTEDMEASURE()
+
+			formatStringDefinition =
+					VAR _curSfx = " EUR"
+					RETURN
+					SWITCH(
+						TRUE(),
+						ISINSCOPE('x-Selector 1'[x-Selector 1]),
+							SWITCH(TRUE(), CONTAINSSTRING(SELECTEDVALUE('x-Selector 1'[x-Selector 1]), "cost"), "#,##0.0 " & _curSfx, "General"),
+						CONTAINSSTRING(SELECTEDVALUE(Currency[Code]), "usd"), "$#,##0",
+						CONTAINSSTRING(SELECTEDMEASURENAME(), "/ "), "#,##0 " & _curSfx,
+						CONTAINSSTRING(SELECTEDMEASURENAME(), "cost"), "#,##0.00",
+						"General"
+					)
+
+	column Name
+		dataType: string
+		sourceColumn: Name
+
+	partition 'z-Selector Format' = calculationGroup

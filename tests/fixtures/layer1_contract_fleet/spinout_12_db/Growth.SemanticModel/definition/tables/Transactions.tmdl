@@ -1,0 +1,23 @@
+table Transactions
+	lineageTag: 5eed0000-0000-0000-0000-000000000108
+
+	column event_date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-000000000109
+		summarizeBy: none
+		sourceColumn: event_date
+
+	column user_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000010a
+		summarizeBy: none
+		sourceColumn: user_id
+
+	partition Transactions = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

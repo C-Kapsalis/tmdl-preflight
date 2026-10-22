@@ -1,0 +1,31 @@
+table 'f-Filters'
+	lineageTag: b97b6d4d-3896-5edd-a477-8e9905827885
+
+	measure 'f-All' =
+			VAR all_cats = CONCATENATEX(VALUES('z-Map Dimension-Measure Groupings'[Analysis Category]), [Analysis Category], ",")
+			VAR temp_basic =
+			    IF(CONTAINSSTRING(all_cats, "Email Marketing"), IF([f-Email Marketing] > 0, TRUE(), FALSE()), TRUE())
+			    && IF(CONTAINSSTRING(all_cats, "Beans"), IF([f-Beans] > 0, TRUE(), FALSE()), TRUE())
+			    && IF(CONTAINSSTRING(all_cats, "Keywords"), IF([f-Keywords] > 0, TRUE(), FALSE()), TRUE())
+			    // && IF(CONTAINSSTRING(all_cats, "Sitemap"), IF([f-Sitemap] > 0, TRUE(), FALSE()), TRUE())
+			VAR temp_alt =
+			    IF(CONTAINSSTRING(all_cats, "Email Marketing"), IF([f-Email Marketing] > 0, TRUE(), FALSE()), FALSE())
+			    || IF(CONTAINSSTRING(all_cats, "Beans"), IF([f-Beans] > 0, TRUE(), FALSE()), FALSE())
+			    || IF(CONTAINSSTRING(all_cats, "Keywords"), IF([f-Keywords] > 0, TRUE(), FALSE()), FALSE())
+			    // || IF(CONTAINSSTRING(all_cats, "Sitemap"), IF([f-Sitemap] > 0, TRUE(), FALSE()), FALSE())
+			RETURN
+			    IF(temp_basic || temp_alt, 1, 0)
+		lineageTag: 169885ad-b981-5da3-9ffd-508d6ab7cffd
+
+	measure 'f-Email Marketing' = COUNTROWS(Mailings)
+		lineageTag: ef79cbcc-c80c-5f20-a6bb-61f4e487c9bc
+
+	measure 'f-Beans' = COUNTROWS(Beans)
+		lineageTag: 3b802558-cbbe-5ee4-b7fa-a6ae07d89229
+
+	measure 'f-Keywords' = 1
+		lineageTag: 8eeb8411-6398-574f-8433-724f23928fb6
+
+	partition f-Filters = calculated
+		mode: import
+		source = ROW("x", 1)

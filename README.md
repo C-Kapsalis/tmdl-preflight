@@ -14,15 +14,18 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 
 ## Features
 
-- **37 rules** over the failure modes that reject imports or silently corrupt
-  results: tables missing their `ref table` line, refs to tables that do not
-  exist, tables with no partition, inline `#table` entity sources that force
-  a composite model, duplicate lineage tags and object names, TMDL properties
-  leaked into DAX, dangling `///` descriptions, DAX references to tables and
-  columns that are gone, broken relationship endpoints and ambiguous active
-  paths, stray or missing commas in field-parameter sources, bookmark and
-  report-definition defects, and more.
-- **10 auto-fixers** for the defects whose repair is fully mechanical,
+- **119 rules** over the failure modes that reject imports or silently corrupt
+  results: duplicate lineage tags and object names, TMDL properties leaked
+  into DAX, dangling `///` descriptions, tables with no partition, inline
+  `#table` entity sources that force a composite model, DAX references to
+  tables and columns that are gone, broken relationship endpoints and
+  ambiguous active paths, stray or missing commas in field-parameter
+  sources, bookmark and report-definition defects, and more. Rules that
+  encode one team's conventions (measure placement, naming, ratchets) are
+  opt-in, and project contracts (required objects, pinned relationships,
+  field-parameter registrations) are declared in the configuration. The
+  full catalog is generated into [`docs/rules.md`](docs/rules.md).
+- **25 auto-fixers** for the defects whose repair is fully mechanical,
   applied via a check → fix → re-check loop that never lets a fixer vouch
   for itself.
 - **Surgical, verified edits.** Fixers rewrite single lines or single JSON
@@ -35,7 +38,7 @@ that class of defect on your machine, and repairs the mechanical ones itself.
 - **CI-ready output:** text, JSON, GitHub annotations, SARIF 2.1.0 and
   Markdown, plus a pre-commit hook and an example GitHub Actions workflow.
 - **Four entry points:** a CLI (`check`, `fix`, `baseline`, `stats`,
-  `rules`), a pytest fixture (`tmdl_preflight`), and a plain Python API
+  `rules`, `manifest`, `schema-check`, `refs` and more), a pytest fixture (`tmdl_preflight`), and a plain Python API
   (`check(Context(path), ruleset)`).
 - **Zero runtime dependencies.** Standard library only; Python ≥ 3.10
   (TOML config files need 3.11+; the JSON form works everywhere).
@@ -57,26 +60,31 @@ Point `check` at any PBIP folder: a project root, a `*.SemanticModel`
 folder, a `definition` folder, or a `*.Report` folder. The repo ships a
 small fictional bike-shop project you can try it on. [`examples/`](examples/)
 has a clean copy and a pre-broken one. `bike-shop-broken` **will not open in
-Power BI Desktop**: `Stores` lost its `ref table` line, its `lineageTag` is
-copy-pasted from `Products`, `__Calendar`'s tag is a placeholder, and a
-field-parameter row was deleted without its comma. `check` names each one,
-with file, line, severity, and whether the fixer can handle it:
+Power BI Desktop**: `Stores` copies its `lineageTag` from `Products`, which
+Desktop refuses ("An object with lineage-tag ... already exists in the
+collection"). It has three more defects: `Stores` lost its `ref table`
+line, `__Calendar`'s tag is a placeholder, and a field-parameter row was
+deleted without its comma. `check` names each one, with file, line,
+severity, and whether the fixer can handle it:
 
 ```console
 $ tmdl-preflight check examples/bike-shop-broken
-BikeShop.SemanticModel\definition\tables\Metric Selector.tmdl:45  F001 error: stray comma run (1 orphan comma(s)) in calculated partition source [Metric Selector (partition source)] (auto-fixable)
-BikeShop.SemanticModel\definition\tables\Sales Measures.tmdl:21  S001 info: visible measure has no formatString, so it renders with the engine's default formatting. Add a formatString, or run with --ignore S001 if your formatting strategy lives elsewhere. [Sales Measures[Units Sold]]
-BikeShop.SemanticModel\definition\tables\Stores.tmdl  M006 error: table 'Stores' is defined in tables/ but has no 'ref table' line in model.tmdl, so it is not part of the model and Power BI will not open the project. Add: ref table Stores [Stores] (auto-fixable)
-BikeShop.SemanticModel\definition\tables\Stores.tmdl:3  M003 error: lineageTag 'e689596a-59ea-4b2c-a14d-48596a7b8c9d' duplicates the one on table Products (Products.tmdl:3) [table Stores] (auto-fixable)
-BikeShop.SemanticModel\definition\tables\__Calendar.tmdl:4  M004 warning: lineageTag 'calendar-tag-TODO' is not a canonical UUID [table __Calendar] (auto-fixable)
+BikeShop.SemanticModel/definition/tables/Metric Selector.tmdl:45  F001 error: 1 orphan comma(s). Power BI Desktop still opens the model, but every visual that uses this table fails ('Error fetching data for this visual'). Delete the orphan comma(s) (the auto-fix does). [Metric Selector (field-parameter file)] (auto-fixable)
+BikeShop.SemanticModel/definition/tables/Sales Measures.tmdl:21  S001 info: visible measure has no formatString, so it renders with the engine's default formatting. Add a formatString, or run with --ignore S001 if your formatting strategy lives elsewhere. [Sales Measures[Units Sold]]
+BikeShop.SemanticModel/definition/tables/Sales Measures.tmdl:25  M017 info: Line 25: Multiline DAX should use triple backticks
+BikeShop.SemanticModel/definition/tables/Stores.tmdl  M006 warning: table 'Stores' is defined in tables/ but has no 'ref table' line in model.tmdl. Power BI Desktop still loads the table, but model.tmdl is out of step with tables/. Add: ref table Stores [Stores] (auto-fixable)
+BikeShop.SemanticModel/definition/tables/Stores.tmdl:3  M003 error: lineageTag 'e689596a-59ea-4b2c-a14d-48596a7b8c9d' duplicates the one on table Products (Products.tmdl:3) [table Stores] (auto-fixable)
+BikeShop.SemanticModel/definition/tables/__Calendar.tmdl:4  M004 warning: lineageTag 'calendar-tag-TODO' is not a canonical UUID [table __Calendar] (auto-fixable)
 
 scanned: 1 model, 6 tables, 22 columns, 6 measures, 4 relationships, 8 DAX expressions, 1 report
-tmdl-preflight: 3 error(s), 1 warning(s), 1 info(s)
+tmdl-preflight: 2 error(s), 2 warning(s), 2 info(s)
 ```
 
-Exit code 1. The four blockers carry the `(auto-fixable)` marker; the S001
+Exit code 1. The four defects carry the `(auto-fixable)` marker; the S001
 style nudge does not (info never blocks). `check` is strictly read-only.
-`fix` repairs what it safely can, then re-checks from disk:
+`fix` repairs what it safely can, then re-checks from disk (`fix --dry-run`
+shows the plan without writing; `fix --check` writes nothing and exits with
+the number of objects the selected fixers would act on):
 
 ```console
 $ cp -r examples/bike-shop-broken /tmp/bike-shop
@@ -84,18 +92,21 @@ $ tmdl-preflight fix /tmp/bike-shop
 fixed  M006: model.tmdl: + ref table Stores
 fixed  M003: Stores.tmdl:3 (table Stores): 'e689596a-...' -> '1556d6dd-6012-4be4-8d04-6383081d6e02'
 fixed  M004: __Calendar.tmdl:4 (table __Calendar): 'calendar-tag-TODO' -> '1e41940d-23a7-4d0f-b260-4c40ecdd16fa'
-fixed  F001: Metric Selector.tmdl: removed 1 orphan comma(s) from 'Metric Selector' partition source
+fixed  F001: Metric Selector.tmdl: removed 1 orphan comma(s)
 
-BikeShop.SemanticModel\definition\tables\Sales Measures.tmdl:21  S001 info: visible measure has no formatString, so it renders with the engine's default formatting. Add a formatString, or run with --ignore S001 if your formatting strategy lives elsewhere. [Sales Measures[Units Sold]]
+BikeShop.SemanticModel/definition/tables/Sales Measures.tmdl:21  S001 info: visible measure has no formatString, so it renders with the engine's default formatting. Add a formatString, or run with --ignore S001 if your formatting strategy lives elsewhere. [Sales Measures[Units Sold]]
+BikeShop.SemanticModel/definition/tables/Sales Measures.tmdl:25  M017 info: Line 25: Multiline DAX should use triple backticks
 
 scanned: 1 model, 6 tables, 22 columns, 6 measures, 4 relationships, 8 DAX expressions, 1 report
-tmdl-preflight: 0 error(s), 0 warning(s), 1 info(s), 4 fix(es) applied
+tmdl-preflight: 0 error(s), 0 warning(s), 2 info(s), 4 fix(es) applied
+
+Removed 1 orphan comma(s) across 1 file(s). Commit the changes and re-sync the affected workspace(s).
 ```
 
-Exit code 0, because the *re-check* came back clean of blockers, not
-because fixers ran. The four blockers are gone and the project now opens in
-Power BI Desktop; the S001 info line is yours to act on or ignore. Diff,
-review, commit.
+Exit code 0, because the *re-check* came back clean, not because fixers
+ran. Power BI Desktop opened the fixed copy and showed its data (Windows,
+2026-10-18); the S001 info line is yours to act on or ignore. Diff, review,
+commit.
 
 ## Rules
 
@@ -103,45 +114,146 @@ review, commit.
 |------|-------------------|----------|----------|
 | M001 | missing `model.tmdl` / `tables/` folder (truncated exports, bad merges) | error | no |
 | M002 | unreadable files, null bytes, unpaired ```` ``` ```` fences, missing table declarations, declarations the parser could not attach | error | no |
-| M003 | duplicate `lineageTag` values; the deployment target rejects the model | error | yes |
-| M004 | placeholder / non-UUID `lineageTag` values | warning | yes |
+| M003 | duplicate `lineageTag` values; Power BI Desktop refuses to open the model | error | yes |
+| M004 | placeholder / non-UUID `lineageTag` values (Desktop still opens the model) | warning | yes |
 | M005 | column `dataType` values the tabular engine does not accept | warning | no |
-| M006 | a table with no `ref table` line in `model.tmdl`, so Power BI Desktop never opens the project | error | yes |
+| M006 | a table file with no `ref table` line in `model.tmdl` (Desktop still loads it, but the list is out of step) | warning | yes |
 | M007 | a table with no partition at all; Power BI Desktop crashes on open | error | no |
 | M008 | an inline `#table(type table ...)` source, which forces a composite model and blocks open | error | no |
 | M009 | a table literally named "Measures", a reserved name Power BI refuses to open | error | no |
-| M010 | a TMDL property line (`lineageTag:`, `isHidden`, `annotation` ...) inside an expression body | error | no |
-| M011 | a simple property written after an `annotation`/`changedProperty`/`extendedProperty` block | warning | yes |
+| M010 | a TMDL property line (`lineageTag:`, `isHidden`, `annotation`, `kpi` ...) inside an expression body | error | no |
+| M011 | a simple property written after a nested section (`annotation`, `kpi`, `detailRows`, `formatStringDefinition` ...) | error | yes |
 | M012 | duplicate table names (case-insensitive), duplicate columns or measures in one table, a measure named like a column of its table | error | no |
-| M013 | a `///` description followed by a blank line (error) or the end of the file (warning) | error | yes |
+| M013 | a `///` description followed by a blank line or the end of the file | error | yes |
 | M014 | a calculation group in a model without `discourageImplicitMeasures` | error | no |
 | M015 | a `ref table` line naming a table no file defines | error | no |
-| D001 | unbalanced `()`, `{}`, `[]`, quotes in any DAX expression | error | no |
-| D002 | `NAMEOF()` references to missing tables, columns, or measures | error | no |
+| M016 | missing `database.tmdl` or required table files, null bytes, whitespace-only fenced measures, one-tab root comments (CRLF check opt-in) | error | no |
+| M017 | structure lines indented with four spaces instead of tabs | error | no |
+| M018 | the same annotation name twice in one scope of `model.tmdl` | error | no |
+| M019 | a `queryGroup:` reference to a folder `model.tmdl` never declares | error | yes |
+| M020 | a calculated column declared with `=` but no expression | error | no |
+| M021 | Q&A linguistic metadata in `cultures/` bound to a table that no longer exists | error | yes |
+| M022 | a `diagramLayout.json` that is not the blank "All tables" layout (opt-in) | warning | yes |
+| P001 | a `refreshPolicy` placed after its partition, with out-of-domain values, a `sourceExpression` that differs from the partition source, or an unwindowed source | error | yes (unsafe: only when selected; copies the partition source, adds the policies P002 reports missing) |
+| P002 | an incremental-refresh-eligible fact with no `refreshPolicy` and no backlog entry (opt-in; `refresh_policy` config) | warning | via P001 |
+| C001 | a required table (format calculation group, helper table ...) or required measure is missing (configured) | error | no |
+| C002 | a declared object contract broke: a table, column or measure is gone, a key changed type, a DAX shape changed | error | no |
+| C003 | a declared relationship contract broke: an unsanctioned axis edge, a guard that no longer matches the graph, a pinned edge changed | error | no |
+| C004 | a declared field-parameter registration broke: a missing label, an ordinal outside its gap, a duplicate ordinal | error | no |
+| C005 | a declared measure-reference contract broke (a helper names a table it must not, a consumer skips its partner helper, a ratio divides a raw measure) | error | no |
+| C006 | a cost ratio over a re-allocated count is not wrapped in its window guard, or the guard/boundary drifted (configured) | error | no |
+| C007 | a count flag compared with `= 1` or a boolean, or a boolean flag compared with a number (configured) | error | no |
+| C008 | a filter that must stay on one arm of a blended measure moved, spread or changed literals (configured) | error | no |
+| C009 | reach-guard helpers that disagree on their dimension list or key a table by the wrong column (configured) | error | no |
+| C010 | a grain guard that misses a blocked table or axis column, or blocks a conformed one (configured) | error | no |
+| C011 | a grain-policy exception that is not narrow (configured) | error | no |
+| C012 | a missing format or time-intelligence calculation-group table (opt-in) | error | no |
+| D001 | unbalanced `()`, `{}`, `[]`, quotes in any DAX expression; a clean share under `min_success_rate`; a model with no measures (warning) | error | no |
+| D002 | `NAMEOF()` references to missing tables, columns or measures, unparseable field-parameter rows, names spelled with other casing | error | no |
 | D003 | the same measure name declared in two tables (engine requires model-wide uniqueness, case-insensitive) | error | no |
-| D004 | DAX references to tables or qualified columns that do not exist (error); unresolved bare `[X]` (warning) | error | no |
+| D004 | DAX references to tables or qualified columns that do not exist, or spelled with other casing (error); unresolved or ambiguous bare `[X]` (warning) | error | yes (unsafe: only when selected; removes generated `ISFILTERED('<missing table>') \|\|` lines) |
 | D005 | the same `VAR` declared twice in one scope | error | no |
-| R001 | relationships pointing at missing tables or columns, or missing an endpoint | error | no |
+| D010 | no calculated-table, calculation-item or format-string DAX at all (opt-in sanity floor) | warning | no |
+| D011 | a "Daily" calculation item that averages ratios per day | error | no |
+| D012 | an OR chain longer than 60 terms in one VAR | error | no |
+| X001 | two facts compared on a surrogate key whose dimension has several rows per entity (configured keys) | error | no |
+| R001 | relationships pointing at missing tables or columns, missing an endpoint, or spelled with other casing | error | no |
 | R002 | cardinality values other than `one`/`many` | error | no |
 | R003 | two relationships over the same column pair (copy/paste or merge accident) | warning | no |
 | R004 | unreviewed `bothDirections` cross-filters (ambiguous filter paths) | info | no |
 | R005 | data tables with no relationships (load leftovers) | info | no |
 | R006 | more than one active relationship between the same two tables | error | no |
-| R007 | relationships created by Desktop's autodetection (`AutoDetected_*` ids) | warning | no |
-| F001 | stray commas that make a field-parameter / calculated-table source unparseable | error | yes |
+| R007 | relationships created by Desktop's autodetection (id contains `autodetected`) | error | yes (unsafe: only when selected or `fix_autodetected_relationships`) |
+| R008 | a fact table with no active relationship to the conformed dimension (configured; ratchet) | error | no |
+| R009 | no `relationships.tmdl`, or one without a complete relationship (opt-in) | warning | no |
+| R010 | a cycle of three or more tables over active relationships | info | no |
+| R011 | fact tables with no relationship to the calendar (coverage under 90%) | warning | no |
+| R012 | a calendar relationship that is not many-to-one | warning | no |
+| R013 | a calendar missing Date/Year/Quarter/Month/Week/Day (opt-in) | info | no |
+| R014 | a `_` dimension with no key-like column (opt-in) | info | no |
+| R015 | a cohort calendar that does not reach a fact carrying its subject within two hops | error | no |
+| R016 | an anchor calendar (`__...Calendar`) that filters nothing | error | no |
+| F001 | stray commas in a field-parameter / calculated-table source; the model opens but its visuals fail | error | yes |
 | F002 | a missing comma between two rows of a `{ (...), (...) }` constructor | error | yes |
 | F003 | a trailing comma before the constructor's closing `}` | error | yes |
-| F004 | rows of one constructor with different numbers of values | warning | no |
+| F004 | rows of one constructor with different numbers of values | error | no |
+| F005 | a field-parameter row without its category value (configured tables) | error | no |
+| F006 | the same row twice in one field parameter | error | yes |
+| F007 | sibling field parameters of one family that list different fields | error | yes |
+| F008 | field-parameter rows all wider or narrower than the declared `ValueN` columns | error | no |
+| F009 | drilldown levels (`y-Selector 1..N`) that list different dimensions, or a plot-specific table that adds one | error | no |
+| F010 | a display name with different categories across sibling field parameters (opt-in; `fieldparam retag` fixes all siblings at once) | error | no |
+| F011 | a numbered axis row (`x-Selector N`, `y-Selector N`) with no category value (opt-in) | error | no |
+| F012 | measures and dimensions no axis exposes, helpers an axis does expose (opt-in) | info | no |
+| F013 | a measure parked on a field-parameter table | error | no |
+| F014 | a selector SWITCH branch that calls a measure that no longer exists | error | yes |
+| F015 | an axis table that is not an import-mode `("label", NAMEOF(...))` field parameter (opt-in) | info | no |
+| F016 | a field-parameter row that carries `//` (the repair is opt-in) | info | yes |
+| F017 | a fenced field-parameter source that drifted from its canonical form | info | yes |
+| A001 | the category-mapping table or one of its key columns is missing (opt-in) | warning | no |
+| A002 | inventory of axis group ids and mapping-table relationships (opt-in) | info | no |
+| A003 | an account-filterable category whose mapping rows lack the account groups (opt-in) | error | yes |
+| A004 | `f-All` gate chains that disagree, name missing measures, miss a category, or use inert or over-broad literals (opt-in; baseline) | error | no |
+| A005 | an `f-` filter measure that fits no known shape (opt-in) | warning | no |
 | B001 | bookmark `howCreated`/`ComparisonKind`/`Version` stored as strings; the report loader rejects them | error | yes |
 | B002 | bookmarks referencing renamed or deleted visuals | error | no |
 | B003 | bookmark `options` keys outside the report schema | error | yes |
 | B004 | `definition.pbir` pointing at a missing model, `pages.json` naming missing pages, unparseable `visual.json` | error | no |
+| B005 | `pages.json` missing, with an unexpected `$schema`, or without a `pageOrder` list | error | no |
+| B006 | a `HierarchyLevel` binding with its `Level` inside the `Expression`, or missing either part | error | no |
+| B007 | a report folder whose `definition.pbir`, `version.json`, `report.json` or content files do not declare the published schemas | error | yes |
+| B008 | a report folder that misses a scaffold file, or whose files do not parse or lack the properties the loader reads | error | no |
+| L001 | a role without `modelPermission: read`, or a `tablePermission` with no filter | error | no |
+| L002 | a row filter that calls `USERNAME()` instead of `USERPRINCIPALNAME()` | error | no |
+| L003 | an `IN VALUES(...)` row filter that does not restrict the mapping table to the signed-in user | error | no |
+| L004 | a visible user-mapping table (a `UserPrincipalName` column) | error | no |
+| L005 | a relationship to the user-mapping table | error | no |
+| L006 | RLS inventory and posture (opt-in) | info | no |
 | S001 | visible measures without a `formatString` | info | no |
 | S002 | visible measures without a real `///` description | info | no |
+| S003 | a visible measure whose name gives a format-picking calculation group nothing to go on (opt-in) | info | no |
+| S004 | ticket numbers (`#365`) in model comments above the recorded floor (opt-in ratchet) | error | no |
+| S005 | a measure that resolves to too few decimals through the format calculation group (configured expectations) | error | no |
+| O001 | a helper measure in a user-only (`#`) table (opt-in) | warning | no |
+| O002 | a helper measure in the wrong table for its kind (opt-in; `profile = "lenient"` for infos) | warning | no |
+| O003 | a user-facing measure parked in a dimension or helper table (opt-in) | warning | no |
+| O004 | a user-facing measure homed on a fact table (opt-in) | warning | no |
+| O005 | measures on a dimension table (opt-in) | info | no |
+| O006 | a measures table with no measures (opt-in) | info | no |
+| N020 | fewer `_` dimension tables than the template's floor (opt-in, disabled by default) | error | no |
+| O007 | a fact table no measure reads (opt-in ratchet) | error | no |
+| O008 | an intermediary helper (`-Name`) without a display folder (opt-in) | warning | no |
+| O009 | a visible helper measure not on the always-visible list (opt-in) | warning | yes |
+| O010 | helper measures nothing references, and the most used ones (opt-in) | info | no |
+| O011 | a hidden user-facing measure (opt-in) | error | no |
+| O012 | user-facing measures without a display folder (opt-in) | info | no |
+| O013 | user-facing measures without a description of at least 10 characters (opt-in) | info | no |
+| O014 | table description coverage (opt-in) | info | no |
+| O015 | a fact table user-facing measures read but no `f-` filter measure does (opt-in) | error | no |
 
-Details, scopes, examples and severity semantics: see the rule catalog in
-the [documentation](#documentation) below. Print the same catalog from the
-tool: `tmdl-preflight rules` (or `--json`).
+Details, scopes, examples and severity semantics: see the generated
+[`docs/rules.md`](docs/rules.md) and the rule catalog in the
+[documentation](#documentation) below. Print the same catalog from the
+tool: `tmdl-preflight rules` (or `--json`, or `--format markdown --out
+FILE`, with `--check` to fail when a committed copy is stale). Opt-in rules
+run only when named in `--select` or the configuration's `select`; the
+generated catalog lists the whole opt-in set as a `select` line you can
+paste into your configuration file.
+
+The analysis-category checks (A001, A003, A004, A005) carry the priority
+of the gate they came from. A P0 check — an unpaired gate chain, a gate
+that names a measure the model does not declare, a gate literal that
+matches no category — is an error. A P1 check — a category that owns a
+filter measure but is not gated, a category with no filter measure to
+gate on, a gate literal that spans two categories, a mapping table without
+its key columns, a filter measure that fits no known shape — is a
+warning. So a plain run fails on the P0 checks only, and `--strict` is
+the full run: it fails on the P1 checks too.
+
+A check that cannot run (a model without an `f-Filters` table, an `f-All`
+that is absent or non-canonical, a mapping table that yields no category)
+is listed under `skipped` in the JSON output, with the model and the
+reason, and it never fails the run.
 
 ## Selecting rules and other flags
 
@@ -171,7 +283,7 @@ its parents wins; the search stops at the repository root.
 ```toml
 [tool.tmdl-preflight]
 ignore = ["S002"]
-exclude = ["**/tables/Legacy*.tmdl"]   # project-relative globs
+exclude = ["**/*_backup*/**"]          # globs relative to the folder you scan
 
 [tool.tmdl-preflight.severity_overrides]
 R007 = "error"
@@ -192,6 +304,49 @@ strict = true                           # tmdl-preflight check . --profile ci
 Unknown keys, unknown rule ids and wrongly typed options are errors (exit
 2), never silent no-ops. An exemption without a `reason` is rejected.
 
+### Incremental refresh
+
+`P001` and `P002` read the `refresh_policy` section. The loader function is
+the one your facts load through, so it is a setting, not a guess:
+
+```toml
+[tool.tmdl-preflight.refresh_policy]
+loader_function = "source_filter_dates"   # the call the facts load through
+window_markers = ["RangeEnd"]              # what marks a source as windowed
+etl_stamp_columns = ["updated_at_db"]      # load stamps, not event dates
+inline_template = "let ir_dfilter = ..."   # the windowed query (one line)
+backlog = { "spinout-01/Sales" = ["Refunds"] }
+exempt = { "Import Log" = "a bookkeeping table" }
+```
+
+* `window_markers` — a source counts as windowed when it names
+  `RangeStart` and one of these markers. The default (`RangeEnd`) is
+  generic; the parity setting for a template that inlines its own window
+  variable is `window_markers = ["ir_dfilter"]`.
+* `inline_template` — the windowed query that replaces the loader call.
+  It must render to a **single line** (the placeholders `{view}`,
+  `{date_column}`, `{floor}` and `{table}` are substituted). An example
+  value, the warehouse query one template uses:
+
+  ```
+  let ir_dfilter = " cast({date_column} as date) >= parse_date('%m/%d/%Y', '" & Date.ToText(DateTime.Date(RangeStart), "MM/dd/yyyy") & "') and cast({date_column} as date) < parse_date('%m/%d/%Y', '" & Date.ToText(DateTime.Date(RangeEnd), "MM/dd/yyyy") & "') and cast({date_column} as date) >= parse_date('%m/%d/%Y', '" & Date.ToText({floor}, "MM/dd/yyyy") & "') ", ir_qstr = "SELECT * FROM `" & #"v-BQ_project" & "." & #"v-db" & "." & "{view}" & "` where " & ir_dfilter & #"v-rows_limit", ir_src = Value.NativeQuery(GoogleBigQuery.Database([CommandTimeout=#duration(0,3,0,0), BillingProject=#"v-BQ_billing_project"]){[Name= #"v-BQ_project" ]}[Data], ir_qstr, null, [EnableFolding=true]) in ir_src
+  ```
+
+  The repair replaces **only** the loader call, so the rest of the
+  partition's M source stands, and it writes the same body as the policy's
+  `sourceExpression`.
+* `backlog` — the facts that are known to be missing a `refreshPolicy`, per
+  model. `P002` does not report them, and the repair prunes the entries it
+  fixed (`--no-prune` keeps them).
+* `exempt` — a table-to-reason map, or a list of `{table, reason}` tables.
+
+The repair is unsafe (it changes what a partition stores), so it runs only
+when it is named:
+
+```console
+$ tmdl-preflight fix . --select refresh-policy-repair --only missing
+```
+
 ## Baselines
 
 Adopting the tool on an existing model? Record what fails today and gate on
@@ -207,15 +362,89 @@ The baseline stores rule id, project-relative file and object (no line
 numbers), so unrelated edits do not churn it. `--update` only ever removes
 entries; `--update --accept-new` is the explicit way to grow it. A baseline
 is never written from a `--select`/`--ignore` run or while files fail to
-parse, and the defects that stop a model from opening (M003, M006, M007,
-M010, M015, R006) can never be baselined.
+parse, and the defects that stop a model from opening (M003, M007, M010,
+M015, R006) can never be baselined.
 
 ## Inventory
 
 `tmdl-preflight stats <path>` (or `--json`) prints counts: tables, columns,
 measures, relationships, partitions by kind, calculation groups, field
 parameters, descriptions, display folders, and so on. No thresholds, just
-numbers worth watching in a pull request.
+numbers worth watching in a pull request. `stats --measures` adds how the
+measures are organised: user-facing vs helper names, helper kinds, which
+measures a field parameter surfaces, the busiest tables, and how many
+dash-prefixed helpers carry a description.
+
+`tmdl-preflight report complexity|nameof|relationships <path>` prints the
+measure-length distribution with threshold suggestions, the NAMEOF inventory
+(the validation block, the two families of field-parameter tables and the
+broken references), or the relationship topology (cardinalities,
+both-direction filters, hubs, unrelated tables). The reports never write a
+file.
+`tmdl-preflight format-resolve <path> --name NAME [--compare NAME2]` shows
+the format a measure name gets from a format calculation group, for every
+model under the path and on every axis the group branches on, before a
+rename ships.
+
+`tmdl-preflight grain <path> --cost-fact T --backend-fact T ...` works out
+from the relationship graph which dimensions can filter both sides of a
+ratio (conformed, cost-only, backend-only, partial, neither); `--check
+--guard-table T --guard-measure M` confirms the guard blocks every
+non-conformed dimension, and `--emit-config` prints the lists for C010.
+
+`tmdl-preflight info --categories <path> [--json]` decodes the encoded
+category-mapping table and lists, per group id, the analysis categories it
+belongs to, and per fact table the categories its measures are offered under
+(the relation is many-to-many).
+`tmdl-preflight fieldparam retag <files> --names N1,N2 --from OLD --to NEW`
+moves the named rows to another category in every sibling table at once; if
+any name is not found live under OLD it writes nothing.
+
+`tmdl-preflight manifest <Model.SemanticModel> [--check] [--targets FILE]`
+writes a deterministic JSON manifest (tables with their role, columns,
+measures, the warehouse table each partition reads, relationships) for the
+pipelines next to the model; `--check` fails when the committed copy is stale,
+and a targets file pins the warehouse project and dataset each model must
+declare. `tmdl-preflight schema-check --manifest M --schema SNAPSHOT
+[--strict] [--project P] [--dataset D]` compares it with a schema snapshot you
+export (model columns the warehouse lost fail; columns the model does not
+import are informational) and writes the result next to the manifest as
+`<name>.bq.json`, and `schema-check --sql-dir DIR --entries FILE
+[--write-holdbacks] [--clear-ready]` proves from view SQL files that the
+views expose the columns a model needs. Nothing connects to a warehouse.
+
+`tmdl-preflight live <Model.SemanticModel> --workspace ID --dataset ID
+[--checks ...]` is the one command that talks to the Power BI service: it
+asks the published dataset whether its tables hold rows (a row-limit
+parameter left at `LIMIT 1` imports one row per table), whether measures
+evaluate, whether the last refresh succeeded and the data is fresh, and runs
+a best-practice pass over the published metadata. In text mode every check
+prints its report block before its result line; `--json` prints the same
+findings as data. It signs in as a service principal (`PBI_TENANT_ID`,
+`PBI_CLIENT_ID`, `PBI_CLIENT_SECRET`) or, with the optional `msal` package,
+interactively; credentials are never stored. The workspace and the dataset
+may also come from `FABRIC_WORKSPACE_ID` and `FABRIC_MODEL_ID`. It refuses
+to run when the dataset name does not match the local model. `--record DIR`
+saves every response and `--replay DIR` answers from such a folder without
+any network access.
+
+`tmdl-preflight refs NAME [PATH ...] [--files] [--include-nonlive]
+[--targets FILE]` counts every place a table, column or measure name
+appears, model side and report side, before a rename or delete; the live
+set is the registered model paths when a targets file is given.
+
+`tmdl-preflight comment-refs <path> [--floors FILE]` counts ticket
+references (`#365`) in comments per model and per comment class, and gates
+on the floor file: a rise above the floor fails, a fall is reported for
+tightening. `--list` prints every reference, `--list PREFIX` only the
+models whose key starts with it, and `--floors FILE --tighten` lowers a
+ratchet file to today's counts and never raises it (rule S004 gates on the
+same file).
+
+`tmdl-preflight dead-facts <path>` lists the fact tables no measure reads.
+`--capture FILE` records them as the floor the dead-fact gate compares
+against (rule O007): a JSON object of model key to the sorted list of dead
+fact tables, with the models that have none left out.
 
 ## In CI and pre-commit
 
@@ -223,7 +452,7 @@ numbers worth watching in a pull request.
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/c-kapsalis/tmdl-preflight
-    rev: v1.1.0
+    rev: v1.2.0
     hooks:
       - id: tmdl-preflight
 ```
@@ -245,8 +474,12 @@ def test_model_is_deployable(tmdl_preflight):
 `assert_clean` takes `select=`/`ignore=` sets, `strict=True`, and
 `autofix=True` (repair, then assert on the re-check; also switchable via
 `TMDL_PREFLIGHT_AUTOFIX=1` so CI stays read-only while developers repair
-locally). `run()` returns the report without asserting. See the "run in
-pytest" how-to guide in the [documentation](#documentation) below.
+locally). `run()` returns the report without asserting. List models that are
+still being brought into line under `advisory = [...]` in
+`[tool.tmdl-preflight]`: a failing test whose parameters name such a model is
+reported as an expected failure instead of failing the run (passes stay
+passes, setup errors stay errors). See the "run in pytest" how-to guide in the
+[documentation](#documentation) below.
 
 ## How `fix` works
 

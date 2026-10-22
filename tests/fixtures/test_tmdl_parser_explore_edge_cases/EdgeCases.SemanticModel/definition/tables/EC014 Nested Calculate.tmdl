@@ -1,0 +1,23 @@
+table 'EC014 Nested Calculate'
+	lineageTag: 7ec06d1d-8401-584d-86f4-77ed57d50f22
+
+	measure Deep =
+			CALCULATE(
+			    CALCULATE(
+			        CALCULATE(
+			            SUM(Rentals[Minutes]),
+			            Rentals[Status] = "Active"
+			        ),
+			        Rentals[Year] = 2024
+			    )
+			)
+		formatString: #,0
+		lineageTag: d6fd54a9-7356-582e-9a56-f4b5740a42fe
+
+	partition 'EC014 Nested Calculate' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

@@ -1,0 +1,10 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+
+ref table Orders
+ref table Brews
+ref table Refunds
+ref table Tastings
+ref table Deliveries
+ref table '_Stores'

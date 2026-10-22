@@ -1,0 +1,13 @@
+table 'EC016 No Whitespace'
+	lineageTag: de8ef4eb-24ec-5124-a947-f1b4c9b52296
+
+	measure Compact=[Sales]+[Returns]-[Discounts]
+		lineageTag: 9a601b3f-b8a2-5162-9919-df2e72e51700
+
+	partition 'EC016 No Whitespace' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

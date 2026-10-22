@@ -1,0 +1,244 @@
+relationship 5eed0000-0000-0000-0000-000000000062
+	fromColumn: 'GA4 Conversions'.landing_page_x_id
+	toColumn: '_Landing Pages'.landing_page_x_id
+
+relationship 5eed0000-0000-0000-0000-000000000063
+	fromColumn: 'GA4 Conversions'.country_id
+	toColumn: _Countries.country_id
+
+relationship 5eed0000-0000-0000-0000-000000000064
+	fromColumn: 'GA4 Conversions'.device_id
+	toColumn: _Devices.device_id
+
+relationship 5eed0000-0000-0000-0000-000000000065
+	fromColumn: 'GA4 Conversions'.account_id
+	toColumn: _Accounts.account_id
+
+relationship 5eed0000-0000-0000-0000-000000000066
+	fromColumn: 'GA4 Conversions'.ad_group_x_id
+	toColumn: _Campaigns.ad_group_x_id
+
+relationship 5eed0000-0000-0000-0000-000000000067
+	fromColumn: 'Queries Paid'.landing_page_x_id
+	toColumn: '_Landing Pages'.landing_page_x_id
+
+relationship 5eed0000-0000-0000-0000-000000000068
+	fromColumn: 'Queries Paid'.country_id
+	toColumn: _Countries.country_id
+
+relationship 5eed0000-0000-0000-0000-000000000069
+	fromColumn: 'Queries Paid'.device_id
+	toColumn: _Devices.device_id
+
+relationship 5eed0000-0000-0000-0000-00000000006a
+	fromColumn: 'Queries Paid'.account_id
+	toColumn: _Accounts.account_id
+
+relationship 5eed0000-0000-0000-0000-00000000006b
+	fromColumn: 'Queries Paid'.ad_group_x_id
+	toColumn: _Campaigns.ad_group_x_id
+
+relationship 5eed0000-0000-0000-0000-00000000006c
+	fromColumn: 'Queries Paid'.query_id
+	toColumn: _Queries.query_id
+
+relationship 5eed0000-0000-0000-0000-00000000006d
+	fromColumn: 'Queries Paid'.keyword_id
+	toColumn: _Keywords.keyword_id
+
+relationship 5eed0000-0000-0000-0000-00000000006e
+	fromColumn: 'Queries Paid'.ad_id
+	toColumn: _Ads.ad_id
+
+relationship 5eed0000-0000-0000-0000-00000000006f
+	fromColumn: 'Keywords Report'.landing_page_x_id
+	toColumn: '_Landing Pages'.landing_page_x_id
+
+relationship 5eed0000-0000-0000-0000-000000000070
+	fromColumn: 'Keywords Report'.country_id
+	toColumn: _Countries.country_id
+
+relationship 5eed0000-0000-0000-0000-000000000071
+	fromColumn: 'Keywords Report'.device_id
+	toColumn: _Devices.device_id
+
+relationship 5eed0000-0000-0000-0000-000000000072
+	fromColumn: 'Keywords Report'.account_id
+	toColumn: _Accounts.account_id
+
+relationship 5eed0000-0000-0000-0000-000000000073
+	fromColumn: 'Keywords Report'.ad_group_x_id
+	toColumn: _Campaigns.ad_group_x_id
+
+relationship 5eed0000-0000-0000-0000-000000000074
+	fromColumn: 'Keywords Report'.query_id
+	toColumn: _Queries.query_id
+
+relationship 5eed0000-0000-0000-0000-000000000075
+	fromColumn: 'Keywords Report'.keyword_id
+	toColumn: _Keywords.keyword_id
+
+relationship 5eed0000-0000-0000-0000-000000000076
+	fromColumn: 'Keywords Report'.ad_id
+	toColumn: _Ads.ad_id
+
+relationship 5eed0000-0000-0000-0000-000000000077
+	fromColumn: 'Ads Report'.landing_page_x_id
+	toColumn: '_Landing Pages'.landing_page_x_id
+
+relationship 5eed0000-0000-0000-0000-000000000078
+	fromColumn: 'Ads Report'.country_id
+	toColumn: _Countries.country_id
+
+relationship 5eed0000-0000-0000-0000-000000000079
+	fromColumn: 'Ads Report'.device_id
+	toColumn: _Devices.device_id
+
+relationship 5eed0000-0000-0000-0000-00000000007a
+	fromColumn: 'Ads Report'.account_id
+	toColumn: _Accounts.account_id
+
+relationship 5eed0000-0000-0000-0000-00000000007b
+	fromColumn: 'Ads Report'.ad_group_x_id
+	toColumn: _Campaigns.ad_group_x_id
+
+relationship 5eed0000-0000-0000-0000-00000000007c
+	fromColumn: 'Ads Report'.query_id
+	toColumn: _Queries.query_id
+
+relationship 5eed0000-0000-0000-0000-00000000007d
+	fromColumn: 'Ads Report'.keyword_id
+	toColumn: _Keywords.keyword_id
+
+relationship 5eed0000-0000-0000-0000-00000000007e
+	fromColumn: 'Ads Report'.ad_id
+	toColumn: _Ads.ad_id
+
+relationship 5eed0000-0000-0000-0000-00000000007f
+	fromColumn: 'Traffic Report'.landing_page_x_id
+	toColumn: '_Landing Pages'.landing_page_x_id
+
+relationship 5eed0000-0000-0000-0000-000000000080
+	fromColumn: 'Traffic Report'.country_id
+	toColumn: _Countries.country_id
+
+relationship 5eed0000-0000-0000-0000-000000000081
+	fromColumn: 'Traffic Report'.device_id
+	toColumn: _Devices.device_id
+
+relationship 5eed0000-0000-0000-0000-000000000082
+	fromColumn: 'Traffic Report'.account_id
+	toColumn: _Accounts.account_id
+
+relationship 5eed0000-0000-0000-0000-000000000083
+	fromColumn: 'Traffic Report'.ad_group_x_id
+	toColumn: _Campaigns.ad_group_x_id
+
+relationship 5eed0000-0000-0000-0000-000000000084
+	fromColumn: 'Traffic Report'.query_id
+	toColumn: _Queries.query_id
+
+relationship 5eed0000-0000-0000-0000-000000000085
+	fromColumn: 'Traffic Report'.keyword_id
+	toColumn: _Keywords.keyword_id
+
+relationship 5eed0000-0000-0000-0000-000000000086
+	fromColumn: 'Traffic Report'.ad_id
+	toColumn: _Ads.ad_id
+
+relationship 5eed0000-0000-0000-0000-000000000087
+	fromColumn: 'Crawl Report'.landing_page_x_id
+	toColumn: '_Landing Pages'.landing_page_x_id
+
+relationship 5eed0000-0000-0000-0000-000000000088
+	fromColumn: 'Crawl Report'.country_id
+	toColumn: _Countries.country_id
+
+relationship 5eed0000-0000-0000-0000-000000000089
+	fromColumn: 'Crawl Report'.device_id
+	toColumn: _Devices.device_id
+
+relationship 5eed0000-0000-0000-0000-00000000008a
+	fromColumn: 'Crawl Report'.account_id
+	toColumn: _Accounts.account_id
+
+relationship 5eed0000-0000-0000-0000-00000000008b
+	fromColumn: 'Crawl Report'.ad_group_x_id
+	toColumn: _Campaigns.ad_group_x_id
+
+relationship 5eed0000-0000-0000-0000-00000000008c
+	fromColumn: 'Crawl Report'.query_id
+	toColumn: _Queries.query_id
+
+relationship 5eed0000-0000-0000-0000-00000000008d
+	fromColumn: 'Crawl Report'.keyword_id
+	toColumn: _Keywords.keyword_id
+
+relationship 5eed0000-0000-0000-0000-00000000008e
+	fromColumn: 'Crawl Report'.ad_id
+	toColumn: _Ads.ad_id
+
+relationship 5eed0000-0000-0000-0000-00000000008f
+	fromColumn: 'Email Report'.landing_page_x_id
+	toColumn: '_Landing Pages'.landing_page_x_id
+
+relationship 5eed0000-0000-0000-0000-000000000090
+	fromColumn: 'Email Report'.country_id
+	toColumn: _Countries.country_id
+
+relationship 5eed0000-0000-0000-0000-000000000091
+	fromColumn: 'Email Report'.device_id
+	toColumn: _Devices.device_id
+
+relationship 5eed0000-0000-0000-0000-000000000092
+	fromColumn: 'Email Report'.account_id
+	toColumn: _Accounts.account_id
+
+relationship 5eed0000-0000-0000-0000-000000000093
+	fromColumn: 'Email Report'.ad_group_x_id
+	toColumn: _Campaigns.ad_group_x_id
+
+relationship 5eed0000-0000-0000-0000-000000000094
+	fromColumn: 'Email Report'.query_id
+	toColumn: _Queries.query_id
+
+relationship 5eed0000-0000-0000-0000-000000000095
+	fromColumn: 'Email Report'.keyword_id
+	toColumn: _Keywords.keyword_id
+
+relationship 5eed0000-0000-0000-0000-000000000096
+	fromColumn: 'Email Report'.ad_id
+	toColumn: _Ads.ad_id
+
+relationship 5eed0000-0000-0000-0000-000000000097
+	fromColumn: 'Queries Paid'.event_date
+	toColumn: __Calendar.Date
+
+relationship 5eed0000-0000-0000-0000-000000000098
+	fromColumn: 'Keywords Report'.event_date
+	toColumn: __Calendar.Date
+
+relationship 5eed0000-0000-0000-0000-000000000099
+	fromColumn: 'Ads Report'.event_date
+	toColumn: __Calendar.Date
+
+relationship 5eed0000-0000-0000-0000-00000000009a
+	fromColumn: 'Traffic Report'.event_date
+	toColumn: __Calendar.Date
+
+relationship 5eed0000-0000-0000-0000-00000000009b
+	fromColumn: 'Crawl Report'.event_date
+	toColumn: __Calendar.Date
+
+relationship 5eed0000-0000-0000-0000-00000000009c
+	fromColumn: 'Email Report'.event_date
+	toColumn: __Calendar.Date
+
+relationship 5eed0000-0000-0000-0000-00000000009d
+	fromColumn: 'GA4 Conversions'.event_date
+	toColumn: __Calendar.Date
+
+relationship 5eed0000-0000-0000-0000-00000000009e
+	isActive: false
+	fromColumn: 'Queries Paid'.event_date
+	toColumn: '__Comparison Calendar'.Date

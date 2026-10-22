@@ -1,0 +1,16 @@
+table _Harvests
+	lineageTag: 6ef284b4-984f-52af-b2df-282179c8ad3b
+
+	column Key
+		dataType: int64
+		lineageTag: f4294547-2288-5aa7-a9c1-05ecef1bce50
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition _Harvests = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

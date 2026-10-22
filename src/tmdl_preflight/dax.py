@@ -97,9 +97,14 @@ def classify(text: str) -> str:
             continue
 
         if ch == "/" and nxt == "*":
-            # block comment: to closing */ (or end of text if unterminated)
+            # block comment: to closing */; an unterminated one is ordinary
+            # text, so the delimiters after it are still checked
             end = text.find("*/", i + 2)
-            stop = (end + 2) if end != -1 else n
+            if end == -1:
+                tags.append(CODE)
+                i += 1
+                continue
+            stop = end + 2
             tags.extend([COMMENT] * (stop - i))
             i = stop
             continue
@@ -120,14 +125,34 @@ def strip_comments(text: str) -> str:
 
 
 def strip_strings(text: str) -> str:
-    """Blank out the *contents* of string literals (quotes survive)."""
+    """Blank out the *contents* of string literals (quotes survive).
+
+    An escaped double quote inside a string is blanked as two spaces, so the
+    length of the text never changes. The escape only counts inside a string:
+    the first quote of a pair opens it, the second one closes it.
+    """
     tags = classify(text)
     out = []
-    for ch, tag in zip(text, tags):
-        if tag == STRING and ch != '"' and ch not in "\r\n":
+    in_string = False
+    i, n = 0, len(text)
+    while i < n:
+        ch, tag = text[i], tags[i]
+        if tag == STRING and ch == '"':
+            escaped = in_string and i + 1 < n and text[i + 1] == '"' and tags[i + 1] == STRING
+            if escaped:
+                out.append(" ")
+                out.append(" ")
+                i += 2
+                continue
+            in_string = not in_string
+            out.append(ch)
+            i += 1
+            continue
+        if tag == STRING and ch not in "\r\n":
             out.append(" ")
         else:
             out.append(ch)
+        i += 1
     return "".join(out)
 
 
@@ -147,75 +172,142 @@ def _line_of(text: str, pos: int) -> int:
 def check_balanced_delimiters(text: str) -> list[str]:
     """Return a list of human-readable balance errors (empty = clean).
 
-    Checks parentheses and braces in code regions, unterminated strings and
-    quoted identifiers, and unterminated bracketed identifiers. Comments are
-    ignored. Brackets are validated by the scanner itself: an unterminated
-    ``[`` shows up as a bracket region that never closes.
+    Every error names the delimiter kind and the character offset of the
+    offending character inside the expression text. Comments are blanked out
+    first, so the offsets are the ones a reader sees in the file.
+
+    The closers come first, in text order and with the kinds mixed. Then,
+    for each kind that is still open, only its earliest opener is reported,
+    in the order parenthesis, bracket, brace, double quote, single quote.
+
+    A bracketed name is one region: an apostrophe or a parenthesis inside it
+    belongs to the name, not to the code. A ``]`` that closes no name is a
+    stray closer, and every ``]`` outside a name counts on its own.
     """
+    text = strip_comments(text)
     errors: list[str] = []
-    tags = classify(text)
-
-    # Unterminated string / identifier / bracket regions: the scanner ended
-    # the text while still inside the region.
-    errors.extend(_unterminated_regions(text, tags))
-
     stack: list[tuple[str, int]] = []
-    for pos, (ch, tag) in enumerate(zip(text, tags)):
-        if tag != CODE:
+    brackets: list[int] = []
+    double_quote: Optional[int] = None
+    single_quote: Optional[int] = None
+
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == '"':
+            end, closed = _string_end(text, i)
+            if not closed and double_quote is None:
+                double_quote = i
+            i = end
+            continue
+        if ch == "'":
+            if i + 1 < n and text[i + 1] == "'":
+                i += 2  # an escaped apostrophe
+                continue
+            end, closed = _quoted_name_end(text, i)
+            if not closed and single_quote is None:
+                single_quote = i
+            i = end
+            continue
+        if ch == "[":
+            end = _name_end(text, i)
+            if end == -1:
+                brackets.append(i)
+                i += 1  # an unterminated name: its content is code again
+                continue
+            i = end + 1
+            continue
+        if ch == "]":
+            if brackets:
+                brackets.pop()
+            else:
+                errors.append(f"Unmatched closing bracket ']' at position {i}")
+            i += 1
             continue
         if ch in _PAIRS:
-            stack.append((ch, pos))
-        elif ch in _CLOSERS:
+            stack.append((ch, i))
+            i += 1
+            continue
+        if ch in _CLOSERS:
             if stack and stack[-1][0] == _CLOSERS[ch]:
                 stack.pop()
             else:
-                errors.append(
-                    f"unmatched closing {_NAMES[ch]} '{ch}' at line {_line_of(text, pos)}"
-                )
-    for ch, pos in stack:
-        errors.append(
-            f"unmatched opening {_NAMES[ch]} '{ch}' at line {_line_of(text, pos)}"
-        )
-    return errors
-
-
-def _unterminated_regions(text: str, tags: str) -> list[str]:
-    """Detect string/identifier/bracket regions that never close."""
-    errors: list[str] = []
-    i, n = 0, len(text)
-    while i < n:
-        tag = tags[i]
-        if tag == STRING:
-            j = i
-            while j < n and tags[j] == STRING:
-                j += 1
-            region = text[i:j]
-            # a closed string ends with a quote that is not part of an escape
-            if not _closed(region, '"'):
-                errors.append(f"unterminated string starting at line {_line_of(text, i)}")
-            i = j
-        elif tag == IDENT:
-            j = i
-            while j < n and tags[j] == IDENT:
-                j += 1
-            if not _closed(text[i:j], "'"):
-                errors.append(
-                    f"unterminated quoted identifier starting at line {_line_of(text, i)}"
-                )
-            i = j
-        elif tag == BRACKET:
-            j = i
-            while j < n and tags[j] == BRACKET:
-                j += 1
-            region = text[i:j]
-            if not (len(region) >= 2 and region.endswith("]")):
-                errors.append(
-                    f"unterminated bracket '[' at line {_line_of(text, i)}"
-                )
-            i = j
-        else:
+                errors.append(f"Unmatched closing {_NAMES[ch]} '{ch}' at position {i}")
             i += 1
+            continue
+        i += 1
+
+    openers = _open_positions(stack)
+    paren_at = openers.get("(")
+    if paren_at is not None:
+        errors.append(f"Unmatched opening parenthesis '(' at position {paren_at}")
+    if brackets:
+        errors.append(f"Unmatched opening bracket '[' at position {brackets[0]}")
+    brace_at = openers.get("{")
+    if brace_at is not None:
+        errors.append(f"Unmatched opening brace '{{' at position {brace_at}")
+    if double_quote is not None:
+        errors.append(f"Unmatched opening double quote at position {double_quote}")
+    if single_quote is not None:
+        errors.append(f"Unmatched opening single quote at position {single_quote}")
     return errors
+
+
+def _open_positions(stack: list[tuple[str, int]]) -> dict[str, int]:
+    """The earliest still-open position of every delimiter kind on the stack."""
+    out: dict[str, int] = {}
+    for ch, pos in stack:
+        out.setdefault(ch, pos)
+    return out
+
+
+def _string_end(text: str, start: int) -> tuple[int, bool]:
+    """``(end offset, closed)`` for the string literal opening at ``start``.
+
+    A doubled quote inside the string is an escaped quote, so it does not
+    close the string.
+    """
+    i, n = start + 1, len(text)
+    while i < n:
+        if text[i] == '"':
+            if i + 1 < n and text[i + 1] == '"':
+                i += 2
+                continue
+            return i + 1, True
+        i += 1
+    return n, False
+
+
+def _quoted_name_end(text: str, start: int) -> tuple[int, bool]:
+    """``(end offset, closed)`` for the quoted table name opening at ``start``."""
+    i, n = start + 1, len(text)
+    while i < n:
+        if text[i] == "'":
+            if i + 1 < n and text[i + 1] == "'":
+                i += 2
+                continue
+            return i + 1, True
+        i += 1
+    return n, False
+
+
+def _name_end(text: str, start: int) -> int:
+    """The offset of the ``]`` that closes the name opening at ``start``.
+
+    The brackets nest, so the name ends at the ``]`` that closes them all.
+    -1 when the name never closes.
+    """
+    depth = 1
+    i, n = start + 1, len(text)
+    while i < n:
+        if text[i] == "[":
+            depth += 1
+        elif text[i] == "]":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
 
 
 def _closed(region: str, quote: str) -> bool:
@@ -238,7 +330,7 @@ def _closed(region: str, quote: str) -> bool:
 
 _NAMEOF_RE = re.compile(
     r"NAMEOF\s*\(\s*"
-    r"(?:'(?P<qtable>(?:[^']|'')+)'|(?P<table>[A-Za-z_][\w ]*?))?"
+    r"(?:'(?P<qtable>(?:[^'\"]|'')+)'|(?P<table>[A-Za-z_][\w ]*?))?"
     r"\s*\[(?P<member>[^\]]+)\]\s*\)",
     re.IGNORECASE,
 )
@@ -351,6 +443,18 @@ def code_only(text: str) -> str:
     )
 
 
+def unquote_member(member: str) -> str:
+    """A member written in the quoted form: ``'Amount'`` -> ``Amount``.
+
+    The quoted form is what NAMEOF accepts inside the brackets; the rest of
+    the tool resolves the member the same way.
+    """
+    member = member.replace("]]", "]").strip()
+    if len(member) >= 2 and member[0] == member[-1] == "'":
+        member = member[1:-1].replace("''", "'").strip()
+    return member
+
+
 def string_literals(text: str) -> set[str]:
     """Contents of every string literal in ``text`` (escapes resolved)."""
     tags = classify(text)
@@ -399,7 +503,7 @@ def extract_references(text: str) -> list[DaxReference]:
                 m = _region_end(tags, k, BRACKET)
                 bregion = text[k:m]
                 if bregion.endswith("]") and len(bregion) >= 2:
-                    member = bregion[1:-1].replace("]]", "]")
+                    member = unquote_member(bregion[1:-1])
                     refs.append(DaxReference("column", name, member, i, _line_of(text, i)))
                 i = m
                 continue
@@ -412,7 +516,7 @@ def extract_references(text: str) -> list[DaxReference]:
             if not (region.endswith("]") and len(region) >= 2):
                 i = j
                 continue
-            member = region[1:-1].replace("]]", "]")
+            member = unquote_member(region[1:-1])
             # a word glued to the bracket qualifies it: Sales[Amount]
             w = i
             while w > 0 and tags[w - 1] == CODE and _WORD_CHAR_RE.match(text[w - 1]):

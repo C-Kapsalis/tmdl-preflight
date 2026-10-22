@@ -1,0 +1,13 @@
+relationship 6b3db02f-df08-539b-94e9-19d974071ae4
+	fromColumn: Orders.order_date
+	toColumn: __Calendar.Date
+
+relationship 75956b84-2140-560c-b9c8-0622fbf2a68b
+	isActive: false
+	fromColumn: Visits.visit_date
+	toColumn: __Calendar.Date
+
+relationship a696cc8b-795a-5cf4-9693-a59e28fbee84
+	fromColumn: Orders.account_x_id
+	toColumn: _Accounts.account_x_id
+

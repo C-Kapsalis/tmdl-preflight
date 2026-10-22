@@ -1,0 +1,26 @@
+table Sitemap
+	lineageTag: e8d18599-01c9-560f-97b7-e134b15b670f
+
+	column page_id
+		dataType: int64
+		lineageTag: b855fba2-53bb-5e38-b65d-32c915c347a6
+		summarizeBy: none
+		sourceColumn: page_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column url
+		dataType: string
+		lineageTag: 6c5afc8b-f01c-5c26-9447-30ce020c8cbd
+		summarizeBy: none
+		sourceColumn: url
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Sitemap = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from sitemap")
+				in
+				    Source

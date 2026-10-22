@@ -1,0 +1,35 @@
+table 'x-Selector 1'
+	lineageTag: 0000b4b1-0000-0000-0000-000000000053
+
+	column 'x-Selector 1'
+		lineageTag: 0000b4b1-0000-0000-0000-000000000054
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	column 'x-Selector 1 Fields'
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000055
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+	column 'x-Selector 1 Order'
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000056
+		summarizeBy: sum
+		sourceColumn: [Value3]
+
+	column 'x-Selector 1 Field Category'
+		lineageTag: 0000b4b1-0000-0000-0000-000000000057
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+	partition 'x-Selector 1' = calculated
+		mode: import
+		source = ```
+				{
+				    ( "Total Cost", NAMEOF ( [Total Cost] ), 0, "Performance_x" ),
+				    ( "Revenue", NAMEOF ( [Revenue] ), 1, "Performance_x" ),
+				    ( "Bags", NAMEOF ( [Bags] ), 2 )
+				}
+				```
+

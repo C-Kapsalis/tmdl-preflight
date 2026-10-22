@@ -16,9 +16,10 @@ contract is the same for all of them:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 _BOM = "﻿"
 
@@ -48,8 +49,75 @@ def read_text_file(path: Path) -> TextFile:
     bom = raw.startswith(_BOM)
     if bom:
         raw = raw[1:]
-    newline = "\r\n" if "\r\n" in raw else "\n"
+    newline = _dominant_newline(raw)
     return TextFile(Path(path), raw, bom, newline)
+
+
+def _dominant_newline(raw: str) -> str:
+    """The file's line-ending style.
+
+    A file whose lines end with a lone CR (no LF) is read line by line like
+    any other file: treating it as one line would report a different set of
+    findings than the same model with LF.
+    """
+    crlf = raw.count("\r\n")
+    lf = raw.count("\n") - crlf
+    cr = raw.count("\r") - crlf
+    if crlf and not lf and not cr:
+        return "\r\n"
+    if cr and not lf and not crlf:
+        return "\r"
+    return "\r\n" if crlf else "\n"
+
+
+def mixed_line_endings(path: Path) -> bool:
+    """Does the file mix its line endings?
+
+    A file that mixes them cannot be split on one style and joined on
+    another: the lines that use the other style fold into one, and an edit
+    computed on that would delete the model. Such a file is read but never
+    written.
+    """
+    try:
+        raw = Path(path).read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    body = raw[1:] if raw.startswith(_BOM) else raw
+    crlf = body.count("\r\n")
+    lf = body.count("\n") - crlf
+    cr = body.count("\r") - crlf
+    return sum(1 for n in (crlf, lf, cr) if n) > 1
+
+
+def dump_json(data: Any, newline: str = "\n") -> str:
+    """The document as 2-space JSON with one trailing newline.
+
+    The key order of the document is kept, and a non-ASCII character is
+    written literally.
+    """
+    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    if newline != "\n":
+        text = text.replace("\n", newline)
+    return text
+
+
+def write_json(original: TextFile, data: Any) -> bool:
+    """Rewrite the file as 2-space JSON, keeping its byte-order mark.
+
+    The rewrite is proven: the new text must parse to the repaired
+    document. Raises :class:`EditRefused` when it does not.
+    """
+    expected = data
+
+    def verify(_old: str, new: str) -> None:
+        try:
+            written = json.loads(new)
+        except json.JSONDecodeError as exc:
+            raise EditRefused(f"the rewritten file is not valid JSON: {exc}") from exc
+        if written != expected:
+            raise EditRefused("the rewritten file does not hold the repaired document")
+
+    return verified_write(original, dump_json(data, original.newline), verify)
 
 
 def verified_write(
@@ -65,6 +133,13 @@ def verified_write(
     """
     if new_text == original.text:
         return False
+    if mixed_line_endings(original.path):
+        # A file that mixes its line endings cannot be rewritten safely:
+        # the edit was computed on a text whose lines had folded together.
+        # The file is left exactly as it is.
+        raise EditRefused(
+            f"{original.path.name} mixes its line endings; it was left "
+            f"untouched (normalize it to one style first)")
     if verify is not None:
         verify(original.text, new_text)
     current = read_text_file(original.path)

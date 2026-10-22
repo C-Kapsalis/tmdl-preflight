@@ -1,0 +1,22 @@
+table _Beans
+	lineageTag: def3b868-a186-5c18-a379-8682956d676a
+
+	column BeanKey
+		dataType: int64
+		lineageTag: 01228bcc-d504-5e32-8bbe-4605981ffcdc
+		summarizeBy: none
+		sourceColumn: BeanKey
+
+	column Kilos
+		dataType: double
+		lineageTag: e1fcffa5-53b7-5972-bba3-b6eff1c1d1c5
+		summarizeBy: none
+		sourceColumn: Kilos
+
+	partition _Beans = m
+		mode: import
+		source =
+			let
+			    Source = #table({"BeanKey"}, {})
+			in
+			    Source

@@ -1,0 +1,7 @@
+relationship guid-escaped-table-0001
+	fromColumn: 'Cohort ''Since'' Interval'.Value4
+	toColumn: 'z-Selector Cohort Timeframe'.Column1
+
+relationship guid-quoted-column-0002
+	fromColumn: 'z-Selector Spend Report Level'.'z-Spend Report Level'
+	toColumn: 'z-Spend Report Level'.'Report Level Key'

@@ -1,0 +1,21 @@
+table 'y-Selector 1'
+	lineageTag: 5eed0000-0000-0000-0000-00000000021e
+
+	column 'y-Selector 1'
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-00000000021f
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	partition 'y-Selector 1' = calculated
+		mode: import
+		source =
+				{
+				    ("lead_source", NAMEOF('_Attribution LM'[lead_source]), 0, "Leads"),
+				    ("account_name", NAMEOF('_Accounts'[account_name]), 1, "Leads"),
+				    ("campaign_name", NAMEOF('_Campaigns'[campaign_name]), 2, "Leads"),
+				    ("device", NAMEOF('_Devices'[device]), 3, "Leads"),
+				    ("page_url", NAMEOF('_Landing Pages'[page_url]), 4, "Leads"),
+				    ("Country", NAMEOF('_Countries'[Country Official Name]), 9, "Leads"),
+				    ("Attribution", NAMEOF('_Report Attribution'[m_main_attribution]), 10, "Leads")
+				}

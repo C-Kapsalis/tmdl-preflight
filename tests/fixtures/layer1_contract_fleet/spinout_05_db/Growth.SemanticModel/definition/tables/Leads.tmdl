@@ -1,0 +1,29 @@
+table Leads
+	lineageTag: 5eed0000-0000-0000-0000-0000000001ef
+
+	column country_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000001f0
+		summarizeBy: none
+		sourceColumn: country_id
+
+	column event_date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-0000000001f1
+		summarizeBy: none
+		sourceColumn: event_date
+
+	column lead_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000001f2
+		summarizeBy: none
+		sourceColumn: lead_id
+
+	partition Leads = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

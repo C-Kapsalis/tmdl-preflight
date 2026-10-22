@@ -1,0 +1,16 @@
+table _Packages
+	lineageTag: 4b55fd15-1184-51d3-b6df-30f6f32df9dc
+
+	column Key
+		dataType: int64
+		lineageTag: f310c176-f8a3-55df-87fc-8b0c6b7dca93
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition _Packages = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

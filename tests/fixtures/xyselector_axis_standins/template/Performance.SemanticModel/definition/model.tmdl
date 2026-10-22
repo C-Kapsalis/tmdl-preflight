@@ -1,0 +1,9 @@
+model Model
+	culture: en-US
+
+ref table Sales
+ref table Calendar
+ref table _Stores
+ref table 'Other Measures'
+ref table '#Report Measures'
+ref table 'x-Selector 1'

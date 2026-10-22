@@ -1,0 +1,22 @@
+table '_Landing Pages'
+	lineageTag: cc0cbd66-84dc-5568-8941-477728d13b26
+
+	column landing_page_x_id
+		dataType: int64
+		lineageTag: a9740091-e14f-592a-b2fb-8c20c998aeff
+		summarizeBy: none
+		sourceColumn: landing_page_x_id
+
+	column 'Landing Page'
+		dataType: string
+		lineageTag: e8def226-3279-5b7e-bcf2-e0e71ce59a73
+		summarizeBy: none
+		sourceColumn: Landing Page
+
+	partition '_Landing Pages' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

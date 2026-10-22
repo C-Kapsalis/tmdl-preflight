@@ -1,0 +1,21 @@
+table 'EC009 Blank Lines'
+	lineageTag: 25e72077-bdc7-57d7-a61f-316784d9baff
+
+	measure Spaced =
+			VAR a = SUM(Rentals[Fee])
+
+
+			VAR b = SUM(Rentals[Minutes])
+
+			RETURN
+			    a + b
+		formatString: #,0
+		lineageTag: d7d50e83-8b9d-535a-84a2-50e63804afa6
+
+	partition 'EC009 Blank Lines' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

@@ -1,0 +1,13 @@
+table 'z-Selector Cohort Timeframe'
+	lineageTag: 38b063fe-f78b-5676-9de7-96e478720560
+
+	column Column1
+		dataType: string
+		lineageTag: 21d73c37-c252-5eb2-9e47-3b83a0074358
+		summarizeBy: none
+		sourceColumn: Column1
+
+	partition 'z-Selector Cohort Timeframe' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

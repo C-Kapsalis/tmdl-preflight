@@ -1,0 +1,54 @@
+table 'Shop Measures'
+	lineageTag: 60ba818f-24b5-5790-8ed3-d832bd079adc
+
+	measure Revenue = SUM(Sales[Amount])
+		formatString: #,0
+		lineageTag: 78b10eb4-19a0-5bca-9e96-41250f4ccff2
+
+	measure 'Sales #' = COUNTROWS(Sales)
+		formatString: #,0
+		lineageTag: 424f76f0-d564-571a-928b-3318df33e082
+
+	measure 'Avg Ticket' =
+			VAR total = [Revenue]
+			VAR cnt = [Sales #]
+			RETURN
+			    DIVIDE(total, cnt)
+		formatString: #,0
+		lineageTag: 92641a95-4c8c-573d-80d9-6cb83ec77770
+
+	measure 'Avg Price' = AVERAGE(Bikes[Price])
+		formatString: #,0
+		lineageTag: 2d7d53b5-09f6-5f88-b757-3760ca1e4478
+
+	measure 'Revenue YTD' = CALCULATE([Revenue], DATESYTD('__Calendar'[Date]))
+		formatString: #,0
+		lineageTag: ce05d07d-bfa3-50f6-9224-c74901fe9253
+
+	measure 'Date Field Name' = NAMEOF('__Calendar'[Date])
+		formatString: #,0
+		lineageTag: 198d36ee-cd06-5390-92b7-a8f5750d1295
+
+	measure 'Year Field Name' = NAMEOF(__Calendar[Year])
+		formatString: #,0
+		lineageTag: 67987ebc-b35f-5a12-874a-0fa489e587fd
+
+	measure 'Revenue Field Name' = NAMEOF([Revenue])
+		formatString: #,0
+		lineageTag: 67e1cc13-1041-5d6d-93df-ec8dce6481cf
+
+	measure 'Premium Revenue' = CALCULATE([Revenue], Bikes[Price Band] = "Premium") -- parked idea: FILTER(ALL(Bikes)
+		formatString: #,0
+		lineageTag: 7c9c4046-3a01-5d28-8f7f-58bbe35dfbd4
+
+	measure Label = "Bikes -- all models"
+		formatString: #,0
+		lineageTag: b657e48d-9b2e-5fbf-9303-f75f965f3261
+
+	partition 'Shop Measures' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

@@ -1,0 +1,14 @@
+table '__Calendar'
+	lineageTag: fa0655e1-2769-53f0-bb5c-b2e5a013d5f6
+
+	column Date
+		dataType: dateTime
+		lineageTag: 4374e918-d705-5802-92d8-460486d1af44
+		summarizeBy: none
+		sourceColumn: Date
+
+		annotation SummarizationSetBy = Automatic
+
+	partition __Calendar = calculated
+		mode: import
+		source = CALENDARAUTO()

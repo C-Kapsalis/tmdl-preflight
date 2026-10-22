@@ -1,0 +1,26 @@
+table Samples
+	lineageTag: 4e7439c8-05c9-5387-88ac-1331a3eb7247
+
+	column samples_id
+		dataType: int64
+		lineageTag: 331f2bc2-595c-58f2-be7f-9f6a455595ae
+		summarizeBy: none
+		sourceColumn: samples_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_date
+		dataType: dateTime
+		lineageTag: 706db626-fc91-5feb-8596-c93245b3bd88
+		summarizeBy: none
+		sourceColumn: order_date
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Samples = m
+		mode: import
+		source =
+				let
+				    Source = source_filter_dates("samples_v", "sample_date", true, #"v-fromdate")
+				in
+				    Source

@@ -1,0 +1,7 @@
+relationship 5eed0000-0000-0000-0000-00000000023a
+	fromColumn: 'Account Events'.org_id
+	toColumn: '_m Organizations'.org_id
+
+relationship 5eed0000-0000-0000-0000-00000000023b
+	fromColumn: 'Account Events'.user_id
+	toColumn: '_m Users'.user_id

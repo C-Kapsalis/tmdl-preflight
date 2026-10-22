@@ -1,0 +1,8 @@
+role Regional
+	modelPermission: read
+
+	tablePermission _Stores
+
+	tablePermission Sales = USERNAME()
+
+	annotation PBI_Id = c9071a5666ee5f14b7e1fda5afa2e161

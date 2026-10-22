@@ -1,0 +1,32 @@
+[
+  {
+    "query": "EVALUATE ROW(\"Count\", COUNTROWS('__Calendar'))",
+    "response": {
+      "error": "Table '__Calendar' cannot be queried"
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"Count\", COUNTROWS('_Accounts'))",
+    "response": {
+      "error": "Table '_Accounts' cannot be queried"
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"Count\", COUNTROWS('_Campaigns'))",
+    "response": {
+      "error": "Table '_Campaigns' cannot be queried"
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"Count\", COUNTROWS('_Conversions'))",
+    "response": {
+      "error": "Table '_Conversions' cannot be queried"
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"Count\", COUNTROWS('_Devices'))",
+    "response": {
+      "error": "Table '_Devices' cannot be queried"
+    }
+  }
+]

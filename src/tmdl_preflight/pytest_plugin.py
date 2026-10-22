@@ -31,7 +31,7 @@ from typing import Optional
 import pytest
 
 from .engine import PreflightReport, check, fix
-from .rules import default_ruleset
+from .rules import full_ruleset
 from .rules.base import Context, Severity
 
 
@@ -48,7 +48,7 @@ class PreflightRunner:
         if autofix is None:
             autofix = os.getenv("TMDL_PREFLIGHT_AUTOFIX", "0") == "1"
         ctx = Context(Path(path))
-        ruleset = default_ruleset().select(
+        ruleset = full_ruleset().select(
             {s.lower() for s in select} if select else None,
             {s.lower() for s in ignore} if ignore else None,
         )
@@ -89,3 +89,69 @@ class PreflightRunner:
 def tmdl_preflight() -> PreflightRunner:
     """Run tmdl-preflight rules inside a pytest test."""
     return PreflightRunner()
+
+
+# ---------------------------------------------------------------------------
+# Advisory models: failures on them are reported as expected failures
+# ---------------------------------------------------------------------------
+
+_ADVISORY_KEY = pytest.StashKey[Optional[list[str]]]() if hasattr(pytest, "StashKey") else None
+
+
+def _advisory_models(config) -> list[str]:
+    """The ``advisory`` list of the project configuration (pyproject.toml
+    ``[tool.tmdl-preflight]`` or ``.tmdl-preflight.toml``/``.json``)."""
+    if _ADVISORY_KEY is not None and _ADVISORY_KEY in config.stash:
+        return config.stash[_ADVISORY_KEY] or []
+    found: list[str] = []
+    try:
+        from .config import find_config, read_config_file
+
+        path = find_config(Path(str(config.rootpath)))
+        raw = read_config_file(path) if path else {}
+        value = raw.get("advisory") if isinstance(raw, dict) else None
+        if isinstance(value, list):
+            found = [str(v) for v in value if str(v).strip()]
+    except Exception:  # a broken config must not break unrelated test runs
+        found = []
+    if _ADVISORY_KEY is not None:
+        config.stash[_ADVISORY_KEY] = found
+    return found
+
+
+def _advisory_subject(item, advisory: list[str]) -> Optional[str]:
+    callspec = getattr(item, "callspec", None)
+    if callspec is None:
+        return None
+    for model in advisory:
+        if model in callspec.id:
+            return model
+    root = Path(str(item.config.rootpath)).resolve()
+    for value in callspec.params.values():
+        if not isinstance(value, (str, Path)):
+            continue
+        try:
+            rel = Path(value).resolve().relative_to(root).as_posix()
+        except (ValueError, OSError):
+            rel = str(value).replace("\\", "/")
+        for model in advisory:
+            m = model.replace("\\", "/").strip("/")
+            if rel == m or rel.startswith(m + "/"):
+                return model
+    return None
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    if report.when != "call" or not report.failed:
+        return
+    advisory = _advisory_models(item.config)
+    if not advisory:
+        return
+    subject = _advisory_subject(item, advisory)
+    if subject is None:
+        return
+    report.outcome = "skipped"
+    report.wasxfail = f"advisory model {subject}: failures are reported, not gated"

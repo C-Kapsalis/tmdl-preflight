@@ -1,0 +1,16 @@
+table _Baristas
+	lineageTag: 346826db-a092-5213-bf0a-ee361d1940e2
+
+	column Key
+		dataType: int64
+		lineageTag: b2a4a6f0-48f8-5c6e-9ec6-276e83775165
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition _Baristas = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

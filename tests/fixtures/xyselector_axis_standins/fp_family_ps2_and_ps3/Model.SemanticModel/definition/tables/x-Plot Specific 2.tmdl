@@ -1,0 +1,39 @@
+table 'x-Plot Specific 2'
+	lineageTag: 8076e778-0714-5c26-933a-efb322dc8723
+
+	column 'x-Plot Specific 2'
+		dataType: string
+		lineageTag: 57ad8296-ac82-53cd-8637-cee090e21b24
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	column 'x-Plot Specific 2 Fields'
+		dataType: string
+		lineageTag: b199b167-2b97-5ae8-b03e-134e61299ca4
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+	column 'x-Plot Specific 2 Order'
+		dataType: int64
+		lineageTag: 4924ff3c-ac62-5244-b1f6-db0e2e023ec2
+		summarizeBy: none
+		sourceColumn: [Value3]
+
+	column 'x-Plot Specific 2 Value4'
+		dataType: string
+		lineageTag: 73649d53-6e68-57b9-920f-722c2bd3f137
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+	partition 'x-Plot Specific 2' = calculated
+		mode: import
+		source =
+				{
+				    ("Revenue", NAMEOF('Sales'[Revenue]), 0, "sales_x"),
+				    ("Units", NAMEOF([Units]), 1, "sales_x"),
+				    ("Region", NAMEOF('_Stores'[Region]), 2, "store_x"),
+				    ("CPM", NAMEOF([CPM]), 3, "ads_x")
+				}
+
+	annotation PBI_Id = 6adefa542cec5594ba0b2f7376a24676
+

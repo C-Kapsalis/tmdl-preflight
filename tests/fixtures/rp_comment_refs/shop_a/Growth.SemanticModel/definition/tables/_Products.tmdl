@@ -1,0 +1,16 @@
+table '_Products'
+	lineageTag: 00000000-0000-0000-0000-722939578913
+
+	column product_id
+		dataType: int64
+		sourceColumn: product_id
+
+	column 'shop ''A'' key'
+		dataType: string
+		sourceColumn: k
+
+	partition '_Products' = m
+		mode: import
+		source = ```
+			let x = 1 in x
+			```

@@ -1,0 +1,10 @@
+table 'Sales Measures'
+	lineageTag: ac3d9d37-aaa9-5c4d-a120-5aa8256d4ef4
+
+	measure Revenue = SUM(Sales[amount])
+		lineageTag: 9759b722-3633-5aa4-9cdc-32d158c0052c
+
+	partition 'Sales Measures' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

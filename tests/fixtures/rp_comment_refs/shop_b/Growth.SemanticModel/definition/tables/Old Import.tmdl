@@ -1,0 +1,12 @@
+table 'Old Import'
+	lineageTag: 00000000-0000-0000-0000-282876191342
+
+	column a
+		dataType: string
+		sourceColumn: a
+
+	partition 'Old Import' = m
+		mode: import
+		source = ```
+			let x = 1 in x
+			```

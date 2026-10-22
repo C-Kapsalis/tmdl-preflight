@@ -1,0 +1,44 @@
+table 'x-Selector 1'
+	lineageTag: 0ee70417-cd00-5b8f-891d-12e4e035aaef
+
+	column 'x-Selector 1'
+		lineageTag: 162597b1-532f-5496-95c8-a9f9e3fc2cd8
+		summarizeBy: none
+		sourceColumn: [Value1]
+		sortByColumn: 'x-Selector 1 Order'
+
+		relatedColumnDetails
+			groupByColumn: 'x-Selector 1 Fields'
+
+	column 'x-Selector 1 Fields'
+		isHidden
+		lineageTag: cd086931-574d-59ea-aa38-146b5a1d976c
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+	column 'x-Selector 1 Order'
+		isHidden
+		formatString: 0
+		lineageTag: 40960eb5-bd68-50c6-bc8a-92e3281eb40f
+		summarizeBy: sum
+		sourceColumn: [Value3]
+
+	column 'x-Selector 1 Field Category'
+		lineageTag: de0a608b-b158-5c97-a0e7-ff70c09b8d4f
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+	column 'Axis Label' = "Metric"
+		dataType: string
+		lineageTag: 1d4a8816-4a92-551e-ad7e-d1f44ab8e44b
+		summarizeBy: none
+
+	partition 'x-Selector 1' = calculated
+		mode: import
+		source = ```
+				{
+					("Revenue", NAMEOF('Coffee Measures'[Total Revenue]), 0, "Sales_x"),
+					("Visits", NAMEOF([Visit Count]), 1, "Traffic_x")
+				}
+				```
+

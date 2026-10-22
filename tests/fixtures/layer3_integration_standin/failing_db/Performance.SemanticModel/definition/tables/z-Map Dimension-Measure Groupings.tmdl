@@ -1,0 +1,24 @@
+table 'z-Map Dimension-Measure Groupings'
+	isHidden
+	lineageTag: b7ad8026-359f-5418-9b20-a97d392f28c1
+
+	column 'Analysis Category'
+		dataType: string
+		lineageTag: c65bdc96-5ba5-5423-88d4-b1f29b229bbc
+		summarizeBy: none
+		sourceColumn: Analysis Category
+
+	column category_x_id
+		dataType: string
+		lineageTag: 7add8c21-0105-501f-ba2d-39a8e7f5b26f
+		summarizeBy: none
+		sourceColumn: category_x_id
+
+	partition 'z-Map Dimension-Measure Groupings' = m
+		mode: import
+		source =
+				let
+				    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText("i45WCk7MSS1W0lFQAmHHFAX3ovzSgvhKpVgdhWgl38Si7NSSzLx0XApQdIM58RU4tKLIhhQlpqVlJsPkoFyYLIqpLoklqTDr0LQhS6H6Izk5vzSvBLc3CMgHpxaVZSbjsjY4I7+gGCQXCwA=", BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type nullable text) meta [Serialized.Text = true]) in type table [#"Analysis Category" = _t, #"Analysis Subcategory" = _t, category_x_id = _t])
+				in
+				    Source
+

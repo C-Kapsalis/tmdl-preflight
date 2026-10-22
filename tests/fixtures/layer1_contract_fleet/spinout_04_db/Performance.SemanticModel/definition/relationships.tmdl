@@ -1,0 +1,3 @@
+relationship 5eed0000-0000-0000-0000-000000000243
+	fromColumn: Sales.event_date
+	toColumn: __Calendar.Date

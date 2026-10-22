@@ -1,0 +1,16 @@
+table _Days
+	lineageTag: afc981d2-0de5-541b-8182-29c0ff0f74f4
+
+	column Date
+		dataType: dateTime
+		lineageTag: 61c0de5e-86a5-5cb5-bc92-cc2177b6bf3d
+		summarizeBy: none
+		sourceColumn: Date
+
+	partition _Days = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Date"}, {})
+			in
+			    Source

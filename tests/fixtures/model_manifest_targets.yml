@@ -1,0 +1,7 @@
+# Targets file for the stand-in fleet (tests/fixtures/measure_organization_fleet).
+# universal reads the internal warehouse with its own dataset; spinout-02 follows
+# the <id>_db naming convention and declares no dataset.
+universal:
+  model_path: universal/Performance.SemanticModel
+spinout-02:
+  model_path: spinout_02_db/Performance.SemanticModel

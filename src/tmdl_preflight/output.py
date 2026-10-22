@@ -80,11 +80,26 @@ def _cwd_relative(file: Optional[Path]) -> str:
 
 def render_text(report: PreflightReport, root: Path) -> str:
     out: list[str] = []
+    out.extend(report.fix_notes)
+    if report.fix_notes:
+        out.append("")
     for applied in report.fixes_applied:
         out.append(f"fixed  {applied}")
-    if report.fixes_applied:
+    for planned in report.would_fix:
+        out.append(f"would fix  {planned}")
+    for refused in report.refused_fixes:
+        out.append(f"refused  {refused} (the edit could not be proven; the file is unchanged)")
+    for rid in report.skipped_fixers:
+        out.append(
+            f"not fixed  {rid}: its fixer can change data, so a blanket fix skips "
+            f"it; run 'fix --select {rid}' to apply it"
+        )
+    if report.fixes_applied or report.would_fix or report.skipped_fixers or report.refused_fixes:
         out.append("")
     for v in _sorted(report.violations):
+        if v.grouped:
+            # the rule prints its findings as a block of its own
+            continue
         loc = _display_path(v.file, root)
         if loc and v.line:
             loc += f":{v.line}"
@@ -102,11 +117,21 @@ def render_text(report: PreflightReport, root: Path) -> str:
         f"tmdl-preflight: {e} error(s), {w} warning(s), {i} info(s)"
         + (f", {len(report.fixes_applied)} fix(es) applied" if report.fixes_applied else "")
     )
+    for block in report.blocks:
+        out.append("")
+        out.append(block)
     return "\n".join(out)
 
 
 def _notes(report: PreflightReport) -> list[str]:
-    notes: list[str] = []
+    notes: list[str] = list(report.notes)
+    for entry in report.skipped:
+        if isinstance(entry, str):
+            why = report.skip_reasons.get(entry, "turned off by its policy option")
+            notes.append(f"skipped: {entry} ({why})")
+        else:
+            where = f"{entry['model']}: " if entry.get("model") else ""
+            notes.append(f"skipped: {entry['rule']} ({where}{entry['reason']})")
     if report.excluded:
         notes.append(f"excluded: {len(report.excluded)} violation(s) in excluded paths")
     if report.exempted:

@@ -1,0 +1,50 @@
+table 'MCP Tool Calls'
+	lineageTag: 2440a21d-6bc6-50cb-ad58-332588844144
+
+	column id
+		dataType: int64
+		lineageTag: f94cacbc-0d5e-5df7-9ddb-7ea241dd41bf
+		summarizeBy: none
+		sourceColumn: id
+
+		annotation SummarizationSetBy = Automatic
+
+	column session_id
+		dataType: int64
+		lineageTag: 60d09c3a-278c-5328-af0d-94c47fad66b4
+		summarizeBy: none
+		sourceColumn: session_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column created_at
+		dataType: dateTime
+		lineageTag: 4411f877-549f-595c-ad3b-ebdafbdcfcb1
+		summarizeBy: none
+		sourceColumn: created_at
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Analysis Category'
+		dataType: string
+		lineageTag: 595f1845-7b83-5b33-9c17-38a3af3cf482
+		summarizeBy: none
+		sourceColumn: Analysis Category
+
+		annotation SummarizationSetBy = Automatic
+
+	column exception_type
+		dataType: string
+		lineageTag: bb67e3db-d2d0-5598-b195-2dc639a9b9dd
+		summarizeBy: none
+		sourceColumn: exception_type
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'MCP Tool Calls' = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from tool_calls")
+				in
+				    Source

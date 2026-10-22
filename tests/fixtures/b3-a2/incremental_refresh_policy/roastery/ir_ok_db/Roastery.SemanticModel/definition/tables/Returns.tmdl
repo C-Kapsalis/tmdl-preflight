@@ -1,0 +1,26 @@
+table Returns
+	lineageTag: 70d036eb-d181-58cb-8c54-5796aecc34ab
+
+	column returns_id
+		dataType: int64
+		lineageTag: 33c12bcf-3784-5c62-916d-c55fdb8ade85
+		summarizeBy: none
+		sourceColumn: returns_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_date
+		dataType: dateTime
+		lineageTag: be73a3b1-c2b1-5189-83af-a0e07fcaaf39
+		summarizeBy: none
+		sourceColumn: order_date
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Returns = m
+		mode: import
+		source =
+				let
+				    Source = source_filter_dates("returns_v", "return_date", false, #"v-fromdate")
+				in
+				    Source

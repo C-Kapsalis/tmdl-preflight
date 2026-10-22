@@ -1,0 +1,34 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+
+ref table 'Active Promos'
+ref table 'Ads Report'
+ref table 'Client-a Measures'
+ref table 'Crawl Report'
+ref table 'GA4 Conversions'
+ref table 'Helper Measures'
+ref table 'Keywords Report'
+ref table 'Queries Paid'
+ref table Subscriptions
+ref table 'Traffic Report'
+ref table Transactions
+ref table 'User Views'
+ref table _Accounts
+ref table _Ads
+ref table '_Analysis Category'
+ref table _Assets
+ref table _Campaigns
+ref table '_Cluster Mappings'
+ref table _Content
+ref table _Countries
+ref table _Devices
+ref table _Keywords
+ref table '_Landing Pages'
+ref table _Offers
+ref table _Queries
+ref table _Users
+ref table '__Acquiring Cohort Calendar'
+ref table __Calendar
+ref table '__Registration Calendar'
+ref table 'y-Selector 1'

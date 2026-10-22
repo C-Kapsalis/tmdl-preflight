@@ -1,0 +1,9 @@
+model Model
+	culture: en-US
+
+ref table __Calendar
+ref table Bikes
+ref table Sales
+ref table 'Shop Measures'
+ref table 'x-Selector 1'
+ref table 'z-Selector Format'

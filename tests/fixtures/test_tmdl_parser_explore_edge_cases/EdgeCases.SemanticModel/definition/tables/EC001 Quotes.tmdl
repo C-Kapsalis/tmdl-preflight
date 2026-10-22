@@ -1,0 +1,16 @@
+table 'EC001 Quotes'
+	lineageTag: 78c57c3a-dfe5-59f3-b6c0-1c93e174c2b9
+
+	column 'Rider''s Name'
+		dataType: string
+		lineageTag: 9a4c4148-03ba-5719-b166-2764d21ff5ee
+		summarizeBy: none
+		sourceColumn: Rider's Name
+
+	partition 'EC001 Quotes' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

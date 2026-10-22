@@ -1,0 +1,19 @@
+table 'y-Selector 1'
+	lineageTag: 5eed0000-0000-0000-0000-000000000238
+
+	column 'y-Selector 1'
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-000000000239
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	partition 'y-Selector 1' = calculated
+		mode: import
+		source =
+				{
+				    ("Organisation", NAMEOF('_m Organizations'[org_name]), 0, "Orgs"),
+				    ("Tier", NAMEOF('_m Organizations'[org_tier]), 1, "Orgs"),
+				    ("Role", NAMEOF('_m Users'[user_role]), 2, "Users"),
+				    --DQ-14 dup: ("Legacy", NAMEOF('_m Users'[legacy_flag]), 3, "Users"),,
+				    ("Signup", NAMEOF('_m Users'[signup_month]), 4, "Users")
+				}

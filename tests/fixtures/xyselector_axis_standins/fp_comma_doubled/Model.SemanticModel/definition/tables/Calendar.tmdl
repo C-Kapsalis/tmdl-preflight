@@ -1,0 +1,19 @@
+table Calendar
+	lineageTag: b6d7d599-7e03-5fa3-88f3-b11455ec6391
+
+	column Month
+		dataType: string
+		lineageTag: 1f70d57d-27e3-5555-9486-e2f7e2cbcc4a
+		summarizeBy: none
+		sourceColumn: Month
+
+	column 'Order Date'
+		dataType: dateTime
+		lineageTag: 5af56838-1a0d-5ae3-ad4c-289ca0278c0f
+		summarizeBy: none
+		sourceColumn: Order Date
+
+	partition Calendar = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

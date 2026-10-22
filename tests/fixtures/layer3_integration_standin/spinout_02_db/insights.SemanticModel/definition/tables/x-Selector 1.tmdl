@@ -1,0 +1,38 @@
+table 'x-Selector 1'
+	lineageTag: 0ee70417-cd00-5b8f-891d-12e4e035aaef
+
+	column 'x-Selector 1'
+		lineageTag: 162597b1-532f-5496-95c8-a9f9e3fc2cd8
+		summarizeBy: none
+		sourceColumn: [Value1]
+		sortByColumn: 'x-Selector 1 Order'
+
+		relatedColumnDetails
+			groupByColumn: 'x-Selector 1 Fields'
+
+	column 'x-Selector 1 Fields'
+		isHidden
+		lineageTag: cd086931-574d-59ea-aa38-146b5a1d976c
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+	column 'x-Selector 1 Order'
+		isHidden
+		formatString: 0
+		lineageTag: 40960eb5-bd68-50c6-bc8a-92e3281eb40f
+		summarizeBy: sum
+		sourceColumn: [Value3]
+
+	column 'x-Selector 1 Field Category'
+		lineageTag: de0a608b-b158-5c97-a0e7-ff70c09b8d4f
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+	partition 'x-Selector 1' = calculated
+		mode: import
+		source = ```
+				{
+					("Users", NAMEOF([User Count]), 0, "m_users_across_x")
+				}
+				```
+

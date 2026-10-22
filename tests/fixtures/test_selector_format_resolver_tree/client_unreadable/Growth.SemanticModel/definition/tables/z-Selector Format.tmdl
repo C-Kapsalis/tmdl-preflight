@@ -1,0 +1,8 @@
+table 'z-Selector Format'
+	calculationGroup
+		calculationItem Format = selectedmeasure()
+
+			formatStringDefinition =
+				SWITCH(TRUE(),
+				    SOMEUNKNOWNFUNC('t'[c]), "#,##0 €",
+				    "General")

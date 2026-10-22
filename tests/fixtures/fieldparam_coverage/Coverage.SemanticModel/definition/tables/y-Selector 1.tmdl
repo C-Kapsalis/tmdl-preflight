@@ -1,0 +1,32 @@
+table 'y-Selector 1'
+	lineageTag: 364ed16f-4b5a-4c6d-ae8f-011223344556
+
+	column 'y-Selector 1'
+		lineageTag: 475fe270-5c6b-4d7e-bf90-122334455667
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	column 'y-Selector 1 Fields'
+		isHidden
+		lineageTag: 5860f381-6d7c-4e8f-c0a1-233445566778
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+	column 'y-Selector 1 Order'
+		isHidden
+		lineageTag: 69710492-7e8d-4f90-d1b2-344556667788
+		summarizeBy: sum
+		sourceColumn: [Value3]
+
+	column 'y-Selector 1 Field Category'
+		lineageTag: 7a8215a3-8f9e-40a1-e2c3-445566778899
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+	partition 'y-Selector 1' = calculated
+		mode: import
+		source = ```
+				{
+					("Shop", NAMEOF('_Shops'[shop_name]), 0, "Shops_y")
+				}
+				```

@@ -1,0 +1,25 @@
+table Orders
+	lineageTag: 1e0eb1e8-2bc1-5cb8-abdd-821cbf427609
+
+	column order_id
+		dataType: int64
+		lineageTag: 54bc2475-ecba-5de7-8c55-b1ad3a7062b1
+		summarizeBy: none
+		sourceColumn: order_id
+
+	column store_id
+		dataType: int64
+		lineageTag: 9418961b-9337-5b14-b31e-9e3c5fd6f068
+		summarizeBy: none
+		sourceColumn: store_id
+
+	column region_id
+		dataType: int64
+		lineageTag: 5d64e2ff-6a80-5cb0-8cff-a5ac9910727f
+		summarizeBy: none
+		sourceColumn: region_id
+
+	partition Orders = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

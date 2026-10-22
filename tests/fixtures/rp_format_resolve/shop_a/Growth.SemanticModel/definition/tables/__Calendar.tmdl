@@ -1,0 +1,12 @@
+table '__Calendar'
+	lineageTag: 00000000-0000-0000-0000-871467642637
+
+	column date
+		dataType: dateTime
+		sourceColumn: date
+
+	partition '__Calendar' = m
+		mode: import
+		source = ```
+			let x = 1 in x
+			```

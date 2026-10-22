@@ -1,0 +1,16 @@
+table _Roasts
+	lineageTag: 6e2b3f3d-274a-5d33-b64d-66da0da1df5a
+
+	column Key
+		dataType: int64
+		lineageTag: 55eff517-2450-5c39-840a-d8a292ba8053
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition _Roasts = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

@@ -1,0 +1,57 @@
+[
+  {
+    "query": "EVALUATE ROW(\"User\", USERPRINCIPALNAME())",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[User]": "reader@example.com"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"Count\", COUNTROWS('__Calendar'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Count]": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"Normal\", COUNTROWS('_Accounts'), \"WithALL\", CALCULATE(COUNTROWS('_Accounts'), ALL('_Accounts')) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Normal]": 1,
+                  "[WithALL]": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

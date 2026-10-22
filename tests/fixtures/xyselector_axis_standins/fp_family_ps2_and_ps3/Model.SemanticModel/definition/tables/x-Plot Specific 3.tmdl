@@ -1,0 +1,40 @@
+table 'x-Plot Specific 3'
+	lineageTag: c3f1a901-4d21-5f77-9d1e-7a2b3c4d5e6f
+
+	column 'x-Plot Specific 3'
+		dataType: string
+		lineageTag: c3f1a902-4d21-5f77-9d1e-7a2b3c4d5e6f
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	column 'x-Plot Specific 3 Fields'
+		dataType: string
+		lineageTag: c3f1a903-4d21-5f77-9d1e-7a2b3c4d5e6f
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+	column 'x-Plot Specific 3 Order'
+		dataType: int64
+		lineageTag: c3f1a904-4d21-5f77-9d1e-7a2b3c4d5e6f
+		summarizeBy: none
+		sourceColumn: [Value3]
+
+	column 'x-Plot Specific 3 Value4'
+		dataType: string
+		lineageTag: c3f1a905-4d21-5f77-9d1e-7a2b3c4d5e6f
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+	partition 'x-Plot Specific 3' = calculated
+		mode: import
+		source =
+				{
+				    ("Revenue", NAMEOF('Sales'[Revenue]), 0, "sales_x"),
+				    ("Units", NAMEOF([Units]), 1, "sales_x"),
+				    ("Region", NAMEOF('_Stores'[Region]), 2, "store_x"),
+				    ("CPM", NAMEOF([CPM]), 3, "ads_x"),
+				    ("Order Date", NAMEOF('Calendar'[Order Date]), 9, "date_x")
+				}
+
+	annotation PBI_Id = 6adefa542cec5594ba0b2f7376a24676
+

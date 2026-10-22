@@ -39,7 +39,9 @@ def scan_summary(ctx: Context) -> dict[str, int]:
         bookmarks += sum(1 for _ in report_dir.rglob("*.bookmark.json"))
         pages += sum(1 for _ in report_dir.rglob("page.json"))
         visuals += sum(1 for _ in report_dir.rglob("visual.json"))
+    bookmarks += len(ctx.bookmark_targets)
     return {
+        "files": ctx.files_scanned(),
         "models": len(models),
         "tables": len(tables),
         "columns": sum(len(t.column_list) for t in tables),
@@ -70,6 +72,31 @@ class PreflightReport:
     expired_exemptions: list[Any] = field(default_factory=list)
     unused_exemptions: list[Any] = field(default_factory=list)
     baseline: Optional[Any] = None  # baseline.BaselineResult
+    # files skipped before parsing because an exclude glob matched them all
+    excluded_files: int = 0
+    # fixable rules whose (unsafe) fixer a blanket fix did not run
+    skipped_fixers: list[str] = field(default_factory=list)
+    # rules disabled by a policy toggle; they ran no check at all
+    skipped: list[str] = field(default_factory=list)
+    # why each skipped rule did not run
+    skip_reasons: dict[str, str] = field(default_factory=dict)
+    # fix --dry-run: what a real fix would repair, per rule
+    would_fix: list[str] = field(default_factory=list)
+    # free-text notes from the rules (for example ratchet tighten hints)
+    notes: list[str] = field(default_factory=list)
+    # multi-line closing advice from the fixers, printed after the summary
+    blocks: list[str] = field(default_factory=list)
+    # repairs a fixer refused because it could not prove them (exit 2)
+    refused_fixes: list[str] = field(default_factory=list)
+    # the violations the first pass found, before any fixer ran; the console
+    # reports of the rules that repair files describe those, not the clean
+    # re-check
+    found: list[Violation] = field(default_factory=list)
+    # the console report of a rule that came from a script with a report of
+    # its own, rendered before the repair so it can describe what was there
+    console: list[str] = field(default_factory=list)
+    # lines the fixers printed while they worked
+    fix_notes: list[str] = field(default_factory=list)
 
     def by_severity(self, severity: Severity) -> list[Violation]:
         return [v for v in self.violations if v.severity == severity]
@@ -87,6 +114,8 @@ class PreflightReport:
         return self.by_severity(Severity.INFO)
 
     def exit_code(self, strict: bool = False) -> int:
+        if self.refused_fixes:
+            return 2
         if self.errors:
             return 1
         if strict and self.warnings:
@@ -100,11 +129,21 @@ class PreflightReport:
                 "warnings": len(self.warnings),
                 "infos": len(self.infos),
                 "fixes_applied": len(self.fixes_applied),
-                "excluded": len(self.excluded),
+                "excluded": len(self.excluded) + self.excluded_files,
+                "excluded_files": self.excluded_files,
+                "files_scanned": self.scanned.get("files", 0),
                 "exempted": len(self.exempted),
                 "baselined": len(self.baseline.suppressed) if self.baseline else 0,
             },
             "fixes": self.fixes_applied,
+            "skipped": self.skipped,
+            "skip_reasons": self.skip_reasons,
+            "skipped_fixers": self.skipped_fixers,
+            "would_fix": self.would_fix,
+            "refused_fixes": self.refused_fixes,
+            "notes": self.notes,
+            "fix_notes": self.fix_notes,
+            "blocks": self.blocks,
             "violations": [v.to_dict() for v in self.violations],
             "scanned": self.scanned,
         }
@@ -125,13 +164,22 @@ class PreflightReport:
 def check(ctx: Context, ruleset: RuleSet) -> PreflightReport:
     """Pure-read pass: run every rule, collect violations, mutate nothing."""
     report = PreflightReport()
+    ctx.notes = []
+    ctx.skips = []
     for rule in ruleset.rules:
+        if rule.disabled_by_policy():
+            report.skipped.append(rule.name)
+            report.skip_reasons[rule.name] = rule.skip_reason()
+            continue
         report.violations.extend(rule.check(ctx))
+    report.skipped.extend(ctx.skips)
     report.scanned = scan_summary(ctx)
+    report.notes = list(dict.fromkeys(ctx.notes))
+    report.blocks = list(ctx.blocks)
     return report
 
 
-def fix(ctx: Context, ruleset: RuleSet) -> PreflightReport:
+def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> PreflightReport:
     """Imposition pass: check, repair what is repairable, then re-check.
 
     The returned report carries the *post-fix* violations plus a log of
@@ -140,10 +188,19 @@ def fix(ctx: Context, ruleset: RuleSet) -> PreflightReport:
     """
     first = check(ctx, ruleset)
     report = PreflightReport()
+    report.found = list(first.violations)
+    ctx.refused_fixes = []
+    ctx.fix_notes = []
 
     dirty_rule_ids = {v.rule_id for v in first.violations}
+    chosen = {e.lower() for e in (explicit or set())}
+    notes_before = len(ctx.notes)
     for rule in ruleset.rules:
-        if not rule.fixable or rule.id not in dirty_rule_ids:
+        if not rule.fixable or (rule.id not in dirty_rule_ids and not rule.pending_repairs(ctx)):
+            continue
+        if not rule.safe and not ({rule.id.lower(), rule.name.lower()} & chosen) \
+                and not rule.unsafe_fix_enabled():
+            report.skipped_fixers.append(rule.id)
             continue
         applied = rule.fix(ctx)
         if applied:
@@ -153,13 +210,23 @@ def fix(ctx: Context, ruleset: RuleSet) -> PreflightReport:
         # new state, not the parse cache.
         ctx.reload()
 
+    # what a fixer had to say survives the re-check, which starts with an
+    # empty note list
+    fixer_notes = list(ctx.notes[notes_before:])
+    report.fix_notes = list(ctx.fix_notes)
     second = check(ctx, ruleset)
+    report.refused_fixes = list(ctx.refused_fixes)
     report.violations = second.violations
     report.scanned = second.scanned
+    report.notes = list(dict.fromkeys(ctx.fix_notes + fixer_notes + second.notes))
+    report.skipped = second.skipped
+    report.skip_reasons = second.skip_reasons
+    report.blocks = list(ctx.blocks)
     return report
 
 
-def apply_policy(report: PreflightReport, config, today: Optional[_dt.date] = None) -> PreflightReport:
+def apply_policy(report: PreflightReport, config, today: Optional[_dt.date] = None,
+                 ctx: Optional[Context] = None) -> PreflightReport:
     """Apply a ``config.Config`` to a report, in place.
 
     Order: severity overrides, then path excludes, then exemptions. An
@@ -173,10 +240,14 @@ def apply_policy(report: PreflightReport, config, today: Optional[_dt.date] = No
         override = config.severity_overrides.get(v.rule_id)
         if override is not None:
             v.severity = override
+    if ctx is not None:
+        report.excluded_files = ctx.excluded_files
     if config.exclude:
         kept = []
         for v in report.violations:
-            if v.path and any(glob_match(p, v.path) for p in config.exclude):
+            scan_rel = ctx.scan_relative(v.file) if (ctx is not None and v.file) else None
+            paths = [p for p in (v.path, scan_rel) if p]
+            if any(glob_match(p, path) for p in config.exclude for path in paths):
                 report.excluded.append(v)
             else:
                 kept.append(v)

@@ -1,0 +1,14 @@
+/// Plumbing the report never shows.
+table 'Helper Measures'
+	lineageTag: 8b7326b4-90af-41b2-f3d4-ef5061728394
+
+	measure '-helper Base' = 1
+		lineageTag: 9c8437c5-a1b0-42c3-04e5-061728394a5b
+
+	partition 'Helper Measures' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source

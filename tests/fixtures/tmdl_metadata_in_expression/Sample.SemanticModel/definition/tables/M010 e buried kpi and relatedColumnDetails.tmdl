@@ -1,0 +1,20 @@
+table 'M010 e buried kpi and relatedColumnDetails'
+	lineageTag: 39cb6a2d-d3c2-59bd-a180-a70eeb2b921b
+
+	measure 'Cups Sold' =
+			VAR c = SUM(Brews[cups])
+			RETURN
+			kpi
+			c
+		lineageTag: 31f46536-86d5-5902-99f2-d73f034e7cc6
+
+	measure 'Beans Used' =
+			VAR b = SUM(Brews[grams])
+			RETURN
+			relatedColumnDetails
+			b
+		lineageTag: 92b93d6d-f3e6-57cc-b109-3c9894dd74a7
+
+	partition 'M010 e buried kpi and relatedColumnDetails' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})

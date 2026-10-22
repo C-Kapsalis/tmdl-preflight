@@ -1,0 +1,8 @@
+relationship 478ca95a-5e84-5850-bfda-2476569fb524
+	fromColumn: Sales.bike_id
+	toColumn: Bikes.bike_id
+
+relationship 6b284d0c-b4e4-5168-aa8d-2d94c44fea3c
+	fromColumn: Sales.Date
+	toColumn: __Calendar.Date
+

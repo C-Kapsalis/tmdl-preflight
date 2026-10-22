@@ -1,0 +1,23 @@
+table _Countries
+	lineageTag: 5eed0000-0000-0000-0000-0000000001f7
+
+	column 'Country Official Name'
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-0000000001f8
+		summarizeBy: none
+		sourceColumn: Country Official Name
+
+	column country_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000001f9
+		summarizeBy: none
+		sourceColumn: country_id
+
+	partition _Countries = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

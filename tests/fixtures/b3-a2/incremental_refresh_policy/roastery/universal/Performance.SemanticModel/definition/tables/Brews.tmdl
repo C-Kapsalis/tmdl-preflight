@@ -1,0 +1,41 @@
+table Brews
+	lineageTag: bc32e60b-6d87-5d1b-b3dd-499421ee5ed8
+
+	column brews_id
+		dataType: int64
+		lineageTag: 532f0378-5480-5470-a61a-60fb07feb0a7
+		summarizeBy: none
+		sourceColumn: brews_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_date
+		dataType: dateTime
+		lineageTag: 88962da1-0724-5340-9a03-480be42a6df3
+		summarizeBy: none
+		sourceColumn: order_date
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Brews = m
+		mode: import
+		source =
+				let
+				    ir_dfilter = " order_date >= '" & Date.ToText(DateTime.Date(RangeStart), "yyyy-MM-dd") & "' and order_date < '" & Date.ToText(DateTime.Date(RangeEnd), "yyyy-MM-dd") & "'",
+				    Source = Value.NativeQuery(Warehouse, "select * from orders_n where " & ir_dfilter)
+				in
+				    Source
+
+	refreshPolicy
+		policyType: basic
+		rollingWindowGranularity: year
+		rollingWindowPeriods: 6
+		incrementalGranularity: month
+		incrementalPeriods: 3
+		sourceExpression = ```
+				let
+				    ir_dfilter = " order_date >= '" & Date.ToText(DateTime.Date(RangeStart), "yyyy-MM-dd") & "' and order_date < '" & Date.ToText(DateTime.Date(RangeEnd), "yyyy-MM-dd") & "'",
+				    Source = Value.NativeQuery(Warehouse, "select * from orders_n where " & ir_dfilter)
+				in
+				    Source
+			```

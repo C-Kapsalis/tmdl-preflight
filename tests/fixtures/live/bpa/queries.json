@@ -1,0 +1,150 @@
+[
+  {
+    "query": "EVALUATE ADDCOLUMNS( INFO.MEASURES(), \"HasDivision\", SEARCH(\"/\", [Expression], 1, 0) > 0, \"HasDIVIDE\", SEARCH(\"DIVIDE\", [Expression], 1, 0) > 0 )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Name]": "!Revenue",
+                  "[Expression]": "[Sales] / [Orders]",
+                  "[Description]": "",
+                  "[HasDivision]": true,
+                  "[HasDIVIDE]": false,
+                  "[TableName]": "Coffee Measures"
+                },
+                {
+                  "[Name]": "!Margin",
+                  "[Expression]": "DIVIDE([P], [S])",
+                  "[Description]": "Profit over sales.",
+                  "[HasDivision]": false,
+                  "[HasDIVIDE]": true,
+                  "[TableName]": "Coffee Measures"
+                },
+                {
+                  "[Name]": "Helper Ratio",
+                  "[Expression]": "[A]/[B]",
+                  "[Description]": "",
+                  "[HasDivision]": true,
+                  "[HasDIVIDE]": false,
+                  "[TableName]": "Coffee Measures"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE FILTER( INFO.COLUMNS(), [Type] = \"Calculated\" )",
+    "response": {
+      "error": "DAX comparison operations do not support comparing values of type Integer with values of type Text."
+    }
+  },
+  {
+    "query": "EVALUATE FILTER( INFO.COLUMNS(), [Type] = 2 )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[TableID]": 2,
+                  "[TableName]": "Sales",
+                  "[Name]": "Band",
+                  "[Type]": 2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE FILTER( INFO.MEASURES(), ISBLANK([Description]) || [Description] = \"\" )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Name]": "!Revenue",
+                  "[Expression]": "[Sales] / [Orders]",
+                  "[Description]": "",
+                  "[TableName]": "Coffee Measures"
+                },
+                {
+                  "[Name]": "Helper Ratio",
+                  "[Expression]": "[A]/[B]",
+                  "[Description]": "",
+                  "[TableName]": "Coffee Measures"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"MeasureCount\", COUNTROWS(INFO.MEASURES()))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[MeasureCount]": 3,
+                  "[TableName]": "Coffee Measures"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"ColumnCount\", COUNTROWS(INFO.COLUMNS()))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[ColumnCount]": 12
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE { 1 }",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[Value]": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

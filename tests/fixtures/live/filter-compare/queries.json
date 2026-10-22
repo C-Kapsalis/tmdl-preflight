@@ -1,0 +1,388 @@
+[
+  {
+    "query": "EVALUATE ROW( \"UserPrincipalName\", USERPRINCIPALNAME(), \"UserName\", USERNAME(), \"UserObjectId\", USEROBJECTID() )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[UserPrincipalName]": "reader@example.com",
+                  "[UserName]": "reader@example.com",
+                  "[UserObjectId]": "00000000-0000-0000-0000-000000000001"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('_Accounts'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE TOPN(10, '_Accounts')",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "_Accounts[Key]": 0
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"TotalRows\", CALCULATE(COUNTROWS('_Accounts'), ALL('_Accounts')) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[TotalRows]": 40
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('_Campaigns'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 25
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE TOPN(10, '_Campaigns')",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "_Campaigns[Key]": 0
+                },
+                {
+                  "_Campaigns[Key]": 1
+                },
+                {
+                  "_Campaigns[Key]": 2
+                },
+                {
+                  "_Campaigns[Key]": 3
+                },
+                {
+                  "_Campaigns[Key]": 4
+                },
+                {
+                  "_Campaigns[Key]": 5
+                },
+                {
+                  "_Campaigns[Key]": 6
+                },
+                {
+                  "_Campaigns[Key]": 7
+                },
+                {
+                  "_Campaigns[Key]": 8
+                },
+                {
+                  "_Campaigns[Key]": 9
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"TotalRows\", CALCULATE(COUNTROWS('_Campaigns'), ALL('_Campaigns')) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[TotalRows]": 25
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('_Conversions'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 6
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE TOPN(10, '_Conversions')",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "_Conversions[Key]": 0
+                },
+                {
+                  "_Conversions[Key]": 1
+                },
+                {
+                  "_Conversions[Key]": 2
+                },
+                {
+                  "_Conversions[Key]": 3
+                },
+                {
+                  "_Conversions[Key]": 4
+                },
+                {
+                  "_Conversions[Key]": 5
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"TotalRows\", CALCULATE(COUNTROWS('_Conversions'), ALL('_Conversions')) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[TotalRows]": 6
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('__Calendar'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 730
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE TOPN(10, '__Calendar')",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "__Calendar[Key]": 0
+                },
+                {
+                  "__Calendar[Key]": 1
+                },
+                {
+                  "__Calendar[Key]": 2
+                },
+                {
+                  "__Calendar[Key]": 3
+                },
+                {
+                  "__Calendar[Key]": 4
+                },
+                {
+                  "__Calendar[Key]": 5
+                },
+                {
+                  "__Calendar[Key]": 6
+                },
+                {
+                  "__Calendar[Key]": 7
+                },
+                {
+                  "__Calendar[Key]": 8
+                },
+                {
+                  "__Calendar[Key]": 9
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"TotalRows\", CALCULATE(COUNTROWS('__Calendar'), ALL('__Calendar')) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[TotalRows]": 730
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW(\"RowCount\", COUNTROWS('Ads'))",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 300
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE TOPN(10, 'Ads')",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "Ads[Key]": 0
+                },
+                {
+                  "Ads[Key]": 1
+                },
+                {
+                  "Ads[Key]": 2
+                },
+                {
+                  "Ads[Key]": 3
+                },
+                {
+                  "Ads[Key]": 4
+                },
+                {
+                  "Ads[Key]": 5
+                },
+                {
+                  "Ads[Key]": 6
+                },
+                {
+                  "Ads[Key]": 7
+                },
+                {
+                  "Ads[Key]": 8
+                },
+                {
+                  "Ads[Key]": 9
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "EVALUATE ROW( \"TotalRows\", CALCULATE(COUNTROWS('Ads'), ALL('Ads')) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[TotalRows]": 300
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

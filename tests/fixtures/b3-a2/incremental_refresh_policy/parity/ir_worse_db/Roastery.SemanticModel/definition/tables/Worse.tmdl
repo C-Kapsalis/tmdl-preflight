@@ -1,0 +1,36 @@
+table Worse
+	lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00018
+
+	column worse_id
+		dataType: int64
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00019
+		summarizeBy: none
+		sourceColumn: worse_id
+
+	column order_date
+		dataType: dateTime
+		lineageTag: c7010ce3-97a6-5bc9-8597-d9d6c0b00020
+		summarizeBy: none
+		sourceColumn: order_date
+	refreshPolicy
+		policyType: hybrid
+		rollingWindowGranularity: week
+		rollingWindowPeriods: six
+		incrementalGranularity: month
+		incrementalPeriods: 0
+		foo: bar
+		sourceExpression = ```
+				let
+				    ir_dfilter = " order_date >= '" & Date.ToText(DateTime.Date(RangeStart), "yyyy-MM-dd") & "' and order_date < '" & Date.ToText(DateTime.Date(RangeEnd), "yyyy-MM-dd") & "'",
+				    Source = Value.NativeQuery(Warehouse, "select * from orders_n where " & ir_dfilter)
+				in
+				    Source
+			```
+	partition Worse = m
+		mode: import
+		source =
+				let
+				    ir_dfilter = " order_date >= '" & Date.ToText(DateTime.Date(RangeStart), "yyyy-MM-dd") & "' and order_date < '" & Date.ToText(DateTime.Date(RangeEnd), "yyyy-MM-dd") & "'",
+				    Source = Value.NativeQuery(Warehouse, "select * from orders_n where " & ir_dfilter)
+				in
+				    Source

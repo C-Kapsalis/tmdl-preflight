@@ -1,0 +1,18 @@
+table 'Helper Measures'
+	lineageTag: 7af5c306-a978-51df-9510-cb921b66234d
+
+	measure '-helper Base' = 1
+		isHidden
+		lineageTag: f134de1a-d7f8-5924-8631-fbb0d7196655
+
+	measure 'i-Debug' = 1
+		lineageTag: 00bbaba5-abfc-5866-8b6b-32380ffbe832
+
+	partition 'Helper Measures' = m
+		mode: import
+		source =
+				let
+				    Source = Table.RemoveColumns(Table.FromRows({{null}}, {"Dummy"}), {"Dummy"})
+				in
+				    Source
+

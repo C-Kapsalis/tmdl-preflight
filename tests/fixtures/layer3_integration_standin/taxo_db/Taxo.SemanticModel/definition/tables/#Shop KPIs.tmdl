@@ -1,0 +1,20 @@
+table '#Shop KPIs'
+	lineageTag: 484988b7-0507-52bc-ab87-7d439eaf36a2
+
+	measure Cups = 1
+		lineageTag: 2849ffcd-493b-53a4-ab39-050d85ee515c
+
+	column k
+		dataType: string
+		lineageTag: c909f599-7096-5d0c-a04a-b6d3938e0343
+		summarizeBy: none
+		sourceColumn: k
+
+	partition '#Shop KPIs' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

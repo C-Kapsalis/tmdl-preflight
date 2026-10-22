@@ -1,0 +1,22 @@
+table 'Ride Measures'
+	lineageTag: be087260-e790-52eb-a77c-1d33df6feb2f
+
+	measure Sales = SUM(Rentals[Fee])
+		formatString: #,0
+		lineageTag: c3212e37-9c88-5489-868a-8a6c58ceaeed
+
+	measure Returns = 0
+		formatString: #,0
+		lineageTag: 7d6e4c72-9e29-56a7-87a8-25c891cf15a6
+
+	measure Discounts = 0
+		formatString: #,0
+		lineageTag: 2f5c4770-c2ce-5267-b0ad-2a4ff975044c
+
+	partition 'Ride Measures' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

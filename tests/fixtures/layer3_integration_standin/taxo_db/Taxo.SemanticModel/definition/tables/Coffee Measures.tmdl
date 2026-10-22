@@ -1,0 +1,17 @@
+table 'Coffee Measures'
+	lineageTag: 1bd6df82-8783-5a6a-a241-179e5363f3a7
+
+	column k
+		dataType: string
+		lineageTag: 82eee19e-e709-54b9-a71e-5a5573c12316
+		summarizeBy: none
+		sourceColumn: k
+
+	partition 'Coffee Measures' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

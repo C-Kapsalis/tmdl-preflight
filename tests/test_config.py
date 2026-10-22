@@ -163,7 +163,7 @@ class TestCliWithConfig:
         assert "configuration error" in capsys.readouterr().err
 
     def test_profile_strict(self, project, definition, capsys):
-        f = definition / "tables" / "Calendar.tmdl"
+        f = definition / "tables" / "__Calendar.tmdl"
         f.write_text(
             f.read_text(encoding="utf-8").replace(
                 "lineageTag: 7f22e2f3-e273-44b5-8ad6-d1e2f3041526", "lineageTag: oops"

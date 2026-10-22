@@ -1,0 +1,14 @@
+table 'x-Selector 1'
+	lineageTag: 00000000-0000-0000-0000-714894652951
+
+	measure 'Lbl' = NAMEOF('Sales'[Revenue]) & NAMEOF([Revenue]) & NAMEOF(Sales[nope]) & NAMEOF([Missing]) & NAMEOF('Ghost'[x])
+
+	column 'x-Selector 1'
+		dataType: string
+		sourceColumn: [Value1]
+
+	partition 'x-Selector 1' = m
+		mode: import
+		source = ```
+			let x = 1 in x
+			```

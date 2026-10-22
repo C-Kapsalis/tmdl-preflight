@@ -1,0 +1,17 @@
+table Orders
+	lineageTag: 476682cb-22e2-5d90-acf1-5b4cfe354894
+
+	column order_id
+		dataType: int64
+		lineageTag: 2e7dda45-620f-5dbe-b334-ee32237466f9
+		summarizeBy: none
+		sourceColumn: order_id
+
+	partition 'Orders' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

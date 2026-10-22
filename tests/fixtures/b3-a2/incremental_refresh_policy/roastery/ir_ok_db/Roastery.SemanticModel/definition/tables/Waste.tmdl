@@ -1,0 +1,26 @@
+table Waste
+	lineageTag: 5c56fc7f-c663-5c8b-9c45-636c073a2bfd
+
+	column waste_id
+		dataType: int64
+		lineageTag: b924a76a-c545-5a27-bb29-f2be268f90f1
+		summarizeBy: none
+		sourceColumn: waste_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_date
+		dataType: dateTime
+		lineageTag: 6853576d-52bd-587b-8859-0844cd4c7d04
+		summarizeBy: none
+		sourceColumn: order_date
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Waste = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from waste_v")
+				in
+				    Source

@@ -1,0 +1,22 @@
+table __Calendar
+	lineageTag: 00628c13-94d7-5944-99f8-8b65e9a3b16b
+
+	column Date
+		dataType: dateTime
+		lineageTag: da9e0935-7696-58cd-bd37-48c295c18845
+		summarizeBy: none
+		sourceColumn: Date
+
+	column Year
+		dataType: int64
+		lineageTag: 5623e32a-beca-54ce-867a-521c85647482
+		summarizeBy: none
+		sourceColumn: Year
+
+	partition __Calendar = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

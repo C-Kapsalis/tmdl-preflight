@@ -1,0 +1,7 @@
+table 'Old Measures'
+	lineageTag: 0000b4b1-0000-0000-0000-00000000004f
+
+	partition 'Old Measures' = calculated
+		mode: import
+		source = ROW("x", 1)
+

@@ -1,0 +1,18 @@
+table 'y-Selector 1'
+	lineageTag: 5eed0000-0000-0000-0000-0000000001aa
+
+	column 'y-Selector 1'
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-0000000001ab
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	partition 'y-Selector 1' = calculated
+		mode: import
+		source =
+				{
+				    ("Campaign", NAMEOF('_Campaigns'[campaign_name]), 0, "Paid"),
+				    ("Device", NAMEOF('_Devices'[device]), 1, "Paid"),
+				    ("Country", NAMEOF('_Countries'[country]), 2, "Paid"),
+				    ("Segment", NAMEOF('_Users'[segment]), 3, "Users")
+				}

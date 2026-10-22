@@ -1,0 +1,11 @@
+table 'Analytics Measures'
+	lineageTag: 0000b4b1-0000-0000-0000-000000000048
+
+	/// GA4 sessions in context.
+	measure 'GA4 Sessions Count' = IF([-helper y-drilldown paid performance] = "non_compatible", BLANK(), 42)
+		lineageTag: 0000b4b1-0000-0000-0000-000000000047
+
+	partition 'Analytics Measures' = calculated
+		mode: import
+		source = ROW("x", 1)
+

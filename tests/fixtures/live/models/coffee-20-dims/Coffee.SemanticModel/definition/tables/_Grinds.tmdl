@@ -1,0 +1,16 @@
+table _Grinds
+	lineageTag: 77e455fe-f6cb-57a5-aa7f-30fcb718afb3
+
+	column Key
+		dataType: int64
+		lineageTag: dfcbccec-e3d5-5a4b-91a8-a8eb6d6bb7ac
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition _Grinds = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

@@ -1,0 +1,13 @@
+table 'z-Spend Report Level'
+	lineageTag: 729bab18-3986-58f1-ae8e-e79e5a5f760c
+
+	column 'Report Level Key'
+		dataType: string
+		lineageTag: 46b2a3ea-6ec6-57e2-b99f-751668a9739e
+		summarizeBy: none
+		sourceColumn: Report Level Key
+
+	partition 'z-Spend Report Level' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

@@ -1,0 +1,18 @@
+table 'EC019 Shop B'
+	lineageTag: 4239253f-1152-5584-b6a1-f68b872d4b48
+
+	measure 'Grand Total' = SUM(Rentals[Minutes])
+		formatString: #,0
+		lineageTag: de3062a4-a356-54a0-9a1e-0423eae5abc3
+
+	measure 'Uses Grand Total' = [Grand Total] * 2
+		formatString: #,0
+		lineageTag: 98f400cd-8f43-5703-b544-becd5be11ac7
+
+	partition 'EC019 Shop B' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

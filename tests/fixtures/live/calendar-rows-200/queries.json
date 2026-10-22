@@ -1,0 +1,22 @@
+[
+  {
+    "query": "EVALUATE ROW( \"RowCount\", COUNTROWS('__Calendar'), \"MinDate\", MIN('__Calendar'[Date]), \"MaxDate\", MAX('__Calendar'[Date]) )",
+    "response": {
+      "results": [
+        {
+          "tables": [
+            {
+              "rows": [
+                {
+                  "[RowCount]": 200,
+                  "[MinDate]": "2024-01-01T00:00:00",
+                  "[MaxDate]": "2025-12-30T00:00:00"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

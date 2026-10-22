@@ -1,0 +1,11 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+
+ref table 'MCP Tool Calls'
+ref table 'MCP Activity'
+ref table 'MCP Feedback'
+ref table 'MCP Feedback Measures'
+ref table '__Calendar'
+ref table 'x-Selector 1'
+ref table 'y-Selector 1'

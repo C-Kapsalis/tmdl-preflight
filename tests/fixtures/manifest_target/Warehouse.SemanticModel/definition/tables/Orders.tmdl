@@ -1,0 +1,22 @@
+table Orders
+	lineageTag: 0000b4b1-0000-0000-0000-000000000010
+
+	column order_id
+		dataType: int64
+		lineageTag: 0000b4b1-0000-0000-0000-000000000011
+		summarizeBy: none
+		sourceColumn: order_id
+
+	column amount
+		dataType: double
+		lineageTag: 0000b4b1-0000-0000-0000-000000000012
+		summarizeBy: none
+		sourceColumn: amount
+
+	partition Orders = m
+		mode: import
+		source =
+			let
+			    Source = source_filter_dates("orders_n", "date")
+			in
+			    Source

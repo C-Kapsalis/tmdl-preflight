@@ -48,6 +48,9 @@ class Violation:
     line: Optional[int] = None
     obj: Optional[str] = None
     fixable: bool = False
+    # True for a finding the text report shows inside a block of its rule
+    # rather than as its own line.
+    grouped: bool = False
 
     @property
     def path(self) -> Optional[str]:
@@ -89,11 +92,125 @@ class Context:
     the re-check always runs against what is actually on disk.
     """
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, exclude: Optional[list[str]] = None,
+                 exclude_configured: bool = False):
         self.root = Path(root)
-        self.definition_dirs: list[Path] = find_definition_dirs(self.root)
-        self.report_dirs: list[Path] = find_report_dirs(self.root)
+        self.exclude: list[str] = list(exclude or [])
+        #: whether an ``exclude`` list was configured at all. An empty list
+        #: that WAS configured turns the default exclusions off; a list that
+        #: was never configured leaves them on.
+        self.exclude_configured = exclude_configured or bool(self.exclude)
+        # files under models/reports that were skipped entirely because every
+        # file they hold matches an ``exclude`` glob
+        self.excluded_files: int = 0
+        self.definition_dirs: list[Path] = self._keep(find_definition_dirs(self.root))
+        found_reports = find_report_dirs(self.root)
+        self.report_dirs: list[Path] = self._keep(found_reports)
+        #: bookmark files the scan root names itself: a *.bookmark.json file,
+        #: or a folder that holds bookmark files but names no report
+        self.bookmark_targets: list[Path] = self._bookmark_targets(self.root, found_reports)
         self._models: Optional[list[SemanticModel]] = None
+        # project-level sections of the configuration (for example
+        # ``contracts``), set by the CLI after the config is loaded
+        self.options: dict[str, Any] = {}
+        # free-text notes rules want shown with the report (tighten hints)
+        self.notes: list[str] = []
+        # notes a fixer produced (repair reports); the re-check clears
+        # ``notes`` but keeps these
+        self.fix_notes: list[str] = []
+        # multi-line closing advice a fixer prints after the fix summary
+        self.blocks: list[str] = []
+        # fixes a fixer had to refuse (the proof failed; the file is untouched)
+        self.refused_fixes: list[str] = []
+        # checks a rule could not run, with the reason
+        self.skips: list[dict] = []
+
+    def model_key(self, model: SemanticModel) -> str:
+        """The model's ``*.SemanticModel`` folder relative to the scan root
+        (POSIX), or the folder name when the scan root is inside it."""
+        folder = model.definition_path.parent
+        rel = self.scan_relative(folder)
+        if rel in (None, "", "."):
+            return folder.name
+        return rel
+
+    def model_matches(self, wanted: Optional[str], model: SemanticModel) -> bool:
+        """True when a configured model key names this model. Keys compare
+        with or without the ``.SemanticModel`` suffix; no key matches all."""
+        if not wanted:
+            return True
+        def norm(key: str) -> str:
+            key = key.replace("\\", "/").strip("/")
+            return key[: -len(".SemanticModel")] if key.endswith(".SemanticModel") else key
+        have = norm(self.model_key(model))
+        want = norm(wanted)
+        return have == want or have.endswith("/" + want)
+
+    # -- exclusions --------------------------------------------------------
+    def scan_relative(self, file: Path) -> Optional[str]:
+        """``file`` relative to the scan root (POSIX), or None if outside it."""
+        try:
+            return Path(file).resolve().relative_to(self.root.resolve()).as_posix()
+        except (ValueError, OSError):
+            return None
+
+    def is_excluded(self, file: Path) -> bool:
+        """True when an ``exclude`` glob matches the file's path relative to
+        the scan root or to its PBIP item. Folders above the scan root never
+        take part, so a checkout under ``~/legacy/`` is still scanned.
+
+        With no ``exclude`` configured, the DEFAULT exclusions apply: every
+        file whose path relative to the scan root has a folder segment that
+        holds ``legacy``, ``_backup`` or ``_b2`` (a substring match, so
+        ``spinout-05_db_backup/`` and ``old_legacy_x/`` are skipped). A
+        configured ``exclude`` list replaces the default; an empty list
+        (``exclude = []``) turns it off.
+        """
+        from ..config import glob_match  # local import: config imports rules
+
+        candidates = [c for c in (self.scan_relative(file), item_relative_path(file)) if c]
+        if self.exclude_configured:
+            if not self.exclude:
+                return False
+            return any(glob_match(p, c) for p in self.exclude for c in candidates)
+        return any(_archived_folder(c) for c in candidates)
+
+    def _keep(self, folders: list[Path]) -> list[Path]:
+        kept = []
+        for folder in folders:
+            files = [f for f in folder.rglob("*") if f.is_file()]
+            if files and all(self.is_excluded(f) for f in files):
+                self.excluded_files += len(files)
+                continue
+            kept.append(folder)
+        return kept
+
+    @staticmethod
+    def _bookmark_targets(root: Path, found_reports: list[Path]) -> list[Path]:
+        """The bookmark files the scan root names itself.
+
+        A target that is a ``*.bookmark.json`` file, or a folder that holds
+        bookmark files but names no report, is scanned for bookmarks even
+        though it is not a ``*.Report`` folder.
+        """
+        if root.is_file():
+            return [root] if root.name.endswith(".bookmark.json") else []
+        if found_reports or not root.is_dir():
+            return []
+        return sorted(p for p in root.rglob("*.bookmark.json") if p.is_file())
+
+    def files_scanned(self) -> int:
+        """TMDL and report JSON files the run looked at (excluded ones not
+        counted)."""
+        n = 0
+        for d in self.definition_dirs:
+            n += sum(1 for f in d.rglob("*.tmdl") if not self.is_excluded(f))
+        for r in self.report_dirs:
+            n += sum(
+                1 for f in r.rglob("*")
+                if f.is_file() and f.suffix in (".json", ".pbir") and not self.is_excluded(f)
+            )
+        return n
 
     @property
     def models(self) -> list[SemanticModel]:
@@ -105,7 +222,19 @@ class Context:
         self._models = None
 
     def is_empty(self) -> bool:
-        return not self.definition_dirs and not self.report_dirs
+        return not self.definition_dirs and not self.report_dirs and not self.bookmark_targets
+
+
+def _archived_folder(relative: str) -> bool:
+    """Is this relative path under an archived folder?
+
+    A folder segment that holds ``legacy``, ``_backup`` or ``_b2`` marks an
+    archived copy: a folder SEGMENT, not the whole path, so a model whose
+    NAME contains one of them is still scanned.
+    """
+    parts = relative.replace("\\", "/").split("/")[:-1]
+    return any("legacy" in part or "_backup" in part or "_b2" in part
+               for part in parts)
 
 
 class Rule:
@@ -122,6 +251,13 @@ class Rule:
     severity: Severity = Severity.ERROR
     description: str = ""
     fixable: bool = False
+    # False for fixers that change data or regenerate content (for example a
+    # partition's M source). They never run as part of a blanket ``fix``;
+    # only when the rule is selected explicitly by id or name.
+    safe: bool = True
+    # True for rules that encode one team's conventions (naming, placement).
+    # They run only when selected by id or name (--select or config select).
+    opt_in: bool = False
     # False for defects that must never be accepted into a baseline (they
     # stop the model from opening or deploying at all)
     baselinable: bool = True
@@ -131,12 +267,74 @@ class Rule:
     def __init__(self) -> None:
         self.options: dict[str, Any] = dict(self.option_defaults)
 
+    def unsafe_fix_enabled(self) -> bool:
+        """True when the rule's own configuration opts its unsafe fixer into
+        a blanket fix."""
+        return False
+
+    def pending_repairs(self, ctx: "Context") -> bool:
+        """True when the fixer has work although its own check reported
+        nothing (a fixer that also repairs another rule's findings)."""
+        return False
+
+    def pending_fix_objects(self, ctx: Context, violations: list[Violation]) -> set[str]:
+        """The objects this rule's fixer would act on.
+
+        ``fix --check`` counts them, so a fixer that repairs another rule's
+        findings overrides this.
+        """
+        return {v.obj or v.path or "" for v in violations
+                if v.rule_id == self.id and v.fixable and v.severity is not Severity.INFO}
+
+    def dry_run_report(self, ctx: Context) -> list[str]:
+        """The lines a dry run prints for this rule, in the rule's own words.
+
+        A rule that has something to say about what a fix would do says it
+        here; the default is nothing.
+        """
+        return []
+
+    def disabled_by_policy(self) -> bool:
+        """True when a policy option turned this rule off for the run; the
+        engine then lists it under ``skipped`` instead of running it."""
+        return False
+
+    def skip_reason(self) -> str:
+        """Why the rule did not run (shown beside its name in the report)."""
+        return "turned off by its policy option"
+
+    def skip(self, ctx: "Context", reason: str, model: Optional[str] = None) -> None:
+        """Record that a check could not run for a model, and why."""
+        ctx.skips.append({"rule": self.id, "model": model, "reason": reason})
+
     def configure(self, options: dict[str, Any]) -> None:
         """Apply per-rule options (already validated by the config loader)."""
         self.options.update(options)
 
     def check(self, ctx: Context) -> list[Violation]:  # pragma: no cover
         raise NotImplementedError
+
+    def capture_floor(self, ctx: Context) -> Optional[dict[str, list[str]]]:
+        """The ratchet floor this rule would record for the models in the run.
+
+        A rule that gates a backlog (not a defect class) can record what it
+        sees today, so the next run fails only on growth. Returns a mapping
+        from a model key to the objects the rule would accept, or None when
+        the rule has no floor.
+        """
+        return None
+
+    def floor_indent(self) -> int:
+        """The indent the captured floor file is written with."""
+        return 2
+
+    def floor_captured_message(self, floors: dict[str, list[str]]) -> str:
+        """The line the tool prints after it captured a floor."""
+        return f"captured floor for {len(floors)} model(s)"
+
+    def dry_run_notes(self, ctx: Context) -> list[str]:
+        """The lines a dry run prints instead of repairing anything."""
+        return []
 
     def fix(self, ctx: Context) -> list[str]:
         """Apply the auto-repair; return human-readable descriptions of each
@@ -151,6 +349,8 @@ class Rule:
         line: Optional[int] = None,
         obj: Optional[str] = None,
         severity: Optional[Severity] = None,
+        grouped: bool = False,
+        fixable: Optional[bool] = None,
     ) -> Violation:
         return Violation(
             rule_id=self.id,
@@ -159,7 +359,8 @@ class Rule:
             file=file,
             line=line,
             obj=obj,
-            fixable=self.fixable,
+            fixable=self.fixable if fixable is None else fixable,
+            grouped=grouped,
         )
 
 
@@ -173,6 +374,8 @@ class RuleSet:
             keys = {r.id.lower(), r.name.lower()}
             if select is not None and not (keys & select):
                 continue
+            if select is None and r.opt_in:
+                continue  # conventions rules run only when named
             if ignore is not None and (keys & ignore):
                 continue
             chosen.append(r)

@@ -1,0 +1,11 @@
+table 'f-Filters'
+	lineageTag: 0000b4b1-0000-0000-0000-000000000034
+
+	measure 'f-Channel' = 1
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000033
+
+	partition 'f-Filters' = calculated
+		mode: import
+		source = ROW("x", 1)
+

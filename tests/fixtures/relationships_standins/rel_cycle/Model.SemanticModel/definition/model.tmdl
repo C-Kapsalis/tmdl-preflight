@@ -1,0 +1,6 @@
+model Model
+	culture: en-US
+
+ref table Alpha
+ref table Beta
+ref table Gamma

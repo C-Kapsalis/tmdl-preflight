@@ -1,0 +1,38 @@
+table 'M011 d wider block set'
+	lineageTag: b0191eb2-a853-524f-874b-6142931afd17
+
+	measure 'Cups Sold' = SUM(Brews[cups])
+		lineageTag: 5c0b68fe-9e8d-5bb5-8f56-afa0b6fff189
+
+		formatStringDefinition = "0"
+
+		formatString: 0.0
+
+	measure 'Cups Target' = 100
+		lineageTag: e575a716-8b76-5281-a2b5-a4cf2f08ecb3
+
+		kpi
+			targetExpression = 120
+
+		isHidden
+
+	measure 'Brew Detail' = 1
+		lineageTag: 02bcb5f2-bec7-55b9-88cd-2b7acfbfa7b8
+
+		detailRows = Brews
+
+		displayFolder: X
+
+	column roast
+		dataType: string
+		lineageTag: 9aa33b42-3f2b-5f7b-9858-0c8b34c774c5
+		sourceColumn: roast
+
+		relatedColumnDetails
+			groupByColumn: roast
+
+		summarizeBy: none
+
+	partition 'M011 d wider block set' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})

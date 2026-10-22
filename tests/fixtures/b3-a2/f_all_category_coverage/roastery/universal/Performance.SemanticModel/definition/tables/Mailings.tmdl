@@ -1,0 +1,26 @@
+table Mailings
+	lineageTag: 0a948763-5046-5f00-b9e1-3092f21dd9be
+
+	column mailing_id
+		dataType: int64
+		lineageTag: c47e3f93-3b61-5e81-9582-e85759dd6cd8
+		summarizeBy: none
+		sourceColumn: mailing_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column subject
+		dataType: string
+		lineageTag: f1d78a50-ae73-57f0-9bf6-0d75075da2c9
+		summarizeBy: none
+		sourceColumn: subject
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Mailings = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from mailings")
+				in
+				    Source

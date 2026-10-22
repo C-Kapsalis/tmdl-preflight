@@ -6,17 +6,22 @@ from __future__ import annotations
 import re
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from .base import Context, Rule, Severity, Violation
 from ..dax import CODE, classify
-from ..edits import EditRefused, read_text_file, verified_write
+from ..edits import EditRefused, mixed_line_endings, read_text_file, verified_write
 from ..parser import indent_level, parse_object_name
 from ..recognizers import (
+    attach_descriptions,
     find_dangling_descriptions,
     find_properties_after_child_blocks,
+    leaked_keyword,
     leaked_property,
     move_properties_before_child_blocks,
     remove_dangling_descriptions,
+    same_lines,
+    unpaired_fence,
 )
 
 _REF_TABLE_RE = re.compile(r"^\s*ref\s+table\s+(?P<rest>.+?)\s*$")
@@ -69,36 +74,31 @@ class ModelStructureRule(Rule):
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for d in ctx.definition_dirs:
+            missing_dirs = []
             if not (d / "model.tmdl").is_file():
+                missing_dirs.append("model.tmdl")
+            if not (d / "tables").is_dir():
+                missing_dirs.append("tables")
+            if missing_dirs:
                 out.append(
                     self.violation(
-                        "model.tmdl is missing from this definition folder, so "
-                        "the model cannot be opened or deployed. This usually "
-                        "means a truncated export or a bad merge; restore the "
-                        "file from source control or save the project again "
-                        "from Power BI Desktop.",
+                        f"{d.parent.name}: required directories missing: "
+                        f"{missing_dirs}. The model cannot be opened or "
+                        f"deployed without them; this usually means a "
+                        f"truncated export or a bad merge. Restore them from "
+                        f"source control, or save the project again from Power "
+                        f"BI Desktop.",
                         file=d,
                     )
                 )
-            tables = d / "tables"
-            if not tables.is_dir():
+            elif not any((d / "tables").glob("*.tmdl")):
                 out.append(
                     self.violation(
-                        "the tables/ folder is missing, so the model defines "
-                        "no tables. This usually means a truncated export or a "
-                        "bad merge; restore the folder from source control or "
-                        "save the project again from Power BI Desktop.",
+                        f"{d.parent.name}: the tables/ folder contains no "
+                        f".tmdl files, so the model defines no tables. Restore "
+                        f"the table files from source control, or save the "
+                        f"project again from Power BI Desktop.",
                         file=d,
-                    )
-                )
-            elif not any(tables.glob("*.tmdl")):
-                out.append(
-                    self.violation(
-                        "the tables/ folder contains no .tmdl files, so the "
-                        "model defines no tables. Restore the table files from "
-                        "source control or save the project again from "
-                        "Power BI Desktop.",
-                        file=tables,
                     )
                 )
         return out
@@ -120,14 +120,16 @@ class TmdlWellFormedRule(Rule):
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for model in ctx.models:
+            unreadable: set[Path] = set()
             for f in model.tmdl_files:
                 try:
                     text = f.read_text(encoding="utf-8-sig")
                 except (UnicodeDecodeError, OSError) as exc:
+                    unreadable.add(f)
                     out.append(
                         self.violation(
-                            f"cannot be read as UTF-8 ({exc}). TMDL files must "
-                            f"be UTF-8 text; save the file again with UTF-8 "
+                            f"File encoding error: {exc}. TMDL files must be "
+                            f"UTF-8 text; save the file again with UTF-8 "
                             f"encoding, or restore it from source control if "
                             f"it was corrupted.",
                             file=f,
@@ -138,26 +140,35 @@ class TmdlWellFormedRule(Rule):
                     line = text[: text.index("\x00")].count("\n") + 1
                     out.append(
                         self.violation(
-                            "contains null bytes, which usually means the file "
-                            "was truncated or corrupted during a merge or "
-                            "copy. Restore the file from source control.",
+                            f"{f.name}:{line} contains null bytes, which usually "
+                            f"means the file was truncated or corrupted during a "
+                            f"merge or a copy. Restore it from source control.",
                             file=f,
                             line=line,
                         )
                     )
-                fences = text.count("```")
-                if fences % 2 != 0:
+                bad_fence = unpaired_fence(text.splitlines())
+                if bad_fence is not None:
+                    markers = sum(ln.count("```") for ln in text.splitlines())
                     out.append(
                         self.violation(
-                            f"has unpaired expression fences ({fences} ``` "
-                            f"markers; the count must be even). Everything "
-                            f"after the unpaired fence is read as one "
+                            f"unmatched DAX code fences: {markers} ``` markers "
+                            f"(must be even). A fence opened after '=' never "
+                            f"closes, so everything after it is read as one "
                             f"expression; add or remove a fence so they pair up.",
                             file=f,
+                            line=bad_fence + 1,
                         )
                     )
             for err in model.parse_errors:
-                out.append(self.violation(err.message, file=err.file, line=err.line))
+                if err.file in unreadable:
+                    continue  # the file's own finding says it all
+                out.append(
+                    self.violation(
+                        err.message, file=err.file, line=err.line,
+                        severity=Severity(err.severity),
+                    )
+                )
         return out
 
 
@@ -166,7 +177,7 @@ class _LineageRuleBase(Rule):
     rewriting that regenerates a tag without touching anything else."""
 
     @staticmethod
-    def _rewrite_tag(file: Path, line_no: int) -> str | None:
+    def _rewrite_tag(file: Path, line_no: int, new_tag: Optional[str] = None) -> str | None:
         """Replace the lineageTag value on ``line_no`` (1-based) with a fresh
         UUID. Returns the new tag, or None if the line no longer matches."""
         original = read_text_file(file)
@@ -176,7 +187,7 @@ class _LineageRuleBase(Rule):
         m = _LINEAGE_LINE_RE.match(lines[line_no - 1])
         if not m:
             return None
-        new_tag = str(uuid.uuid4())
+        new_tag = new_tag or str(uuid.uuid4())
         lines[line_no - 1] = f"{m.group(1)}{new_tag}{m.group(3)}"
 
         def verify(old: str, new: str) -> None:
@@ -205,12 +216,62 @@ class LineageTagUniquenessRule(_LineageRuleBase):
         "regenerates the rest."
     )
 
+    @staticmethod
+    def _keeper_order(model, occ) -> tuple:
+        """Which occurrence of a shared tag keeps it: table files first, then
+        relationships.tmdl, expressions.tmdl, cultures/, everything else;
+        within a class by path, then line. A table object is the most likely
+        owner of a tag that was copied elsewhere."""
+        try:
+            rel = occ.file.relative_to(model.definition_path).as_posix()
+        except ValueError:
+            rel = occ.file.as_posix()
+        if rel.startswith("tables/"):
+            cls = 0
+        elif rel == "relationships.tmdl":
+            cls = 1
+        elif rel == "expressions.tmdl":
+            cls = 2
+        elif rel.startswith("cultures/"):
+            cls = 3
+        else:
+            cls = 4
+        return (cls, rel, occ.line)
+
     def _duplicates(self, model) -> dict[str, list]:
         seen: dict[str, list] = {}
         for occ in model.lineage_tags:
             seen.setdefault(occ.tag, []).append(occ)
-        return {t: occs for t, occs in seen.items() if len(occs) > 1}
+        return {
+            t: sorted(occs, key=lambda o: self._keeper_order(model, o))
+            for t, occs in seen.items()
+            if len(occs) > 1
+        }
 
+    def duplicates(self, model) -> dict[str, list]:
+        """The duplicated tags of a model and their occurrences, the first
+        occurrence of each tag being the one that keeps it."""
+        return self._duplicates(model)
+
+    def __init__(self) -> None:
+        super().__init__()
+        #: the plan the last repair computed, kept so the console report can
+        #: describe the duplicates that were there before the repair
+        self.last_plan: Optional[list] = None
+
+    def plan(self, ctx: Context) -> list[tuple[object, dict[str, list[tuple[object, str]]]]]:
+        """What the repair would do, per model: the duplicated tags with
+        their occurrences, and the fresh tag every regenerated occurrence
+        gets. The plan is computed before anything is written, so a dry run
+        can print the same report as a live one."""
+        out = []
+        for model in ctx.models:
+            plan_for_model = {}
+            for tag, occs in self._duplicates(model).items():
+                plan_for_model[tag] = [(occ, str(uuid.uuid4())) for occ in occs]
+            out.append((model, plan_for_model))
+        self.last_plan = out
+        return out
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         for model in ctx.models:
@@ -219,8 +280,11 @@ class LineageTagUniquenessRule(_LineageRuleBase):
                 for dup in occs[1:]:
                     out.append(
                         self.violation(
-                            f"lineageTag '{tag}' duplicates the one on "
-                            f"{first.context} ({first.file.name}:{first.line})",
+                            f"Duplicate lineageTag '{tag}' found in files: "
+                            f"{first.file.name}, {dup.file.name}. The tag on "
+                            f"line {first.line} ({first.context}) is the one "
+                            f"that keeps it; the copy on line {dup.line} "
+                            f"({dup.context}) is regenerated by the auto-fix.",
                             file=dup.file,
                             line=dup.line,
                             obj=dup.context,
@@ -230,15 +294,16 @@ class LineageTagUniquenessRule(_LineageRuleBase):
 
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
-        for model in ctx.models:
-            for tag, occs in self._duplicates(model).items():
+        self.last_plan = self.plan(ctx)
+        for _model, plan_for_model in self.last_plan:
+            for tag, entries in plan_for_model.items():
                 # Keep the first (usually the original object); regenerate
                 # each later occurrence.
-                for dup in occs[1:]:
-                    new_tag = self._rewrite_tag(dup.file, dup.line)
-                    if new_tag:
+                for occ, new_tag in entries[1:]:
+                    written = self._rewrite_tag(occ.file, occ.line, new_tag)
+                    if written:
                         applied.append(
-                            f"{dup.file.name}:{dup.line} ({dup.context}): "
+                            f"{occ.file.name}:{occ.line} ({occ.context}): "
                             f"'{tag}' -> '{new_tag}'"
                         )
         return applied
@@ -264,7 +329,9 @@ class LineageTagFormatRule(_LineageRuleBase):
             for occ in self._malformed(model):
                 out.append(
                     self.violation(
-                        f"lineageTag '{occ.tag}' is not a canonical UUID",
+                        f"LineageTag '{occ.tag}' is not a canonically-formatted "
+                        f"UUID (expected 8-4-4-4-12 hex). Power BI rejects a "
+                        f"tag it cannot read; the auto-fix writes a fresh one.",
                         file=occ.file,
                         line=occ.line,
                         obj=occ.context,
@@ -339,15 +406,16 @@ def _referenced_tables(model_file: Path) -> set[str] | None:
 class ModelTableReferencesRule(Rule):
     id = "M006"
     name = "model-table-refs"
-    severity = Severity.ERROR
+    severity = Severity.WARNING
     fixable = True
-    baselinable = False
     description = (
-        "Every table defined under tables/ must be linked to the model with a "
-        "'ref table <name>' line in model.tmdl. A table file with no matching "
-        "ref is not attached to the model, so Power BI Desktop refuses to open "
-        "the project (the report never loads). This happens when a table is "
-        "added by hand or a merge drops the ref line. Auto-fix appends the "
+        "Every table defined under tables/ should be listed in model.tmdl with "
+        "a 'ref table <name>' line. Power BI Desktop still loads a table file "
+        "that has no ref line (observed: the table opened and kept its "
+        "relationships), but model.tmdl is then out of step with tables/, so "
+        "the table order Desktop writes back changes and tools that read the "
+        "table list from model.tmdl miss the table. This happens when a table "
+        "is added by hand or a merge drops the ref line. Auto-fix appends the "
         "missing 'ref table' lines to model.tmdl."
     )
 
@@ -368,9 +436,9 @@ class ModelTableReferencesRule(Rule):
                 out.append(
                     self.violation(
                         f"table '{name}' is defined in tables/ but has no "
-                        f"'ref table' line in model.tmdl, so it is not part of "
-                        f"the model and Power BI will not open the project. "
-                        f"Add: ref table {_render_table_ref(name)}",
+                        f"'ref table' line in model.tmdl. Power BI Desktop "
+                        f"still loads the table, but model.tmdl is out of step "
+                        f"with tables/. Add: ref table {_render_table_ref(name)}",
                         file=table.file,
                         obj=name,
                     )
@@ -518,26 +586,55 @@ def _file_lines(cache: dict, path: Path) -> list[str]:
 
 
 def _expression_owners(model):
-    """(label, obj, file, decl_line, expression, start_line) for every object
-    that carries an expression, DAX or M."""
+    """(label, name, file, decl_line, expression, start_line, is_dax) for
+    every object that carries an expression, DAX or M."""
     for t in model.table_list:
         for m in t.measure_list:
-            yield f"{t.name}[{m.name}] (measure)", m, m.file, m.line, m.expression, m.expression_line
+            yield (f"{t.name}[{m.name}] (measure)", m.name, m.file, m.line,
+                   m.expression, m.expression_line, True)
         for c in t.column_list:
             if c.expression is not None:
                 yield (
-                    f"{t.name}[{c.name}] (calculated_column)", c, c.file, c.line,
-                    c.expression, c.expression_line,
+                    f"{t.name}[{c.name}] (calculated_column)", c.name, c.file,
+                    c.line, c.expression, c.expression_line, True,
                 )
         for p in t.partitions:
             if p.source:
                 yield (
-                    f"{t.name} (partition {p.name})", p, p.file, p.line, p.source,
-                    p.source_start_line,
+                    f"{t.name} (partition {p.name})", p.name, p.file, p.line,
+                    p.source, p.source_start_line, p.kind == "calculated",
                 )
         for k, (name, expr, line) in enumerate(t.calculation_items):
             start = t.calculation_item_starts[k] if k < len(t.calculation_item_starts) else None
-            yield f"{t.name}[{name}] (calculation_item)", None, t.file, line, expr, start
+            yield (f"{t.name}[{name}] (calculation_item)", name, t.file, line,
+                   expr, start, True)
+    for e in model.expressions:
+        if e.expression:
+            yield (f"expression {e.name}", e.name, e.file, e.line, e.expression,
+                   None, False)
+
+
+def _leak_shape(cache: dict, file: Path, decl_line: int, rel: int) -> str:
+    """How a property leaked into an expression: right after the ``=``, buried
+    in the expression body, or inside a ``` expression."""
+    lines = _file_lines(cache, file)
+    if decl_line - 1 >= len(lines):
+        return "property buried in expression"
+    decl = lines[decl_line - 1]
+    if "```" in decl:
+        return "property inside ``` expression"
+    if not decl.rstrip().endswith("=") and rel == 0:
+        return "property buried in expression"
+    # the first line of a bare body that sits at the property level is a
+    # property where the expression should be
+    prop_level = indent_level(decl) + 1
+    for idx in range(decl_line, len(lines)):
+        if not lines[idx].strip():
+            continue
+        if indent_level(lines[idx]) <= prop_level:
+            return "property right after `=`"
+        break
+    return "property buried in expression"
 
 
 class MetadataInExpressionRule(Rule):
@@ -547,21 +644,25 @@ class MetadataInExpressionRule(Rule):
     baselinable = False
     description = (
         "A TMDL property line (lineageTag:, formatString:, displayFolder:, "
-        "isHidden, annotation ...) must never sit inside an expression body. "
-        "It happens when a script or a merge inserts a property at the wrong "
-        "indentation, or inside a ``` fence: the property becomes part of the "
-        "DAX or M text and Power BI rejects the file ('... is neither a "
-        "property nor an object in the current context'). Move the line out "
-        "of the expression, one level under the object's declaration."
+        "isHidden, annotation, kpi, detailRows ...) must never sit inside an "
+        "expression body. It happens when a script or a merge inserts a "
+        "property at the wrong indentation, or inside a ``` fence: the "
+        "property becomes part of the DAX or M text and Power BI rejects the "
+        "file ('... is neither a property nor an object in the current "
+        "context'). In DAX bodies the keyword counts whatever follows it; in "
+        "M bodies only a line shaped like a property counts. Lines inside a "
+        "comment or a string are never findings. Move the line out of the "
+        "expression, one level under the object's declaration."
     )
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
         cache: dict = {}
         for model in ctx.models:
-            for label, obj, file, decl_line, expr, start in _expression_owners(model):
-                if expr:
-                    tags = classify(expr)
+            for label, name, file, decl_line, expr, start, is_dax in _expression_owners(model):
+                match = leaked_keyword if is_dax else leaked_property
+                if expr and expr.strip():
+                    tags = classify(expr) if is_dax else None
                     offset = 0
                     for rel, ln in enumerate(expr.split("\n")):
                         body = ln.lstrip()
@@ -569,19 +670,17 @@ class MetadataInExpressionRule(Rule):
                         offset += len(ln) + 1
                         if not body or body.startswith("```"):
                             continue
-                        if first < len(tags) and tags[first] != CODE:
+                        if tags is not None and first < len(tags) and tags[first] != CODE:
                             continue  # inside a string or comment
-                        token = leaked_property(body)
+                        token = match(body)
                         if token:
                             out.append(
                                 self.violation(
-                                    f"TMDL property '{token}' is inside the "
-                                    f"expression body, so it is read as part "
-                                    f"of the expression and Power BI rejects "
-                                    f"the file. Move it out of the expression, "
-                                    f"one level under the declaration.",
+                                    f"{name}: {_leak_shape(cache, file, decl_line, rel)}"
+                                    f" (line {self._line_of(cache, file, decl_line, start, rel, body)}): "
+                                    f"{body[:40]}",
                                     file=file,
-                                    line=(start or decl_line) + rel,
+                                    line=self._line_of(cache, file, decl_line, start, rel, body),
                                     obj=label,
                                 )
                             )
@@ -598,15 +697,12 @@ class MetadataInExpressionRule(Rule):
                     nxt = lines[j]
                     if not nxt.strip():
                         continue
-                    token = leaked_property(nxt)
+                    token = match(nxt)
                     if token and indent_level(nxt) <= indent_level(decl) + 1:
                         out.append(
                             self.violation(
-                                f"the expression after '=' is missing and the "
-                                f"TMDL property '{token}' sits where it should "
-                                f"be, so Power BI rejects the file. Put the "
-                                f"expression back right after '=' and keep "
-                                f"properties below it.",
+                                f"{name}: property right after `=` (line {j + 1}): "
+                                f"{nxt.strip()[:40]}",
                                 file=file,
                                 line=j + 1,
                                 obj=label,
@@ -615,20 +711,34 @@ class MetadataInExpressionRule(Rule):
                     break
         return out
 
+    @staticmethod
+    def _line_of(cache, file, decl_line, start, rel, body) -> int:
+        """File line of the ``rel``-th expression line. Expressions collected
+        from blocks with blank lines keep their relative offsets; when the
+        start line is unknown, search forward from the declaration."""
+        if start:
+            return start + rel
+        lines = _file_lines(cache, file)
+        for j in range(decl_line - 1, len(lines)):
+            if lines[j].strip() == body.strip():
+                return j + 1
+        return decl_line
+
 
 class PropertyAfterChildBlockRule(Rule):
     id = "M011"
     name = "property-after-child-block"
-    severity = Severity.WARNING
+    severity = Severity.ERROR
     fixable = True
     description = (
         "An object's simple properties (isHidden, displayFolder, "
-        "formatString, lineageTag ...) must come before its child blocks "
-        "(annotation, changedProperty, extendedProperty). Power BI Desktop "
-        "always writes them in that order; a property appended after an "
-        "annotation, usually by a script, is at best ignored and at worst "
-        "rejected when the file is opened. Auto-fix moves the line up into "
-        "the object's property section."
+        "formatString, lineageTag ...) must come before its nested sections "
+        "(annotation, changedProperty, extendedProperty, kpi, detailRows, "
+        "relatedColumnDetails, formatStringDefinition). Power BI Desktop "
+        "always writes them in that order; a property appended after such a "
+        "section, usually by a script, is rejected as an unknown keyword when "
+        "the model is imported. Auto-fix moves the line to the object's first "
+        "property slot, right after its expression."
     )
 
     def _files(self, ctx: Context):
@@ -645,13 +755,14 @@ class PropertyAfterChildBlockRule(Rule):
             for finding in find_properties_after_child_blocks(lines):
                 out.append(
                     self.violation(
-                        f"property '{finding.token}' comes after a child block "
-                        f"(annotation, changedProperty or extendedProperty) of "
-                        f"'{finding.owner}'. Properties must precede child "
-                        f"blocks; move the line up (the auto-fix does this).",
+                        f"property '{finding.token}' comes after a nested "
+                        f"section (annotation, kpi, detailRows ...) of "
+                        f"'{finding.owner}'. Properties must precede nested "
+                        f"sections, or the import rejects the file; move the "
+                        f"line up (the auto-fix does this).",
                         file=f,
                         line=finding.line + 1,
-                        obj=finding.owner,
+                        obj=finding.name or finding.owner,
                     )
                 )
         return out
@@ -663,15 +774,22 @@ class PropertyAfterChildBlockRule(Rule):
                 original = read_text_file(f)
             except (UnicodeDecodeError, OSError):
                 continue
+            if mixed_line_endings(f):
+                # the file cannot be split on one style and joined on
+                # another: the edit computed on it would delete the model
+                ctx.refused_fixes.append(
+                    f"{self.id}: {f.name}: it mixes its line endings, so it "
+                    f"was left untouched (normalize it to one style first)")
+                continue
             lines = original.lines()
             new_lines, moved = move_properties_before_child_blocks(lines)
-            if not moved:
-                continue
+            if moved <= 0:
+                continue  # nothing to do, or the move limit was hit: write nothing
 
             def verify(old: str, new: str) -> None:
                 old_l = [ln for ln in old.split(original.newline) if ln.strip()]
                 new_l = [ln for ln in new.split(original.newline) if ln.strip()]
-                if sorted(old_l) != sorted(new_l):
+                if not same_lines(old_l, new_l):
                     raise EditRefused("moving properties changed other lines")
                 if find_properties_after_child_blocks(new.split(original.newline)):
                     raise EditRefused("properties are still out of order")
@@ -679,7 +797,8 @@ class PropertyAfterChildBlockRule(Rule):
             try:
                 if verified_write(original, original.join(new_lines), verify):
                     applied.append(f"{f.name}: moved {moved} property line(s) above child blocks")
-            except EditRefused:
+            except EditRefused as exc:
+                ctx.refused_fixes.append(f"{self.id}: {f.name}: {exc}")
                 continue
         return applied
 
@@ -762,14 +881,24 @@ class DanglingDescriptionRule(Rule):
     name = "dangling-description"
     severity = Severity.ERROR
     fixable = True
+    # delete: drop the orphaned run; attach: drop the blank lines between a
+    # description and its object instead, keeping the documentation
+    option_defaults = {"fix_mode": "delete"}
     description = (
         "A /// description must sit directly on top of the declaration it "
         "describes. A /// run followed by a blank line documents nothing, and "
         "Power BI rejects the file once any declaration follows it "
-        "('Unexpected line type: Empty'). At the end of a file it is harmless "
-        "until something is appended, so it is reported as a warning there. "
-        "Auto-fix deletes the orphaned run and the blank line next to it."
+        "('Unexpected line type: Empty'). At the end of a file it breaks the "
+        "file as soon as anything is appended (for example the RangeStart and "
+        "RangeEnd parameters incremental refresh adds), so it is an error "
+        "there too. Auto-fix deletes the orphaned run and the one blank line "
+        "directly after it."
     )
+
+    def __init__(self) -> None:
+        super().__init__()
+        #: the files the attach mode repaired: (file name, occurrences, blanks)
+        self.last_attach: list[tuple[str, int, int]] = []
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
@@ -784,12 +913,14 @@ class DanglingDescriptionRule(Rule):
                         out.append(
                             self.violation(
                                 "/// description at the end of the file "
-                                "describes nothing. It is harmless today, but "
-                                "anything appended after it turns it into an "
-                                "import error; delete it (the auto-fix does).",
+                                "describes nothing, and anything appended "
+                                "after it (incremental refresh adds "
+                                "parameters there) makes Power BI reject the "
+                                "file ('Unexpected line type: Empty'). Delete "
+                                "it (the auto-fix does).",
                                 file=f,
                                 line=d.end + 1,
-                                severity=Severity.WARNING,
+                                obj=d.text,
                             )
                         )
                     else:
@@ -802,19 +933,54 @@ class DanglingDescriptionRule(Rule):
                                 "attach it, or delete the description.",
                                 file=f,
                                 line=d.end + 1,
+                                obj=d.text,
                             )
                         )
         return out
 
+    def _files_to_fix(self, model, attach: bool) -> list[Path]:
+        """The files the repair touches.
+
+        The attach mode works on the table files only: that is the scope
+        the comment-spacing cleanup had, and a shared expression's blank
+        lines are not what it was written for.
+        """
+        if attach:
+            return sorted((model.definition_path / "tables").glob("*.tmdl"))
+        return list(model.tmdl_files)
+
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
+        attach = self.options.get("fix_mode") == "attach"
         for model in ctx.models:
-            for f in model.tmdl_files:
+            for f in self._files_to_fix(model, attach):
                 try:
                     original = read_text_file(f)
                 except (UnicodeDecodeError, OSError):
                     continue
                 lines = original.lines()
+                if attach:
+                    new_lines, occurrences, blanks = attach_descriptions(lines)
+                    if not blanks:
+                        continue
+
+                    def verify_attach(old: str, new: str) -> None:
+                        o = [ln for ln in old.split(original.newline) if ln.strip()]
+                        nw = [ln for ln in new.split(original.newline) if ln.strip()]
+                        if o != nw:
+                            raise EditRefused("attach mode may only delete blank lines")
+
+                    try:
+                        if verified_write(original, original.join(new_lines), verify_attach):
+                            applied.append(
+                                f"{f.name}: attached {occurrences} description(s), "
+                                f"removed {blanks} blank line(s)"
+                            )
+                            self.last_attach.append(
+                                (f.name, occurrences, blanks))
+                    except EditRefused:
+                        pass
+                    continue
                 new_lines, removed = remove_dangling_descriptions(lines)
                 if not removed:
                     continue
@@ -907,4 +1073,155 @@ class RefTableTargetRule(Rule):
                             obj=name,
                         )
                     )
+        return out
+
+
+_EMPTY_FENCED_MEASURE_RE = re.compile(
+    r"^[\t ]*measure[\t ]+(?:'(?P<name>(?:[^']|'')*)'|(?P<bare>[^\s=]+))"
+    r"[\t ]*=[\t ]*```[\t ]*$")
+_ROOT_COMMENT_RE = re.compile(r"^\t//[ ][A-Z]")
+_MODEL_DECL_RE = re.compile(r"^model[\t ]+\S")
+_TABLE_DECL_RE = re.compile(r"^table[\t ]+\S")
+
+
+class TmdlFileSanityRule(Rule):
+    id = "M016"
+    name = "tmdl-file-sanity"
+    severity = Severity.ERROR
+    option_defaults = {
+        "required_files": ["model.tmdl", "database.tmdl"],
+        "required_tables": [],
+        "lf_only_files": [],
+        "check_line_endings": False,
+    }
+    description = (
+        "Pre-import sanity of the files themselves: the required files "
+        "(model.tmdl and database.tmdl by default) and any configured "
+        "required table files exist; no .tmdl file holds a null byte; the "
+        "core files (model.tmdl, database.tmdl, relationships.tmdl and the "
+        "required table files) use LF line endings when check_line_endings "
+        "is on (off by default, because Windows checkouts are often CRLF); "
+        "model.tmdl declares the model and every table file declares a "
+        "table; a measure with a quoted name has no whitespace-only fenced "
+        "body; and a required table file has no comment indented one tab "
+        "at the root of the table (a '// Section' line between objects)."
+    )
+
+    def check(self, ctx: Context) -> list[Violation]:
+        out: list[Violation] = []
+        required_files = list(self.options.get("required_files") or [])
+        required_tables = list(self.options.get("required_tables") or [])
+        extra_lf = list(self.options.get("lf_only_files") or [])
+        for d in ctx.definition_dirs:
+            if not (d / "tables").is_dir():
+                out.append(self.violation(
+                    f"{d.parent.name}: required directories missing: "
+                    f"['tables']. The model defines no tables without them; "
+                    f"restore the folder from source control, or save the "
+                    f"project again from Power BI Desktop.",
+                    file=d,
+                ))
+            missing_files = [name for name in required_files if not (d / name).is_file()]
+            if missing_files:
+                out.append(self.violation(
+                    f"{d.parent.name}: required files missing: {missing_files}. "
+                    f"Power BI Desktop always writes them, so this usually "
+                    f"means a partial export or a bad merge; restore them from "
+                    f"source control or save the project again.",
+                    file=d, obj=", ".join(missing_files),
+                ))
+            table_files = {f"tables/{t}.tmdl" for t in required_tables}
+            for t in required_tables:
+                if not (d / "tables" / f"{t}.tmdl").is_file():
+                    out.append(self.violation(
+                        f"required table file tables/{t}.tmdl is missing "
+                        f"(table '{t}' is configured as required).",
+                        file=d, obj=t,
+                    ))
+            core = {"model.tmdl", "database.tmdl", "relationships.tmdl"} | table_files | set(extra_lf)
+            for f in sorted(d.rglob("*.tmdl")):
+                if ctx.is_excluded(f):
+                    continue
+                rel = f.relative_to(d).as_posix()
+                try:
+                    raw = f.read_bytes()
+                    text = raw.decode("utf-8-sig")
+                except (OSError, UnicodeDecodeError) as exc:
+                    out.append(self.violation(
+                        f"File encoding error: {exc}. TMDL files must be UTF-8 "
+                        f"text; save the file again with UTF-8 encoding, or "
+                        f"restore it from source control if it was corrupted.",
+                        file=f,
+                    ))
+                    continue
+                if b"\x00" in raw:
+                    line = raw[: raw.index(b"\x00")].count(b"\n") + 1
+                    out.append(self.violation(
+                        f"{f.name}:{line} contains null bytes, which usually "
+                        f"means the file was truncated or corrupted by a merge "
+                        f"or a copy. Restore it from source control.",
+                        file=f, line=line,
+                    ))
+                if self.options.get("check_line_endings") and rel in core and b"\r" in raw:
+                    line = raw[: raw.index(b"\r")].count(b"\n") + 1
+                    out.append(self.violation(
+                        f"{f.name}: Windows line endings (CRLF). Core model "
+                        f"files must use LF; convert the file (for example "
+                        f"with a .gitattributes 'eol=lf' rule).",
+                        file=f, line=line,
+                    ))
+                lines = text.splitlines()
+                if rel == "model.tmdl" and not any(_MODEL_DECL_RE.match(ln) for ln in lines):
+                    out.append(self.violation(
+                        "Model file must start with 'model' declaration. Power "
+                        "BI Desktop always writes that line first, so a file "
+                        "without it is not a model file; restore it from source "
+                        "control or save the project again.",
+                        file=f,
+                    ))
+                if rel.startswith("tables/"):
+                    if not any(_TABLE_DECL_RE.match(ln) for ln in lines):
+                        out.append(self.violation(
+                            "Table file must start with 'table' declaration. "
+                            "Power BI Desktop always writes that line first, so "
+                            "a file without it is not a table file; restore it "
+                            "from source control or save the project again.",
+                            file=f,
+                        ))
+                    for idx, ln in enumerate(lines):
+                        match = _EMPTY_FENCED_MEASURE_RE.match(ln)
+                        if not match:
+                            continue
+                        body = []
+                        for nxt in lines[idx + 1:]:
+                            if nxt.strip().startswith("```"):
+                                break
+                            body.append(nxt)
+                        if not "".join(body).strip():
+                            name = match.group("name") or match.group("bare")
+                            out.append(self.violation(
+                                f"Measure '{name}' has empty DAX expression; "
+                                f"write the expression or delete the measure.",
+                                file=f, line=idx + 1,
+                            ))
+                if rel.startswith("tables/"):
+                    for idx, ln in enumerate(lines):
+                        if _ROOT_COMMENT_RE.match(ln):
+                            out.append(self.violation(
+                                f"line {idx + 1}: root-level comment is indented. "
+                                f"TMDL has no comment lines outside expressions, "
+                                f"so this line is not valid TMDL. Move the note "
+                                f"into a /// description or delete it.",
+                                file=f, line=idx + 1,
+                            ))
+                bad = unpaired_fence(lines)
+                if bad is not None:
+                    markers = sum(ln.count("```") for ln in lines)
+                    out.append(self.violation(
+                        f"unmatched DAX code fences: {markers} ``` markers "
+                        f"(must be even). A fence that opens after '=' never "
+                        f"closes, so everything after it is read as one "
+                        f"expression; add or remove a fence so they pair up.",
+                        file=f, line=bad + 1,
+                    ))
         return out

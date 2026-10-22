@@ -1,0 +1,11 @@
+relationship rel-sales-stores-0001
+	fromColumn: Sales.store_id
+	toColumn: _Stores.store_id
+
+relationship rel-ua-0003
+	fromColumn: 'User Access'.Region
+	toColumn: _Stores.Region
+
+relationship rel-ua-0004
+	fromColumn: 'User Access'.UserPrincipalName
+	toColumn: _Stores.Email

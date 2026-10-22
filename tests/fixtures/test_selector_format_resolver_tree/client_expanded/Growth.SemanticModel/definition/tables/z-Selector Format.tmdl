@@ -1,0 +1,13 @@
+table 'z-Selector Format'
+	calculationGroup
+		calculationItem Format = selectedmeasure()
+
+			formatStringDefinition =
+				SWITCH(TRUE(),
+				    ISINSCOPE('x-Selector 1'[x-Selector 1 Selected Field]),
+				        SWITCH(TRUE(),
+				            CONTAINSSTRING(SELECTEDVALUE('x-Selector 1'[x-Selector 1 Selected Field]), "cost/ conversion"), "#,##0.00 €",
+				            "General"),
+				    CONTAINSSTRING(SELECTEDMEASURENAME(), "cost/ conversion"), "#,##0.00 €",
+				    CONTAINSSTRING(SELECTEDMEASURENAME(), "/ "), "#,##0 €",
+				    "General")

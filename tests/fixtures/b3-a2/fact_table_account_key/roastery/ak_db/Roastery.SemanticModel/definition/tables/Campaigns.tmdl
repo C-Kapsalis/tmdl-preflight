@@ -1,0 +1,26 @@
+table Campaigns
+	lineageTag: 9ce85211-053d-5e14-94af-be8f70a13dd3
+
+	column campaign_id
+		dataType: int64
+		lineageTag: 5950b799-dd2a-5ba3-9f77-025d1ce82c67
+		summarizeBy: none
+		sourceColumn: campaign_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column service_account_x_id
+		dataType: int64
+		lineageTag: bbe44996-461a-56f8-a03f-7c8e9c5a51b5
+		summarizeBy: none
+		sourceColumn: service_account_x_id
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Campaigns = m
+		mode: import
+		source =
+				let
+				    Source = Value.NativeQuery(Warehouse, "select * from campaigns")
+				in
+				    Source

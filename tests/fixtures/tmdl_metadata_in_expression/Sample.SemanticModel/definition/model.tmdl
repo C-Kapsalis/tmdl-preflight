@@ -1,0 +1,15 @@
+model Model
+	culture: en-US
+
+ref table 'M010 a isHidden after equals'
+ref table 'M010 b buried flag'
+ref table 'M010 c lineage in fence'
+ref table 'M010 d buried detailRows'
+ref table 'M010 e buried kpi and relatedColumnDetails'
+ref table 'M010 f buried displayFolder no colon'
+ref table 'M010 g correct placement'
+ref table 'M010 h flag inside comment'
+ref table 'M011 a flag after annotation'
+ref table 'M011 b property after changedProperty'
+ref table 'M011 d wider block set'
+ref table 'M011 e properties before annotation'

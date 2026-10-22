@@ -24,12 +24,12 @@ class TestRelationshipEndpoints:
         f = _rels_file(definition)
         f.write_text(
             f.read_text(encoding="utf-8").replace(
-                "toColumn: Stores.store_id", "toColumn: Warehouses.warehouse_id"
+                "toColumn: _Stores.store_id", "toColumn: Warehouses.warehouse_id"
             ),
             encoding="utf-8",
         )
         violations = RelationshipEndpointsRule().check(Context(project))
-        assert any("'Warehouses' does not exist" in v.message for v in violations)
+        assert any("To table not found: Warehouses" in v.message for v in violations)
 
     def test_missing_column_detected(self, project, definition):
         f = _rels_file(definition)
@@ -40,7 +40,7 @@ class TestRelationshipEndpoints:
             encoding="utf-8",
         )
         violations = RelationshipEndpointsRule().check(Context(project))
-        assert any("'Sales'[sku] does not exist" in v.message for v in violations)
+        assert any("From column not found: Sales[sku]" in v.message for v in violations)
 
 
 class TestRelationshipCardinality:
@@ -58,8 +58,7 @@ class TestRelationshipCardinality:
         )
         violations = RelationshipCardinalityRule().check(Context(project))
         assert len(violations) == 1
-        assert "'both'" in violations[0].message
-        assert "not a cardinality" in violations[0].message
+        assert "Invalid from cardinality: both in 1f6f2b3a..." in violations[0].message
 
 
 class TestDuplicateRelationships:
@@ -72,7 +71,7 @@ class TestDuplicateRelationships:
         text += (
             "\nrelationship 99999999-0000-4000-8000-000000000000\n"
             "\tfromColumn: Sales.product_id\n"
-            "\ttoColumn: Products.product_id\n"
+            "\ttoColumn: _Products.product_id\n"
         )
         f.write_text(text, encoding="utf-8")
         violations = DuplicateRelationshipsRule().check(Context(project))
@@ -173,21 +172,25 @@ from tmdl_preflight.rules.relationships import (  # noqa: E402
 
 
 def test_malformed_relationship_reported_by_r001(project, definition, replace_in):
-    replace_in(_rels_file(definition), "\ttoColumn: Stores.store_id\n", "")
+    replace_in(_rels_file(definition), "\ttoColumn: _Stores.store_id\n", "")
     violations = RelationshipEndpointsRule().check(Context(project))
     assert len(violations) == 1
     assert "no usable toColumn" in violations[0].message
     assert violations[0].line == 5
 
 
-def test_endpoints_resolve_case_insensitively(project, definition, replace_in):
+def test_endpoints_resolve_case_insensitively_but_casing_is_an_error(project, definition, replace_in):
     replace_in(_rels_file(definition), "Sales.store_id", "sales.STORE_ID")
-    assert RelationshipEndpointsRule().check(Context(project)) == []
+    found = RelationshipEndpointsRule().check(Context(project))
+    # resolves (no "does not exist"), but the spelling differs: an error by
+    # project decision (casing mismatches are errors)
+    assert len(found) == 1 and "casing mismatch" in found[0].message
+    assert found[0].severity == Severity.ERROR
 
 
 class TestAmbiguousActivePair:
     def test_clean_passes(self, project):
-        # the fixture has two Sales->Calendar relationships, one inactive
+        # the fixture has two Sales->__Calendar relationships, one inactive
         assert AmbiguousActivePairRule().check(Context(project)) == []
 
     def test_second_active_relationship(self, project, definition, replace_in):
@@ -195,14 +198,15 @@ class TestAmbiguousActivePair:
         violations = AmbiguousActivePairRule().check(Context(project))
         assert len(violations) == 1
         assert violations[0].severity == Severity.ERROR
-        assert "4c9e5f6d" in (violations[0].obj or "")
+        assert "2 active" in violations[0].message
+        assert "3b8d4e5c" in violations[0].message
         assert AmbiguousActivePairRule.baselinable is False
 
     def test_direction_does_not_matter(self, project, definition, replace_in):
         replace_in(
             _rels_file(definition),
-            "\tisActive: false\n\tfromColumn: Sales.ship_date\n\ttoColumn: Calendar.Date",
-            "\tfromColumn: Calendar.Date\n\ttoColumn: Sales.ship_date",
+            "\tisActive: false\n\tfromColumn: Sales.ship_date\n\ttoColumn: __Calendar.Date",
+            "\tfromColumn: __Calendar.Date\n\ttoColumn: Sales.ship_date",
         )
         assert len(AmbiguousActivePairRule().check(Context(project))) == 1
 
@@ -218,4 +222,5 @@ class TestAutodetectedRelationships:
             "relationship AutoDetected_2a7c3d4b-9d2e-4f60-8b81-2c3d4e5f6071",
         )
         violations = AutodetectedRelationshipsRule().check(Context(project))
-        assert len(violations) == 1 and violations[0].severity == Severity.WARNING
+        # an error since 1.2 (the ported suite's gate was zero-tolerance)
+        assert len(violations) == 1 and violations[0].severity == Severity.ERROR

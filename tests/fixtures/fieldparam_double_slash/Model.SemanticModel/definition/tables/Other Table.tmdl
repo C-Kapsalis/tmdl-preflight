@@ -1,0 +1,11 @@
+table 'Other Table'
+	lineageTag: 11111111-2222-3333-4444-5555555555aa
+
+	partition 'Other Table' = calculated
+		mode: import
+		source = ```
+				
+				{
+				("Web//App", NAMEOF([Margin %]), 3, "web_x")
+				}
+				```

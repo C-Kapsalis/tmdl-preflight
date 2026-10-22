@@ -1,0 +1,47 @@
+table Spend
+	lineageTag: 5eed0000-0000-0000-0000-0000000001fa
+
+	column account_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000001fb
+		summarizeBy: none
+		sourceColumn: account_id
+
+	column ad_group_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000001fc
+		summarizeBy: none
+		sourceColumn: ad_group_x_id
+
+	column country_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000001fd
+		summarizeBy: none
+		sourceColumn: country_id
+
+	column device_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000001fe
+		summarizeBy: none
+		sourceColumn: device_id
+
+	column event_date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-0000000001ff
+		summarizeBy: none
+		sourceColumn: event_date
+
+	column landing_page_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-000000000200
+		summarizeBy: none
+		sourceColumn: landing_page_x_id
+
+	partition Spend = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

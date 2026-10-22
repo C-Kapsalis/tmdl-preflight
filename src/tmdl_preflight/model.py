@@ -174,6 +174,10 @@ class Relationship:
     to_column: str = ""
     from_cardinality: str = "many"
     to_cardinality: str = "one"
+    # the values exactly as written in the file ("Many" is not "many"); the
+    # pairs above are lowercased, because most checks compare case-insensitively
+    from_cardinality_raw: str = "many"
+    to_cardinality_raw: str = "one"
     cross_filtering: str = "oneDirection"
     is_active: bool = True
 
@@ -241,7 +245,13 @@ class DaxBlock:
 
     @property
     def label(self) -> str:
-        return f"{self.table}[{self.name}] ({self.kind})"
+        if self.kind == "partition_source":
+            return f"{self.table} (partition source)"
+        if self.kind == "calculation_item":
+            return f"{self.table}[{self.name}] (calculationItem)"
+        if self.kind == "format_string_definition":
+            return f"{self.table} (formatStringDefinition)"
+        return f"{self.table}[{self.name}]"
 
 
 @dataclass
@@ -251,6 +261,9 @@ class ParseError:
     file: Path
     message: str
     line: Optional[int] = None
+    # "error" for anything that stops the file from loading; "warning" for
+    # oddities the parser could still read (for example an empty name)
+    severity: str = "error"
 
 
 @dataclass

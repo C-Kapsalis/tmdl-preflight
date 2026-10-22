@@ -1,0 +1,26 @@
+table Tastings
+	lineageTag: c7f538bd-b174-51d5-9d10-503ad9315e69
+
+	column tastings_id
+		dataType: int64
+		lineageTag: 172207a7-99cd-5842-b481-90306da4104e
+		summarizeBy: none
+		sourceColumn: tastings_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_date
+		dataType: dateTime
+		lineageTag: 81a75bea-be81-5356-9d37-5e8b8047026b
+		summarizeBy: none
+		sourceColumn: order_date
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Tastings = m
+		mode: import
+		source =
+				let
+				    Source = source_filter_dates("tastings_v", "tasting_date", false, #"v-fromdate")
+				in
+				    Source

@@ -1,0 +1,71 @@
+table 'Queries Paid'
+	lineageTag: 5eed0000-0000-0000-0000-0000000000a6
+
+	column account_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000a7
+		summarizeBy: none
+		sourceColumn: account_id
+
+	column ad_group_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000a8
+		summarizeBy: none
+		sourceColumn: ad_group_x_id
+
+	column ad_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000a9
+		summarizeBy: none
+		sourceColumn: ad_id
+
+	column content_group_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000aa
+		summarizeBy: none
+		sourceColumn: content_group_id
+
+	column country_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000ab
+		summarizeBy: none
+		sourceColumn: country_id
+
+	column device_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000ac
+		summarizeBy: none
+		sourceColumn: device_id
+
+	column event_date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-0000000000ad
+		summarizeBy: none
+		sourceColumn: event_date
+
+	column keyword_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000ae
+		summarizeBy: none
+		sourceColumn: keyword_id
+
+	column landing_page_x_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000af
+		summarizeBy: none
+		sourceColumn: landing_page_x_id
+
+	column query_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-0000000000b0
+		summarizeBy: none
+		sourceColumn: query_id
+
+	partition 'Queries Paid' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

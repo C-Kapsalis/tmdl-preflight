@@ -1,0 +1,19 @@
+table '#Report Measures'
+	lineageTag: 0000b4b1-0000-0000-0000-000000000009
+
+	/// Total paid media cost.
+	measure 'Total Cost' = SUM(Ads[cost])
+		lineageTag: 0000b4b1-0000-0000-0000-000000000006
+
+	/// Attributed revenue.
+	measure Revenue = SUM(Ads[revenue])
+		lineageTag: 0000b4b1-0000-0000-0000-000000000007
+
+	/// Clicks counted as bags.
+	measure Bags = SUM(Ads[clicks])
+		lineageTag: 0000b4b1-0000-0000-0000-000000000008
+
+	partition '#Report Measures' = calculated
+		mode: import
+		source = ROW("x", 1)
+

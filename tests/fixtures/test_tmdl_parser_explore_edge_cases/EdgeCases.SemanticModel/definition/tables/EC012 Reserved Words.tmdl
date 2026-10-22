@@ -1,0 +1,22 @@
+table 'EC012 Reserved Words'
+	lineageTag: d9899040-7c49-54be-8c1d-58ff2e6cde93
+
+	column VAR
+		dataType: string
+		lineageTag: c3250249-05db-5268-b6ac-1c962f1fc6c6
+		summarizeBy: none
+		sourceColumn: VAR
+
+	column RETURN
+		dataType: string
+		lineageTag: 1f240529-53f2-5252-87d0-7932247a959f
+		summarizeBy: none
+		sourceColumn: RETURN
+
+	partition 'EC012 Reserved Words' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

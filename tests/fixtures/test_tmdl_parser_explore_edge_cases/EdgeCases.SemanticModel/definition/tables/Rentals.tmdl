@@ -1,0 +1,40 @@
+table Rentals
+	lineageTag: 0d3238b1-5675-572c-9afa-67a84dbf616b
+
+	column rental_id
+		dataType: int64
+		lineageTag: 56b9776e-74b8-5d40-8c7b-4f639fa6f766
+		summarizeBy: none
+		sourceColumn: rental_id
+
+	column Minutes
+		dataType: int64
+		lineageTag: 5b965d23-6f42-5338-b996-5c8c7409bc66
+		summarizeBy: none
+		sourceColumn: Minutes
+
+	column Status
+		dataType: string
+		lineageTag: 22422b7a-235f-5470-ad70-a2953baad13a
+		summarizeBy: none
+		sourceColumn: Status
+
+	column Year
+		dataType: int64
+		lineageTag: a1f80edf-2248-536e-b809-d86c920f51c3
+		summarizeBy: none
+		sourceColumn: Year
+
+	column Fee
+		dataType: decimal
+		lineageTag: 149cd283-6fd7-5a1d-9748-50efcbb2f4aa
+		summarizeBy: none
+		sourceColumn: Fee
+
+	partition Rentals = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

@@ -1,0 +1,41 @@
+table 'y-Selector 1'
+	lineageTag: 76b5aa42-7bce-596b-9b00-023a63081602
+
+	column 'y-Selector 1'
+		lineageTag: 1ce3f90f-f8c7-57c3-b320-22be042cefaf
+		summarizeBy: none
+		sourceColumn: [Value1]
+		sortByColumn: 'y-Selector 1 Order'
+
+		relatedColumnDetails
+			groupByColumn: 'y-Selector 1 Fields'
+
+	column 'y-Selector 1 Fields'
+		isHidden
+		lineageTag: 3b053ae3-9d68-5882-a87e-2c7ad1f5787c
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+	column 'y-Selector 1 Order'
+		isHidden
+		formatString: 0
+		lineageTag: 94b8a0fd-f2c9-5c74-acef-e4cd6ad08a38
+		summarizeBy: sum
+		sourceColumn: [Value3]
+
+	column 'y-Selector 1 Field Category'
+		lineageTag: e22398dc-625a-5626-93e2-18b74b092c94
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+	partition 'y-Selector 1' = calculated
+		mode: import
+		source = ```
+				{
+					("Shop", NAMEOF('_Shops'[shop_name]), 0, "Shops_y"),
+					("Account Name", NAMEOF('_Accounts'[Account Name]), 1, "Account_y"),
+					("Main Attribution", NAMEOF('_Shops'[shop_id]), 2, "m_attr_y"),
+					("Region", NAMEOF('_Shops'[shop_name]), 3)
+				}
+				```
+

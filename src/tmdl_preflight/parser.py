@@ -99,12 +99,12 @@ def parse_object_name(rest: str) -> tuple[str, str]:
                 break
             buf.append(rest[i])
             i += 1
-        return "".join(buf), rest[i:].strip()
+        return "".join(buf).strip(), rest[i:].strip()
     if rest.startswith('"'):
         end = rest.find('"', 1)
         if end == -1:
-            return rest[1:], ""
-        return rest[1:end], rest[end + 1 :].strip()
+            return rest[1:].strip(), ""
+        return rest[1:end].strip(), rest[end + 1 :].strip()
     # bare name: runs to '=' or end of line
     eq = rest.find("=")
     if eq == -1:
@@ -170,6 +170,10 @@ _DESC_RE = re.compile(r"^\s*///(?P<text>.*)$")
 # example a mis-indented measure swallowed by the previous expression).
 _RAW_TABLE_MEMBER_RE = re.compile(r"^[\t ]*(?:measure|column)[\t ]+\S")
 _RAW_RELATIONSHIP_RE = re.compile(r"^[\t ]*relationship[\t ]+\S")
+# A relationship block starts at the top level with the keyword and any
+# whitespace after it: "relationship <id>" and "relationship\t<id>" are the
+# same declaration.
+_RELATIONSHIP_START_RE = re.compile(r"^relationship\s+\S")
 
 
 def read_tmdl_text(path: Path) -> str:
@@ -200,6 +204,31 @@ def count_raw_declarations(text: str, pattern: "re.Pattern[str]") -> int:
         if stripped.endswith("```") and stripped.count("```") % 2 == 1:
             in_fence = True
     return count
+
+
+def _name_problem(rest: str, name: str, remainder: str, kw: str) -> Optional[tuple[str, str]]:
+    """Diagnose a declaration name the parser had to guess at.
+
+    Returns ``(severity, message)`` or None. Text left over after a quoted
+    name that is neither empty nor an ``=`` means the quoting is broken (a
+    lone apostrophe inside ``'...'`` must be doubled); an empty name is legal
+    to read but cannot be referenced.
+    """
+    stripped = rest.strip()
+    if stripped.startswith(("'", '"')) and remainder and not remainder.startswith("="):
+        return (
+            "error",
+            f"{kw} name {stripped.split(chr(10))[0][:60]!r} is not quoted correctly: "
+            f"text follows the closing quote. Inside a quoted TMDL name an "
+            f"apostrophe must be written twice ('Rider''s Name').",
+        )
+    if not name:
+        return (
+            "warning",
+            f"{kw} has an empty name, so no DAX expression or visual can refer "
+            f"to it. Give it a name or delete it.",
+        )
+    return None
 
 
 def parse_table_file(path: Path) -> tuple[Optional[Table], list[ParseError]]:
@@ -252,7 +281,10 @@ def parse_table_file(path: Path) -> tuple[Optional[Table], list[ParseError]]:
             rest = m.group("rest")
             desc = take_description()
             if kw == "table" and level == 0:
-                name, _ = parse_object_name(rest)
+                name, remainder = parse_object_name(rest)
+                problem = _name_problem(rest, name, remainder, "table")
+                if problem:
+                    errors.append(ParseError(path, problem[1], i + 1, problem[0]))
                 table = Table(name=name, file=path, line=i + 1, description=desc)
                 set_owner(0, table)
                 i += 1
@@ -263,6 +295,9 @@ def parse_table_file(path: Path) -> tuple[Optional[Table], list[ParseError]]:
 
             if kw == "column" and level == 1:
                 name, remainder = parse_object_name(rest)
+                problem = _name_problem(rest, name, remainder, "column")
+                if problem:
+                    errors.append(ParseError(path, problem[1], i + 1, problem[0]))
                 col = Column(
                     name=name, table=table.name, file=path, line=i + 1, description=desc
                 )
@@ -279,6 +314,9 @@ def parse_table_file(path: Path) -> tuple[Optional[Table], list[ParseError]]:
 
             if kw == "measure" and level == 1:
                 name, remainder = parse_object_name(rest)
+                problem = _name_problem(rest, name, remainder, "measure")
+                if problem:
+                    errors.append(ParseError(path, problem[1], i + 1, problem[0]))
                 meas = Measure(
                     name=name, table=table.name, file=path, line=i + 1, description=desc
                 )
@@ -614,8 +652,8 @@ def parse_relationships(
         stripped = line.strip()
         if not stripped:
             continue
-        if indent_level(line) == 0 and stripped.startswith("relationship "):
-            rel_id = stripped[len("relationship ") :].strip()
+        if indent_level(line) == 0 and _RELATIONSHIP_START_RE.match(stripped):
+            rel_id = stripped[len("relationship") :].strip()
             current = Relationship(rel_id=rel_id, file=path, line=idx)
             rels.append(current)
             continue
@@ -631,8 +669,10 @@ def parse_relationships(
             current.to_table, current.to_column = parse_endpoint(value)
         elif key == "fromCardinality":
             current.from_cardinality = value.lower()
+            current.from_cardinality_raw = value
         elif key == "toCardinality":
             current.to_cardinality = value.lower()
+            current.to_cardinality_raw = value
         elif key == "crossFilteringBehavior":
             current.cross_filtering = value
         elif key == "isActive":
@@ -666,7 +706,8 @@ def parse_relationships_file(path: Path) -> list[Relationship]:
 # ---------------------------------------------------------------------------
 
 _CONTEXT_RE = re.compile(
-    r"^\s*(table|column|measure|partition|relationship|hierarchy)\b\s*(.*)$"
+    r"^\s*(table|column|measure|partition|relationship|hierarchy|level|expression|"
+    r"calculationItem|role|culture|perspective)\b\s*(.*)$"
 )
 
 
@@ -735,6 +776,18 @@ def parse_model(definition_path: Path) -> SemanticModel:
 # Project discovery
 # ---------------------------------------------------------------------------
 
+def is_definition_dir(folder: Path) -> bool:
+    """A ``definition/`` folder holds ``tables/``, ``model.tmdl`` or
+    ``expressions.tmdl`` (a partial export still counts, so the rules can say
+    what is missing)."""
+    folder = Path(folder)
+    return (
+        (folder / "tables").is_dir()
+        or (folder / "model.tmdl").is_file()
+        or (folder / "expressions.tmdl").is_file()
+    )
+
+
 def find_definition_dirs(root: Path) -> list[Path]:
     """Locate semantic-model ``definition/`` folders under (or at) ``root``.
 
@@ -743,7 +796,7 @@ def find_definition_dirs(root: Path) -> list[Path]:
     ``*.SemanticModel`` folders.
     """
     root = Path(root)
-    if root.name == "definition" and (root / "tables").is_dir():
+    if root.name == "definition" and is_definition_dir(root):
         return [root]
     if root.name.endswith(".SemanticModel"):
         d = root / "definition"
@@ -761,7 +814,7 @@ def find_report_dirs(root: Path) -> list[Path]:
     root = Path(root)
     if root.name.endswith(".Report"):
         return [root]
-    if root.name == "definition" and (root / "tables").is_dir():
+    if root.name == "definition" and is_definition_dir(root):
         root = root.parent.parent  # definition -> X.SemanticModel -> project
     if root.name.endswith(".SemanticModel"):
         root = root.parent

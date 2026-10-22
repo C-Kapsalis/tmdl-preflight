@@ -1,0 +1,9 @@
+{
+  "id": "ds-coffee",
+  "name": "Coffee",
+  "configuredBy": "owner@example.com",
+  "isRefreshable": true,
+  "targetStorageMode": "Import",
+  "workspaceId": "ws-coffee",
+  "workspaceName": "Coffee Roastery"
+}

@@ -1,0 +1,149 @@
+{
+ "landing_edge": [
+  [
+   "spinout_12_db/Growth.SemanticModel/definition/relationships.tmdl",
+   "",
+   "relationship 5eed0000-0000-0000-0000-00000000aaa1\n\tisActive: false\n\tfromColumn: '_Landing Pages'.content_group_id\n\ttoColumn: _Content.content_group_id\n"
+  ]
+ ],
+ "queries_paid_active": [
+  [
+   "spinout_12_db/Growth.SemanticModel/definition/relationships.tmdl",
+   "\tisActive: false\n\tfromColumn: 'Queries Paid'.content_group_id",
+   "\tfromColumn: 'Queries Paid'.content_group_id"
+  ]
+ ],
+ "helper_drops_offers": [
+  [
+   "spinout_12_db/Growth.SemanticModel/definition/tables/Client-a Measures.tmdl",
+   "\t\t\t    || ISFILTERED ( '_Offers' ) && NOT CALCULATE ( COUNTROWS ( 'User Views' ), REMOVEFILTERS (), VALUES ( '_Offers'[offer_id] ) )\n",
+   "",
+   7
+  ]
+ ],
+ "ratio_unguarded": [
+  [
+   "spinout_12_db/Growth.SemanticModel/definition/tables/Client-a Measures.tmdl",
+   "\tmeasure 'Cost/ Account' = ```\n\t\t\tIF ( [-helper Enhanced Window Unallocated], BLANK (),",
+   "\tmeasure 'Cost/ Account' = ```\n\t\t\tIF ( FALSE (), BLANK (),"
+  ]
+ ],
+ "boundary_hardcoded": [
+  [
+   "spinout_12_db/Growth.SemanticModel/definition/tables/Client-a Measures.tmdl",
+   "\t\t\tCALCULATE ( MIN ( Subscriptions[event_date] ),",
+   "\t\t\tDATE ( 2026, 6, 1 ) + 0 * CALCULATE ( MIN ( Subscriptions[event_date] ),"
+  ]
+ ],
+ "count_flag_eq_one": [
+  [
+   "spinout_12_db/Growth.SemanticModel/definition/tables/Client-a Measures.tmdl",
+   "Subscriptions[has_renewal] = 0 )",
+   "Subscriptions[has_return] = 1 )",
+   0
+  ]
+ ],
+ "boolean_flag_gt_zero": [
+  [
+   "spinout_12_db/Growth.SemanticModel/definition/tables/Client-a Measures.tmdl",
+   "Subscriptions[has_limbo] = FALSE )",
+   "Subscriptions[has_limbo] > 0 )"
+  ]
+ ],
+ "ga4_reaches_queries": [
+  [
+   "universal/Performance.SemanticModel/definition/relationships.tmdl",
+   "",
+   "relationship 5eed0000-0000-0000-0000-00000000aaa2\n\tfromColumn: 'GA4 Conversions'.query_id\n\ttoColumn: _Queries.query_id\n"
+  ]
+ ],
+ "offer_cohort_calendar": [
+  [
+   "spinout_12_db/Growth.SemanticModel/definition/relationships.tmdl",
+   "",
+   "relationship 5eed0000-0000-0000-0000-00000000aaa3\n\tfromColumn: Subscriptions.offer_start_date\n\ttoColumn: '__Offer Cohort Calendar'.Date\n"
+  ],
+  [
+   "spinout_12_db/Growth.SemanticModel/definition/tables/__Offer Cohort Calendar.tmdl",
+   "",
+   "table '__Offer Cohort Calendar'\n\tlineageTag: 5eed0000-0000-0000-0000-00000000aab3\n\n\tcolumn Date\n\t\tdataType: dateTime\n\t\tlineageTag: 5eed0000-0000-0000-0000-00000000aab4\n\t\tsummarizeBy: none\n\t\tsourceColumn: Date\n\n\tcolumn 'Offer Cohort Date'\n\t\tdataType: dateTime\n\t\tlineageTag: 5eed0000-0000-0000-0000-00000000aab5\n\t\tsummarizeBy: none\n\t\tsourceColumn: Offer Cohort Date\n"
+  ]
+ ],
+ "registration_calendar_cut": [
+  [
+   "spinout_12_db/Growth.SemanticModel/definition/relationships.tmdl",
+   "\tfromColumn: _Users.registration_date\n\ttoColumn: '__Registration Calendar'.Date",
+   "\tfromColumn: Subscriptions.event_date\n\ttoColumn: '__Registration Calendar'.Date"
+  ]
+ ],
+ "dead_anchor_calendar": [
+  [
+   "spinout_12_db/Growth.SemanticModel/definition/tables/__First Order Calendar.tmdl",
+   "",
+   "table '__First Order Calendar'\n\tlineageTag: 5eed0000-0000-0000-0000-00000000aac1\n\n\tcolumn Date\n\t\tdataType: dateTime\n\t\tlineageTag: 5eed0000-0000-0000-0000-00000000aac2\n\t\tsummarizeBy: none\n\t\tsourceColumn: Date\n"
+  ]
+ ],
+ "grain_drops_devices_column": [
+  [
+   "spinout_05_db/Growth.SemanticModel/definition/tables/#Backend Measures.tmdl",
+   " || ISINSCOPE( '_Devices'[device] )",
+   ""
+  ]
+ ],
+ "grain_conformed_blocked": [
+  [
+   "spinout_05_db/Growth.SemanticModel/definition/tables/#Backend Measures.tmdl",
+   "\t\t\tRETURN NOT ( blockedTables || blockedCols )",
+   "\t\t\tVAR blockedCountry = ISINSCOPE( '_Countries'[Country Official Name] ) || ISFILTERED( '_Countries' )\n\t\t\tRETURN NOT ( blockedTables || blockedCols || blockedCountry )"
+  ]
+ ],
+ "or_chain_61": [
+  [
+   "spinout_05_db/Growth.SemanticModel/definition/tables/#Backend Measures.tmdl",
+   "\t\t\tRETURN NOT ( blockedTables || blockedCols )",
+   "\t\t\tVAR wide = ISFILTERED( Spend[c00] ) || ISFILTERED( Spend[c01] ) || ISFILTERED( Spend[c02] ) || ISFILTERED( Spend[c03] ) || ISFILTERED( Spend[c04] ) || ISFILTERED( Spend[c05] ) || ISFILTERED( Spend[c06] ) || ISFILTERED( Spend[c07] ) || ISFILTERED( Spend[c08] ) || ISFILTERED( Spend[c09] ) || ISFILTERED( Spend[c10] ) || ISFILTERED( Spend[c11] ) || ISFILTERED( Spend[c12] ) || ISFILTERED( Spend[c13] ) || ISFILTERED( Spend[c14] ) || ISFILTERED( Spend[c15] ) || ISFILTERED( Spend[c16] ) || ISFILTERED( Spend[c17] ) || ISFILTERED( Spend[c18] ) || ISFILTERED( Spend[c19] ) || ISFILTERED( Spend[c20] ) || ISFILTERED( Spend[c21] ) || ISFILTERED( Spend[c22] ) || ISFILTERED( Spend[c23] ) || ISFILTERED( Spend[c24] ) || ISFILTERED( Spend[c25] ) || ISFILTERED( Spend[c26] ) || ISFILTERED( Spend[c27] ) || ISFILTERED( Spend[c28] ) || ISFILTERED( Spend[c29] ) || ISFILTERED( Spend[c30] ) || ISFILTERED( Spend[c31] ) || ISFILTERED( Spend[c32] ) || ISFILTERED( Spend[c33] ) || ISFILTERED( Spend[c34] ) || ISFILTERED( Spend[c35] ) || ISFILTERED( Spend[c36] ) || ISFILTERED( Spend[c37] ) || ISFILTERED( Spend[c38] ) || ISFILTERED( Spend[c39] ) || ISFILTERED( Spend[c40] ) || ISFILTERED( Spend[c41] ) || ISFILTERED( Spend[c42] ) || ISFILTERED( Spend[c43] ) || ISFILTERED( Spend[c44] ) || ISFILTERED( Spend[c45] ) || ISFILTERED( Spend[c46] ) || ISFILTERED( Spend[c47] ) || ISFILTERED( Spend[c48] ) || ISFILTERED( Spend[c49] ) || ISFILTERED( Spend[c50] ) || ISFILTERED( Spend[c51] ) || ISFILTERED( Spend[c52] ) || ISFILTERED( Spend[c53] ) || ISFILTERED( Spend[c54] ) || ISFILTERED( Spend[c55] ) || ISFILTERED( Spend[c56] ) || ISFILTERED( Spend[c57] ) || ISFILTERED( Spend[c58] ) || ISFILTERED( Spend[c59] ) || ISFILTERED( Spend[c60] ) || ISFILTERED( Spend[c61] )\n\t\t\tRETURN NOT ( blockedTables || blockedCols || wide )"
+  ]
+ ],
+ "ratio_divides_raw_cost": [
+  [
+   "spinout_05_db/Growth.SemanticModel/definition/tables/#Backend Measures.tmdl",
+   "IF ( [-helper Cost Grain Valid], DIVIDE ( [^Cost], [^Leads #] ) )",
+   "IF ( [-helper Cost Grain Valid], DIVIDE ( [Cost], [^Leads #] ) )"
+  ]
+ ],
+ "policy_floor_085": [
+  [
+   "spinout_05_db/Growth.SemanticModel/definition/tables/#Backend Measures.tmdl",
+   "VAR coverageFloor = 0.95",
+   "VAR coverageFloor = 0.85"
+  ]
+ ],
+ "policy_recheck_unused": [
+  [
+   "spinout_05_db/Growth.SemanticModel/definition/tables/#Backend Measures.tmdl",
+   "policyOnSlicer && recheck = 1 && coverage",
+   "policyOnSlicer && coverage"
+  ]
+ ],
+ "cpc_guard_on_keyword": [
+  [
+   "spinout_05_db/Growth.SemanticModel/definition/tables/#Report Measures.tmdl",
+   "\"search_term\", DIVIDE ( CALCULATE ( [Cost], KEEPFILTERS ( NOT _Campaigns[Campaign Type] IN { \"performance_max\", \"performance max\" } ) ), CALCULATE ( [Clicks], KEEPFILTERS ( NOT _Campaigns[Campaign Type] IN { \"performance_max\", \"performance max\" } ) ) ),\n\t\t\t        \"keyword\", DIVIDE ( [Cost], [Clicks] ),",
+   "\"search_term\", DIVIDE ( [Cost], [Clicks] ),\n\t\t\t        \"keyword\", DIVIDE ( CALCULATE ( [Cost], KEEPFILTERS ( NOT _Campaigns[Campaign Type] IN { \"performance_max\", \"performance max\" } ) ), CALCULATE ( [Clicks], KEEPFILTERS ( NOT _Campaigns[Campaign Type] IN { \"performance_max\", \"performance max\" } ) ) ),"
+  ]
+ ],
+ "cpc_extra_literal": [
+  [
+   "spinout_05_db/Growth.SemanticModel/definition/tables/#Report Measures.tmdl",
+   "\"search_term\", DIVIDE ( CALCULATE ( [Cost], KEEPFILTERS ( NOT _Campaigns[Campaign Type] IN { \"performance_max\", \"performance max\" } ) )",
+   "\"search_term\", DIVIDE ( CALCULATE ( [Cost], KEEPFILTERS ( NOT _Campaigns[Campaign Type] IN { \"performance_max\", \"performance max\", \"search & content\" } ) )"
+  ]
+ ],
+ "insights_guard_misses_signup": [
+  [
+   "spinout_02_db/insights.SemanticModel/definition/tables/Backend Measures.tmdl",
+   "IF ( ISINSCOPE( '_m Users'[user_role] ) || ISINSCOPE( '_m Users'[signup_month] ), BLANK (), DISTINCTCOUNT ( 'Account Events'[org_id] ) )",
+   "IF ( ISINSCOPE( '_m Users'[user_role] ), BLANK (), DISTINCTCOUNT ( 'Account Events'[org_id] ) )"
+  ]
+ ]
+}

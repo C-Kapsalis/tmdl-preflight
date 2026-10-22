@@ -1,0 +1,23 @@
+table _Ads
+	lineageTag: 0000b4b1-0000-0000-0000-000000000024
+
+	column ad_id
+		dataType: int64
+		lineageTag: 0000b4b1-0000-0000-0000-000000000022
+		summarizeBy: none
+		sourceColumn: ad_id
+
+	column ad_name
+		dataType: string
+		lineageTag: 0000b4b1-0000-0000-0000-000000000023
+		summarizeBy: none
+		sourceColumn: ad_name
+
+	partition _Ads = m
+		mode: import
+		source =
+			let
+			    Source = source_filter_dates("ads_dim_n", "date")
+			in
+			    Source
+

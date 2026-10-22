@@ -1,0 +1,17 @@
+table _Devices
+	lineageTag: 5eed0000-0000-0000-0000-00000000000c
+
+	column device_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000000d
+		summarizeBy: none
+		sourceColumn: device_id
+
+	partition _Devices = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

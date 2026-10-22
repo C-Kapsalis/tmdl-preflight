@@ -1,0 +1,23 @@
+table '_Cluster Mappings'
+	lineageTag: 5eed0000-0000-0000-0000-000000000117
+
+	column 'Cluster Label'
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-000000000118
+		summarizeBy: none
+		sourceColumn: Cluster Label
+
+	column 'Cluster Value'
+		dataType: string
+		lineageTag: 5eed0000-0000-0000-0000-000000000119
+		summarizeBy: none
+		sourceColumn: Cluster Value
+
+	partition '_Cluster Mappings' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

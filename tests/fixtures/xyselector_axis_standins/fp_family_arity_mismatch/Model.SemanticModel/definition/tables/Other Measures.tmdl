@@ -1,0 +1,13 @@
+table 'Other Measures'
+	lineageTag: 9fed7d69-2d99-5873-bd85-bbdfdabf2c63
+
+	measure 'Margin %' = 0.3
+		lineageTag: 94ee4276-1a69-5b11-8b18-575d7cc2bb30
+
+	measure 'Update Events' = 3
+		lineageTag: 01d87360-26f2-50d6-a575-0ec4a683519e
+
+	partition 'Other Measures' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})
+

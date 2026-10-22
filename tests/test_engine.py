@@ -13,15 +13,15 @@ from tmdl_preflight.rules.base import Context
 def _seed_fixable_violations(definition, report_dir):
     """Introduce one violation for each auto-fixable rule."""
     # M003: duplicate lineage tag
-    products = (definition / "tables" / "Products.tmdl").read_text(encoding="utf-8")
+    products = (definition / "tables" / "_Products.tmdl").read_text(encoding="utf-8")
     tag = re.search(r"lineageTag:\s*(\S+)", products).group(1)
-    stores_file = definition / "tables" / "Stores.tmdl"
+    stores_file = definition / "tables" / "_Stores.tmdl"
     stores = stores_file.read_text(encoding="utf-8")
     old = re.search(r"lineageTag:\s*(\S+)", stores).group(1)
     stores_file.write_text(stores.replace(old, tag, 1), encoding="utf-8")
 
     # M004: malformed lineage tag
-    cal_file = definition / "tables" / "Calendar.tmdl"
+    cal_file = definition / "tables" / "__Calendar.tmdl"
     cal = cal_file.read_text(encoding="utf-8")
     cal_tag = re.search(r"lineageTag:\s*(\S+)", cal).group(1)
     cal_file.write_text(cal.replace(cal_tag, "placeholder-tag", 1), encoding="utf-8")
@@ -62,7 +62,7 @@ class TestCheck:
 
     def test_exit_codes(self, project, definition):
         # a WARNING-only project: malformed lineage tag (M004)
-        cal_file = definition / "tables" / "Calendar.tmdl"
+        cal_file = definition / "tables" / "__Calendar.tmdl"
         cal = cal_file.read_text(encoding="utf-8")
         cal_tag = re.search(r"lineageTag:\s*(\S+)", cal).group(1)
         cal_file.write_text(cal.replace(cal_tag, "oops", 1), encoding="utf-8")
@@ -125,7 +125,7 @@ def test_fixers_preserve_crlf_line_endings(project, definition, report_dir):
     _seed_fixable_violations(definition, report_dir)
     model_file = definition / "model.tmdl"
     model_file.write_text(
-        model_file.read_text(encoding="utf-8").replace("ref table Stores\n", ""),
+        model_file.read_text(encoding="utf-8").replace("ref table _Stores\n", ""),
         encoding="utf-8",
     )
     for f in definition.rglob("*.tmdl"):

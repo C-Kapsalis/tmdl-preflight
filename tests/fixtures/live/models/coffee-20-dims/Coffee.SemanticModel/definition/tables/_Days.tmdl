@@ -1,0 +1,16 @@
+table _Days
+	lineageTag: afc981d2-0de5-541b-8182-29c0ff0f74f4
+
+	column Key
+		dataType: int64
+		lineageTag: 55a2aacb-63bb-5864-87cc-264cb1b6179e
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition _Days = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

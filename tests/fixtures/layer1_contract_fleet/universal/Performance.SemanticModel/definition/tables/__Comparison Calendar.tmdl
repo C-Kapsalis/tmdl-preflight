@@ -1,0 +1,17 @@
+table '__Comparison Calendar'
+	lineageTag: 5eed0000-0000-0000-0000-000000000056
+
+	column Date
+		dataType: dateTime
+		lineageTag: 5eed0000-0000-0000-0000-000000000057
+		summarizeBy: none
+		sourceColumn: Date
+
+	partition '__Comparison Calendar' = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

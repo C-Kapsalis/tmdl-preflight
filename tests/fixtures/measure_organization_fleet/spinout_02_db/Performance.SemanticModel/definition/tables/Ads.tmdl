@@ -1,0 +1,52 @@
+table Ads
+	lineageTag: 0000b4b1-0000-0000-0000-000000000069
+
+	column ad_id
+		dataType: int64
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000062
+		summarizeBy: none
+		sourceColumn: ad_id
+
+	column date
+		dataType: dateTime
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000063
+		summarizeBy: none
+		sourceColumn: date
+
+	column cost
+		dataType: double
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000064
+		summarizeBy: none
+		sourceColumn: cost
+
+	column clicks
+		dataType: int64
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000065
+		summarizeBy: none
+		sourceColumn: clicks
+
+	column revenue
+		dataType: double
+		isHidden
+		lineageTag: 0000b4b1-0000-0000-0000-000000000066
+		summarizeBy: none
+		sourceColumn: revenue
+
+	measure 'countrows check' = COUNTROWS(Ads)
+		lineageTag: 0000b4b1-0000-0000-0000-000000000067
+
+	measure 'Total Revenue' = SUM(Ads[revenue])
+		lineageTag: 0000b4b1-0000-0000-0000-000000000068
+
+	partition Ads = m
+		mode: import
+		source =
+			let
+			    Source = source_filter_dates("ads_n", "date")
+			in
+			    Source
+

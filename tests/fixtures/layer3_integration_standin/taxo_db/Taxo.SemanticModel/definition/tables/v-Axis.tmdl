@@ -1,0 +1,17 @@
+table 'v-Axis'
+	lineageTag: 4fc2dee5-d146-504b-ad47-ba989250ad62
+
+	column axis
+		dataType: string
+		lineageTag: c2f3b795-aaf9-59c1-b645-9cf5b0d9944c
+		summarizeBy: none
+		sourceColumn: axis
+
+	partition 'v-Axis' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

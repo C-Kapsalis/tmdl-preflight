@@ -1,0 +1,17 @@
+table _Keywords
+	lineageTag: 5eed0000-0000-0000-0000-00000000001e
+
+	column keyword_id
+		dataType: int64
+		lineageTag: 5eed0000-0000-0000-0000-00000000001f
+		summarizeBy: none
+		sourceColumn: keyword_id
+
+	partition _Keywords = m
+		mode: import
+		source =
+				let
+				    Source = #table({"x"}, {})
+				in
+				    Source
+

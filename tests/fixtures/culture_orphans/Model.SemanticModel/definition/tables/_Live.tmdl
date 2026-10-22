@@ -1,0 +1,12 @@
+table '_Live'
+	lineageTag: 1b0a0a0a-1c1c-4d4d-8e8e-9f9f9f9f9f01
+
+	column live_id
+		dataType: int64
+		lineageTag: 1b0a0a0a-1c1c-4d4d-8e8e-9f9f9f9f9f02
+		summarizeBy: none
+		sourceColumn: live_id
+
+	partition '_Live' = m
+		mode: import
+		source = #table({"Column1"}, {{1}})

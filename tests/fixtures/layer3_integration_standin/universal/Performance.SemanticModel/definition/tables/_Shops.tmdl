@@ -1,0 +1,24 @@
+/// One row per roastery shop.
+table _Shops
+	lineageTag: 08ed59d8-aad7-5c14-8346-cced00f6c579
+
+	column shop_id
+		dataType: int64
+		lineageTag: 5660ded3-02c3-5c93-95f6-bde785233f5d
+		summarizeBy: none
+		sourceColumn: shop_id
+
+	column shop_name
+		dataType: string
+		lineageTag: 12a5a011-b885-5b42-b9fa-1c97d76ca72e
+		summarizeBy: none
+		sourceColumn: shop_name
+
+	partition '_Shops' = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("example-server", "roastery")
+				in
+				    Source
+

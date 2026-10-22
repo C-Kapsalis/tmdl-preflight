@@ -1,0 +1,22 @@
+table Sales
+	lineageTag: 87994e8b-63d1-5869-ad23-d0b6b2feed92
+
+	column Key
+		dataType: int64
+		lineageTag: fd84014c-01a5-57f1-8c7f-97c4d6d09454
+		summarizeBy: none
+		sourceColumn: Key
+
+	column Cups
+		dataType: int64
+		lineageTag: 5d30ecdf-0172-5e92-82b9-5859695b361f
+		summarizeBy: none
+		sourceColumn: Cups
+
+	partition Sales = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

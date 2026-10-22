@@ -1,0 +1,14 @@
+table 'w-Titles'
+	lineageTag: f2c30874-b0b4-5152-9e18-09d3c694152e
+
+	measure 'f-Matrix Title' = "Coffee"
+		lineageTag: 12709bdb-4e17-5937-9c87-a3ba2b12a0ff
+
+	partition 'w-Titles' = m
+		mode: import
+		source =
+				let
+				    Source = Table.RemoveColumns(Table.FromRows({{null}}, {"Dummy"}), {"Dummy"})
+				in
+				    Source
+

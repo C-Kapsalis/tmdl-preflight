@@ -1,0 +1,16 @@
+table _Promotions
+	lineageTag: 3cdbed9e-5860-5666-8094-e72ec8db893b
+
+	column Key
+		dataType: int64
+		lineageTag: a4b371d0-9875-5b9b-a6e1-478df40f5627
+		summarizeBy: none
+		sourceColumn: Key
+
+	partition _Promotions = m
+		mode: import
+		source =
+			let
+			    Source = #table({"Key"}, {})
+			in
+			    Source

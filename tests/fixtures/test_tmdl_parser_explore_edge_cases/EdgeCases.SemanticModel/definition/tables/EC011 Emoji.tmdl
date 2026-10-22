@@ -1,0 +1,16 @@
+table 'EC011 Emoji'
+	lineageTag: c4cd8b82-96da-5b6b-aab1-667d7c4fb77c
+
+	column '🚲 Bike Count'
+		dataType: int64
+		lineageTag: 738f9c51-397e-5d22-b824-7e2995a208ce
+		summarizeBy: none
+		sourceColumn: 🚲 Bike Count
+
+	partition 'EC011 Emoji' = m
+		mode: import
+		source =
+				let
+				    Source = #table({}, {})
+				in
+				    Source

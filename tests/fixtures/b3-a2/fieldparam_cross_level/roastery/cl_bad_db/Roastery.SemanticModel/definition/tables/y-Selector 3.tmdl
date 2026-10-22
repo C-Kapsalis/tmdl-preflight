@@ -1,0 +1,56 @@
+table 'y-Selector 3'
+	lineageTag: ed95a0c0-0680-5879-a865-f461dc3762f7
+
+	column 'y-Selector 3'
+		lineageTag: fdb4a116-2945-58cf-b7ba-727fc27cf5ec
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+		relatedColumnDetails
+			groupByColumn: 'y-Selector 3 Fields'
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'y-Selector 3 Fields'
+		lineageTag: a1988a28-c124-5d32-bc17-27c22e7f2265
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+		extendedProperty ParameterMetadata =
+				{
+				  "version": 3,
+				  "kind": 2
+				}
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'y-Selector 3 Order'
+		lineageTag: f9bc4366-18ec-5f32-adab-af9acd00bf83
+		summarizeBy: none
+		sourceColumn: [Value3]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'y-Selector 3 Group'
+		lineageTag: a5380af0-c8dc-5bce-985f-478cfa460fed
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'y-Selector 3 Category'
+		lineageTag: 040fcfc5-8949-538e-a0b4-d2aaef6c8b91
+		summarizeBy: none
+		sourceColumn: [Value5]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'y-Selector 3' = calculated
+		mode: import
+		source = ```
+				{
+				("Origin", NAMEOF('Beans'[origin]), 1, "beans_y", "Other"),
+				("Date", NAMEOF('__Calendar'[Date]), 3, "date_y", "Other"),
+				("None", NAMEOF('#Report Measures'[z]), 4, "blank_y", "Other")
+				}
+				```

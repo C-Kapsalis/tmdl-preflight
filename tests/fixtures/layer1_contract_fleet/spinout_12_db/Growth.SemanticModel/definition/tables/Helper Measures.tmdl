@@ -1,0 +1,17 @@
+table 'Helper Measures'
+	lineageTag: 5eed0000-0000-0000-0000-0000000001a7
+
+	/// Blank GA4 measures under tables that cannot reach the fact.
+	measure '-helper y-drilldown ga4 unreachable' = ```
+			-- these tables have no filter path into the GA4 fact
+			VAR g0 = ISINSCOPE ( '_Queries'[query_id] )
+			VAR g1 = ISINSCOPE ( '_Keywords'[keyword_id] )
+			VAR g2 = ISINSCOPE ( '_Offers'[offer_id] )
+			RETURN IF ( g0 || g1 || g2, "non_compatible" )
+			```
+		lineageTag: 5eed0000-0000-0000-0000-0000000001a8
+
+	/// Current reporting grain.
+	measure '-helper Grain' = "campaign"
+		lineageTag: 5eed0000-0000-0000-0000-0000000001a9
+
