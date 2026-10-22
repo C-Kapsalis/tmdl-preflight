@@ -765,7 +765,7 @@ def build_manifest(model_dir: Path, source_path: str, entry: Optional[dict] = No
         shared_label=opts.get("shared_domain_label", "Core / Shared"),
         fallback=opts.get("fallback_domain", "Other"))
     tables = [parse_table(p, readers, transformers, s, domains=domain_settings)
-              for p in sorted((definition / "tables").glob("*.tmdl"))]
+              for p in sorted((definition / "tables").glob("*.tmdl"), key=lambda p: p.name)]
     default_project = target_opts.get("default_project")
     target = read_warehouse_target(
         expr_path, entry, default_project,
