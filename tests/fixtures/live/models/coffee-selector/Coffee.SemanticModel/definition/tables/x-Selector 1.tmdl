@@ -1,0 +1,13 @@
+table 'x-Selector 1'
+	lineageTag: 3c1d2e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f
+
+	measure '!Selected Revenue' = SUM(Sales[Amount])
+		lineageTag: 4d2e3f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a
+
+	partition 'x-Selector 1' = calculated
+		mode: import
+		source =
+			let
+			    Source = #table({"!Selected Revenue"}, {})
+			in
+			    Source

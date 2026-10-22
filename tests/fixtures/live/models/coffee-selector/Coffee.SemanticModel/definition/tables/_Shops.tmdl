@@ -1,0 +1,16 @@
+table _Shops
+	lineageTag: 8923282b-e9c9-5885-ba93-515968b0d3e2
+
+	column ShopKey
+		dataType: int64
+		lineageTag: 1495216e-f3ac-5631-aef0-ec376f7e8b30
+		summarizeBy: none
+		sourceColumn: ShopKey
+
+	partition _Shops = m
+		mode: import
+		source =
+			let
+			    Source = #table({"ShopKey"}, {})
+			in
+			    Source

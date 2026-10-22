@@ -327,6 +327,9 @@ class RecordingClient(_Client):
         self._write("clock.json", {"now": now.isoformat().replace("+00:00", "Z")})
         return now
 
+    def today(self) -> _dt.date:
+        return self.inner.today()
+
 
 def token_provider(interactive: bool = True) -> Callable[[], str]:
     """Bearer tokens: service principal from the environment, else an
@@ -866,7 +869,7 @@ def _measure_probe(c: LiveContext, measure: str) -> tuple[bool, str, float, Any]
 
 
 def _measure_sample(c: LiveContext, cid: str, items: list[tuple[str, str]],
-                    none_message: str) -> CheckResult:
+                    none_message: str, noun: str = "measures") -> CheckResult:
     report: list[str] = []
     values: dict[str, Any] = {}
     passed = 0
@@ -891,7 +894,7 @@ def _measure_sample(c: LiveContext, cid: str, items: list[tuple[str, str]],
                            f"{passed} of {len(items)} sampled measures return a value",
                            details, report)
     return CheckResult(cid, "fail",
-                       f"Only {passed}/{len(items)} measures returned non-blank ({rate:.1%}). "
+                       f"Only {passed}/{len(items)} {noun} returned non-blank ({rate:.1%}). "
                        f"Expected at least {c.cfg['measure_pass_rate']:.0%}.", details, report)
 
 
@@ -915,7 +918,8 @@ def check_parameter_table_measures(c: LiveContext) -> CheckResult:
     if not per_table:
         return CheckResult(cid, "fail", "No x-Selector measure tables found")
     items = [(t, m) for t, ms in per_table.items() for m in ms[:5]]
-    return _measure_sample(c, cid, items, "No x-Selector measure tables found")
+    return _measure_sample(c, cid, items, "No x-Selector measure tables found",
+                           noun="Report measures")
 
 
 def _refresh_probe(c: LiveContext) -> tuple[str, str, dict, float]:

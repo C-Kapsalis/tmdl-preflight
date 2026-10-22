@@ -425,6 +425,21 @@ def test_no_parameter_table_measure_table(tmp_path):
     assert "No x-Selector measure tables found" in out
 
 
+def test_the_report_measures_of_a_selector_table(tmp_path):
+    from conftest import write_config
+
+    model = LIVE / "models" / "coffee-selector" / "Coffee.SemanticModel"
+    cfg = write_config(tmp_path, {"live": {"parameter_table_measures": True}})
+    code, out, err = run_cli("live", str(model), "--workspace", "ws-coffee", "--dataset",
+                             "ds-coffee", "--replay", str(LIVE / "measures-selector"),
+                             "--checks", "live-parameter-table-measures", "--config", str(cfg))
+    assert code == 1
+    assert ("  ❌ [x-Selector 1].[!Selected Revenue]: ❌ FAIL Measure '[!Selected Revenue]' not "
+            "blank: Measure '[!Selected Revenue]' returned BLANK (") in out
+    assert out.splitlines()[-1] == ("fail   live-parameter-table-measures: Only 0/1 Report "
+                                    "measures returned non-blank (0.0%). Expected at least 20%.")
+
+
 # ---------------------------------------------------------------------------
 # PB157: the refresh status
 # ---------------------------------------------------------------------------
