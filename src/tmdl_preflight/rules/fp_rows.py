@@ -490,7 +490,9 @@ class _Family:
             if m:
                 if m.group(1) == "1":
                     self.ps1 = t
-                elif self.ps2 is None:
+                else:
+                    # the LAST numbered plot-specific table in name order is
+                    # "the second plot-specific table"
                     self.ps2 = t
 
 
@@ -512,8 +514,9 @@ class FieldParameterFamilyConsistencyRule(Rule):
         "the group but must not carry a 'date' field; the first plot-specific "
         "table may offer a subset, never a field the family lacks. Fields are "
         "identified by their NAMEOF target (a measure by name alone). "
-        "Auto-fix comments out date rows, promotes plot-specific-only rows "
-        "into the first numbered table, copies missing rows, and annotates "
+        "Auto-fix copies the missing rows from the numbered tables, removes "
+        "date rows from the second plot-specific table, promotes "
+        "plot-specific-only rows into the first numbered table, and annotates "
         "every edit."
     )
 
@@ -531,11 +534,13 @@ class FieldParameterFamilyConsistencyRule(Rule):
             tf = _lines_of(t)
             rows[t.name] = read_rows(tf.lines()) if tf else []
         group = list(fam.numbered) + ([fam.ps2] if fam.ps2 and axis.startswith("x") else [])
-        family: dict[str, tuple[str, Row]] = {}
-        for t in sorted(group, key=lambda t: t.name):
+        family: dict[str, tuple[Table, Row]] = {}
+        # the numbered tables come first, in name order: a field they offer is
+        # the one a missing row is copied from
+        for t in group:
             for r in rows[t.name]:
                 if len(r.fields) > 1:
-                    family.setdefault(identity(r.fields[1], measures), (t.name, r))
+                    family.setdefault(identity(r.fields[1], measures), (t, r))
         missing, dates, unique = [], [], []
         for t in group:
             have = {identity(r.fields[1], measures) for r in rows[t.name] if len(r.fields) > 1}
@@ -548,11 +553,11 @@ class FieldParameterFamilyConsistencyRule(Rule):
         if fam.ps2 is not None and axis.startswith("x"):
             for r in rows[fam.ps2.name]:
                 if len(r.fields) > 1 and word.search(nameof_parts(r.fields[1])[1]):
-                    dates.append((fam.ps2, r))
+                    dates.append((fam.ps2, identity(r.fields[1], measures), r))
         if fam.ps1 is not None:
             for r in rows[fam.ps1.name]:
                 if len(r.fields) > 1 and identity(r.fields[1], measures) not in family:
-                    unique.append((fam.ps1, r))
+                    unique.append((fam.ps1, identity(r.fields[1], measures), r))
         return missing, dates, unique
 
     def check(self, ctx: Context) -> list[Violation]:
@@ -562,26 +567,26 @@ class FieldParameterFamilyConsistencyRule(Rule):
                 missing, dates, unique = self._analyse(model, axis, fam)
                 for t, ident, owner, _r in missing:
                     out.append(self.violation(
-                        f"{t.name} is missing {ident}, which {owner} offers; the field "
-                        f"vanishes when a report swaps to this slot.",
+                        f"MISSING {ident} (offered by {owner.file.name})",
                         file=t.file, obj=f"{t.name}:{ident}",
                     ))
-                for t, r in dates:
+                for t, ident, r in dates:
                     out.append(self.violation(
-                        f"{t.name} carries the date field {r.fields[1]}; the second "
-                        f"plot-specific table must not offer date fields.",
-                        file=t.file, line=r.index + 1, obj=f"{t.name}:{r.fields[1]}",
+                        f"date-named field {ident} must not be in Plot Specific 2",
+                        file=t.file, line=r.index + 1, obj=f"{t.name}:{ident}",
                     ))
-                for t, r in unique:
+                for t, ident, r in unique:
                     out.append(self.violation(
-                        f"{t.name} offers {r.fields[1]}, which no {axis} table offers.",
-                        file=t.file, line=r.index + 1, obj=f"{t.name}:{r.fields[1]}",
+                        f"{ident} is offered NOWHERE in the canonical set — Plot Specific 1 "
+                        f"may not introduce fields",
+                        file=t.file, line=r.index + 1, obj=f"{t.name}:{ident}",
                     ))
         return out
 
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
         for model in ctx.models:
+            added = removed = 0
             for axis, fam in self._families(model):
                 for step in ("dates", "unique", "missing"):
                     ctx.reload()
@@ -590,26 +595,53 @@ class FieldParameterFamilyConsistencyRule(Rule):
                     fam = _Family(model, axis, dict(self.options["axes"])[axis])
                     missing, dates, unique = self._analyse(model, axis, fam)
                     if step == "dates":
-                        for t, r in dates:
-                            if self._comment_out(t, r):
-                                applied.append(f"{t.file.name}: commented out date row {r.fields[0]}")
+                        for t, ident, r in dates:
+                            if self._remove_row(t, r, ident):
+                                applied.append(
+                                    f"{t.file.name}:{r.index + 1}: removed {ident} (date-named)")
+                                removed += 1
                     elif step == "unique":
-                        for t, r in unique:
+                        for t, ident, r in unique:
                             target = fam.numbered[0]
-                            if self._insert(target, r, [
-                                f"-- {self.options['marker_promoted']}: copied from {t.name}, the "
-                                f"only table that offered it.",
-                                "-- Review needed: confirm the field belongs to the whole family.",
-                            ]):
-                                applied.append(f"{target.file.name}: promoted {r.fields[0]} from {t.name}")
+                            status, note = self._insert(target, r, ident, [
+                                f"-- {self.options['marker_promoted']}: {ident} was offered "
+                                f"only by {t.file.name}; Plot Specific 1 may not introduce "
+                                f"fields, so it is promoted here rather than dropped from "
+                                f"the picker.",
+                                "-- A BI developer MUST confirm it belongs in the canonical set.",
+                            ])
+                            if status == "added":
+                                applied.append(
+                                    f"{target.file.name}: promoted {ident} "
+                                    f"(was only in {t.file.name})")
+                                added += 1
+                            elif note:
+                                applied.append(note)
                     else:
                         for t, ident, owner, r in missing:
-                            if self._insert(t, r, [f"-- {self.options['marker_added']}: copied from {owner}."]):
-                                applied.append(f"{t.file.name}: added {r.fields[0]} from {owner}")
+                            status, note = self._insert(t, r, ident, [
+                                f"-- {self.options['marker_added']}: copied from "
+                                f"{owner.file.name} — every table in this family must offer "
+                                f"{ident}.",
+                            ])
+                            if status == "added":
+                                applied.append(
+                                    f"{t.file.name}: added {ident} (from {owner.file.name})")
+                                added += 1
+                            elif note:
+                                applied.append(note)
+            if added or removed:
+                ctx.blocks.append(
+                    f"  ⚠ {added} row(s) added, {removed} removed under "
+                    f"{model.definition_path}.\n"
+                    f"    Each carries a '{self.options['marker_added']}' / "
+                    f"'{self.options['marker_removed']}' comment — these are automatic edits "
+                    f"to a\n"
+                    f"    user-facing picker and a BI developer must review them.")
         return applied
 
-    @staticmethod
-    def _comment_out(t: Table, r: Row) -> bool:
+    def _remove_row(self, t: Table, r: Row, ident: str) -> bool:
+        """Replace a date row with the two comment lines that explain it."""
         tf = read_text_file(t.file)
         lines = tf.lines()
         rows = read_rows(lines)
@@ -622,26 +654,37 @@ class FieldParameterFamilyConsistencyRule(Rule):
                 p = prev[-1]
                 cut = p.text.index(",", p.close_at)
                 lines[p.index] = p.text[:cut] + p.text[cut + 1:]
+        indent = target.indent
         lines[target.index:target.index + 1] = [
-            f"{target.indent}-- AUTO-REMOVED: date field {target.fields[1]} removed from the "
-            f"second plot-specific table.",
-            f"{target.indent}-- Review needed: was: {target.text.strip()}",
+            f"{indent}-- {self.options['marker_removed']}: {ident} references a name "
+            f"containing the word '{self.options['excluded_word']}'; {t.name} must not "
+            f"offer those.",
+            f"{indent}-- A BI developer MUST confirm this row was not wanted here.",
         ]
         try:
             return verified_write(tf, tf.join(lines))
         except EditRefused:
             return False
 
-    @staticmethod
-    def _insert(t: Table, r: Row, notes: list[str]) -> bool:
+    def _insert(self, t: Table, r: Row, ident: str, notes: list[str]) -> tuple[str, str]:
+        """Copy the row ``r`` into table ``t``.
+
+        The row text is copied verbatim - its own indentation and its own
+        trailing comma - and the separators around it are repaired
+        afterwards. Returns ``("added", "")``, ``("arity", note)`` when the
+        sibling row has a different width, or ``("failed", "")``.
+        """
         tf = read_text_file(t.file)
         lines = tf.lines()
         rows = read_rows(lines)
-        if not rows:
-            return False
         widths = Counter(len(x.fields) for x in rows)
-        if len(r.fields) != max(widths, key=lambda w: widths[w]):
-            return False
+        if widths:
+            target_arity = max(widths, key=lambda w: widths[w])
+            if len(r.fields) != target_arity:
+                return ("arity", f"{t.file.name}: {ident} NOT added — the sibling row has "
+                                 f"{len(r.fields)} fields, this table's rows have "
+                                 f"{target_arity}. Re-shaping across arities is the "
+                                 f"ragged-tuple fixer's job, not this one.")
         try:
             order = int(r.fields[2])
         except (IndexError, ValueError):
@@ -655,14 +698,23 @@ class FieldParameterFamilyConsistencyRule(Rule):
                         break
                 except (IndexError, ValueError):
                     continue
-        indent = rows[0].indent
-        body = r.text.strip()
-        body = body[:-1].rstrip() if body.endswith(",") else body
         if at is None:
-            at = rows[-1].index + 1
-        new_lines = lines[:at] + [indent + n for n in notes] + [indent + body] + lines[at:]
+            at = rows[-1].index + 1 if rows else self._constructor_end(lines)
+        indent = (lines[at][: len(lines[at]) - len(lines[at].lstrip())]
+                  if at < len(lines) else "\t\t\t\t")
+        new_lines = lines[:at] + [indent + n for n in notes] + [r.text] + lines[at:]
         text, _n = insert_missing_row_separators(tf.join(new_lines))
+        text, _n = remove_trailing_row_commas(text)
         try:
-            return verified_write(tf, text)
+            return ("added", "") if verified_write(tf, text) else ("failed", "")
         except EditRefused:
-            return False
+            return ("failed", "")
+
+    @staticmethod
+    def _constructor_end(lines: list[str]) -> int:
+        """Index of the line that closes the table constructor."""
+        span = source_span(lines)
+        at = span[1] if span else len(lines)
+        while at > 0 and lines[at - 1].strip() != "}":
+            at -= 1
+        return at

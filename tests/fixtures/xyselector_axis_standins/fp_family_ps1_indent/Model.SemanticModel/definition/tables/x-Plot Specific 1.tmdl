@@ -1,0 +1,38 @@
+table 'x-Plot Specific 1'
+	lineageTag: 51520619-f4a8-51dd-ac6d-810d2b3e63f2
+
+	column 'x-Plot Specific 1'
+		dataType: string
+		lineageTag: d97fe5b0-518d-56bd-b344-557077d459d2
+		summarizeBy: none
+		sourceColumn: [Value1]
+
+	column 'x-Plot Specific 1 Fields'
+		dataType: string
+		lineageTag: 1ce4a9ae-460d-5938-bc91-4820c65eac06
+		summarizeBy: none
+		sourceColumn: [Value2]
+
+	column 'x-Plot Specific 1 Order'
+		dataType: int64
+		lineageTag: d8170657-64c1-5152-8422-876ecdb52ef5
+		summarizeBy: none
+		sourceColumn: [Value3]
+
+	column 'x-Plot Specific 1 Value4'
+		dataType: string
+		lineageTag: ea3bd056-1aae-5365-a4b0-96861f08fe9e
+		summarizeBy: none
+		sourceColumn: [Value4]
+
+	partition 'x-Plot Specific 1' = calculated
+		mode: import
+		source =
+			{
+			    ("Revenue", NAMEOF('Sales'[Revenue]), 0, "sales_x"),
+			    ("Units", NAMEOF([Units]), 1, "sales_x"),
+			    ("Margin", NAMEOF([Margin %]), 8, "other_x")
+			}
+
+	annotation PBI_Id = 1697d3303e4e553bab6eeb2d593eeb2f
+

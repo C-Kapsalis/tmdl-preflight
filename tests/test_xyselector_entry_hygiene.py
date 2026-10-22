@@ -27,7 +27,8 @@ FIX = "xyselector_axis_standins"
 FIXTURES = Path(__file__).parent / "fixtures" / FIX
 # These stand-ins carry a duplicate group of their own shape and are covered
 # by tests/test_fieldparam_row_parity.py.
-ELSEWHERE = {"fp_dup_commented_and_live", "fp_dup_two_groups"}
+ELSEWHERE = {"fp_dup_commented_and_live", "fp_dup_two_groups",
+             "fp_family_arity_mismatch"}
 STANDINS = sorted(p.name for p in FIXTURES.iterdir()
                    if p.is_dir() and p.name not in ELSEWHERE)  # fp_* + template
 

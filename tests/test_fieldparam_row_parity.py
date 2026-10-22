@@ -229,3 +229,65 @@ def test_f006_fix_says_what_it_removed(stand_in):
     blocks = payload["blocks"]
     assert any(b.startswith("removed 1 duplicate axis row(s) under ")
                for b in blocks), blocks
+
+
+# ---------------------------------------------------------------------------
+# F007
+# ---------------------------------------------------------------------------
+
+
+def test_f007_missing_field_message(stand_in):
+    model = _model(stand_in, "fp_family_missing_field")
+    code, payload = run_check(model, "F007")
+    found = violations(payload, "F007")
+    assert found
+    assert found[0]["message"] == "MISSING _Stores[Region] (offered by x-Selector 1.tmdl)"
+
+
+def test_f007_date_field_message(stand_in):
+    model = _model(stand_in, "fp_family_ps2_date")
+    code, payload = run_check(model, "F007")
+    found = violations(payload, "F007")
+    assert found
+    messages = [v["message"] for v in found]
+    assert "date-named field Calendar[Order Date] must not be in Plot Specific 2" in messages
+
+
+def test_f007_plot_specific_only_field_message(stand_in):
+    model = _model(stand_in, "fp_family_ps1_unique")
+    code, payload = run_check(model, "F007")
+    found = violations(payload, "F007")
+    assert found
+    assert found[0]["message"] == (
+        "Margin % is offered NOWHERE in the canonical set — Plot Specific 1 may not "
+        "introduce fields")
+
+
+# ---------------------------------------------------------------------------
+# PB21 - a model without field-parameter tables says so and passes
+# ---------------------------------------------------------------------------
+
+
+def test_no_axis_files_line(stand_in):
+    model = _model(stand_in, "fp_no_axis_tables")
+    code, payload = run_check(model, "F001")
+    assert code == 0
+    lines = [n for n in payload["notes"]
+             if n.startswith("No x-/y-Selector field-parameter files found under ")]
+    assert len(lines) == 1, payload["notes"]
+
+
+def test_no_axis_files_line_is_printed_once(stand_in):
+    model = _model(stand_in, "fp_no_axis_tables")
+    code, payload = run_check(model, "F002", "F003")
+    assert code == 0
+    lines = [n for n in payload["notes"]
+             if n.startswith("No x-/y-Selector field-parameter files found under ")]
+    assert len(lines) == 1, payload["notes"]
+
+
+def test_a_model_with_axis_tables_says_nothing(stand_in):
+    model = _model(stand_in, "fp_clean")
+    code, payload = run_check(model, "F001")
+    assert code == 0
+    assert not [n for n in payload["notes"] if n.startswith("No x-/y-Selector")]

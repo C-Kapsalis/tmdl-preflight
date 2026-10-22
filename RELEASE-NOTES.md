@@ -199,6 +199,19 @@ until configured.
 - **F006**'s fixer leaves a commented-out row alone: a copy of the row
   that sits behind a `--` or `//` marker is a parked row, and removing it
   would destroy a row the author kept on purpose.
+- **F007** says `MISSING <field> (offered by <file>)`, `date-named field
+  <field> must not be in Plot Specific 2` and `<field> is offered NOWHERE
+  in the canonical set — Plot Specific 1 may not introduce fields`. The
+  field is named by its identity: a measure by its bare name, a column as
+  `<table>[<column>]`.
+- **F007** copies a missing row from the numbered tables first and only
+  then from the second plot-specific table, and the second plot-specific
+  table is the LAST one numbered 2 or higher (`x-Plot Specific 3` when both
+  2 and 3 exist). A row of another width is never copied; the fixer says
+  so and leaves the file alone.
+- **F007** writes the three annotations the original wrote - `AUTO-ADDED`,
+  `AUTO-PROMOTED` and `AUTO-REMOVED`, each with the reviewer's line below
+  it - and names the file and the row it edited.
 
 - **B002** reports a bookmark file that is not valid JSON.
 - **B001-B003** skip bookmarks of archived report copies: paths containing
@@ -384,6 +397,14 @@ until configured.
   exit 2, a message on standard error, and never a Python traceback.
 - A lineage tag followed by a tab or several spaces after `lineageTag:` is
   rewritten like any other (before, only one space was handled).
+- **Removing a date row from the second plot-specific table takes the
+  separator with it.** The original left the previous row's comma behind,
+  so the constructor ended with `,` before `}` - a defect of its own. BUGFIX.
+- **A row copied into another table is followed by a separator repair.** The
+  original copied the row's text verbatim and stopped there: appending a row
+  that carried a comma left a trailing comma before `}`, and a promoted row
+  left the previous last row without its separator. The tool repairs both.
+  BUGFIX.
 - **A duplicate row that sits behind a comment marker is never removed.** The
   original searched for the survivor's text and found the commented-out copy
   first, so it emptied the parked row and reported the live copy again. The
