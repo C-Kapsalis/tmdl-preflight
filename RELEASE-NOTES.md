@@ -322,6 +322,19 @@ until configured.
   The rows are serialized with a comma and a space between items, a colon
   and a space between keys, and every non-ASCII character escaped as
   `\uXXXX`; only the first payload in the file is replaced.
+- **The account-key finding reads the way the source tool reads it.** A
+  category that misses an account group is reported as
+  `[<Category>] missing ['<Key>'] Each must assign both Account_y and
+  Service_y.`, and a category whose backing facts cannot carry the key is
+  reported as `[<Category>] account-UNSUPPORTED — backing fact table(s)
+  lack 'account_x_id': ['<Fact>']` (or `account-filterable, but these
+  backing fact tables still lack ...`). The key column is matched by its
+  exact name, so a fact that spells it differently does not carry it. A
+  warning is never tagged auto-fixable.
+- **A mapping table whose payload cannot be read is an error.** A table
+  with no `Binary.FromText(...)` payload is reported as `No binary data
+  found in <file path>`, a payload that does not decode as `mapping
+  payload does not decode: <reason>`, and the fixer writes nothing there.
 
 ### Bug fixes
 

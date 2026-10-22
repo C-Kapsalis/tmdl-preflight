@@ -96,6 +96,41 @@ class TestMappingCategoryRequiredKeys:
         assert "Sales" in errors[0]["message"] and "Service_y" in errors[0]["message"]
         assert (model / "definition" / "tables" / f"{ZMAP}.tmdl").read_bytes() == before
 
+    def test_the_violation_names_the_category_and_the_missing_keys(self, stand_in):
+        model = _model(stand_in, "failing_db")
+        code, payload = run_check(model, self.RULE)
+        errors = [v for v in violations(payload) if v["severity"] == "error"]
+        assert errors[0]["message"] == (
+            "[Sales] missing ['Service_y'] Each must assign both Account_y and Service_y.")
+
+    def test_the_warning_names_the_backing_facts(self, stand_in):
+        model = _model(stand_in, "failing_db")
+        code, payload = run_check(model, self.RULE)
+        warns = [v for v in violations(payload) if v["severity"] == "warning"]
+        assert warns[0]["message"] == (
+            "[Traffic] account-UNSUPPORTED — backing fact table(s) lack "
+            "'account_x_id': ['Visits']. Not adding account dims; backfill "
+            "'account_x_id' to enable account filtering.")
+
+    def test_a_warning_is_never_tagged_auto_fixable(self, stand_in):
+        model = _model(stand_in, "failing_db")
+        code, payload = run_check(model, self.RULE)
+        warns = [v for v in violations(payload) if v["severity"] == "warning"]
+        assert warns and not any(v["fixable"] for v in warns)
+
+    def test_the_key_column_is_matched_by_its_exact_name(self, stand_in):
+        """A fact that spells the key differently does not carry it."""
+        model = _model(stand_in, "failing_db")
+        orders = model / "definition" / "tables" / "Orders.tmdl"
+        orders.write_text(orders.read_text(encoding="utf-8").replace(
+            "account_x_id", "Account_X_ID"), encoding="utf-8")
+        code, payload = run_check(model, self.RULE)
+        assert code == 0, payload
+        warns = [v for v in violations(payload) if v["severity"] == "warning"]
+        assert any("account-UNSUPPORTED" in v["message"] and "['Orders']" in v["message"]
+                   for v in warns), warns
+        assert not [v for v in violations(payload) if v["severity"] == "error"]
+
     def test_fix_appends_rows_then_recheck_is_clean_and_idempotent(self, stand_in):
         model = _model(stand_in, "failing_db")
         old = _rows(model)
@@ -109,3 +144,54 @@ class TestMappingCategoryRequiredKeys:
         assert (model / "definition" / "tables" / f"{ZMAP}.tmdl").read_bytes() == first
         code, payload = run_check(model, self.RULE)
         assert code == 0
+
+    def test_the_fix_reports_one_line_per_appended_row(self, stand_in):
+        model = _model(stand_in, "failing_db")
+        code, payload = run_fix(model, self.RULE)
+        assert payload["fixes"] == ["A003:    wrote [Sales] += Service_y"], payload["fixes"]
+
+
+class TestMappingPayloadErrors:
+    """A mapping table whose payload cannot be read is an error, not a pass."""
+
+    RULE = "mapping-category-required-keys"
+
+    def _zmap(self, model):
+        return model / "definition" / "tables" / f"{ZMAP}.tmdl"
+
+    def test_a_table_without_a_payload_is_an_error(self, stand_in):
+        model = _model(stand_in, "failing_db")
+        text = self._zmap(model).read_text(encoding="utf-8")
+        self._zmap(model).write_text(
+            re.sub(r'Binary\.FromText\("[^"]*"', "Binary.FromText", text),
+            encoding="utf-8")
+        code, payload = run_check(model, self.RULE)
+        assert code == 1
+        errors = [v for v in violations(payload) if v["severity"] == "error"]
+        assert len(errors) == 1
+        assert errors[0]["message"].startswith("No binary data found in ")
+        assert ZMAP in errors[0]["message"]
+
+    def test_a_payload_that_does_not_decode_is_an_error(self, stand_in):
+        model = _model(stand_in, "failing_db")
+        text = self._zmap(model).read_text(encoding="utf-8")
+        self._zmap(model).write_text(
+            re.sub(r'Binary\.FromText\("[^"]*"', 'Binary.FromText("QUJDRA==")', text),
+            encoding="utf-8")
+        code, payload = run_check(model, self.RULE)
+        assert code == 1
+        errors = [v for v in violations(payload) if v["severity"] == "error"]
+        assert len(errors) == 1
+        assert errors[0]["message"].startswith("mapping payload does not decode: ")
+
+    def test_the_fixer_writes_nothing_when_the_payload_cannot_be_read(self, stand_in):
+        model = _model(stand_in, "failing_db")
+        text = self._zmap(model).read_text(encoding="utf-8")
+        self._zmap(model).write_text(
+            re.sub(r'Binary\.FromText\("[^"]*"', 'Binary.FromText("QUJDRA==")', text),
+            encoding="utf-8")
+        before = self._zmap(model).read_bytes()
+        code, payload = run_fix(model, self.RULE)
+        assert self._zmap(model).read_bytes() == before
+        assert payload["fixes"] == []
+

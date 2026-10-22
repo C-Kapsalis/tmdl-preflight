@@ -274,6 +274,7 @@ class Rule:
         line: Optional[int] = None,
         obj: Optional[str] = None,
         severity: Optional[Severity] = None,
+        fixable: Optional[bool] = None,
     ) -> Violation:
         return Violation(
             rule_id=self.id,
@@ -282,7 +283,7 @@ class Rule:
             file=file,
             line=line,
             obj=obj,
-            fixable=self.fixable,
+            fixable=self.fixable if fixable is None else fixable,
         )
 
 

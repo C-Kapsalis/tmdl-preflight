@@ -32,6 +32,12 @@ from ..model import SemanticModel
 from .base import Context, Rule, Severity, Violation
 
 
+def _has_column(model: SemanticModel, table: str, column: str) -> bool:
+    """Does the table hold a column with exactly this name?"""
+    t = model.get_table(table)
+    return t is not None and any(c.name == column for c in t.column_list)
+
+
 class MappingTableRequiredColumnsRule(Rule):
     id = "A001"
     name = "mapping-table-required-columns"
@@ -138,9 +144,11 @@ class MappingCategoryRequiredKeysRule(Rule):
         "'filter dimension not found' for multi-account tenants. A category "
         "is exempt only when its measures are traced to fact tables and none "
         "of them has the account key column (those get a warning instead: "
-        "the account filter would return unfiltered data). declared_removals "
-        "lists [category, key] pairs removed on purpose. Auto-fix appends the "
-        "missing rows to the encoded table; existing rows are untouched."
+        "the account filter would return unfiltered data). The key column is "
+        "matched by its exact name. A mapping table whose payload cannot be "
+        "read is an error, not a pass. declared_removals lists [category, key] "
+        "pairs removed on purpose. Auto-fix appends the missing rows to the "
+        "encoded table; existing rows are untouched."
     )
 
     def _removed(self) -> set[tuple[str, str]]:
@@ -150,21 +158,29 @@ class MappingCategoryRequiredKeysRule(Rule):
                 out.add((str(pair[0]), str(pair[1])))
         return out
 
-    def _analyse(self, model: SemanticModel):
-        """``(mapping, missing {category: [keys]}, warnings [(cat, text)])``."""
+    def _read(self, model: SemanticModel):
+        """``(mapping, error)``: the error is the message of the finding
+        when the table's payload cannot be read."""
         table = model.get_table(self.options["mapping_table"])
         if table is None:
-            return None
+            return None, None
         try:
-            mapping = read_mapping(table)
-        except MappingDecodeError:
-            return None
+            return read_mapping(table), None
+        except MappingDecodeError as exc:
+            if exc.no_payload:
+                return None, f"No binary data found in {table.file}"
+            return None, f"mapping payload does not decode: {exc}"
+
+    def _analyse(self, model: SemanticModel):
+        """``(mapping, error, missing {category: [keys]}, warnings)``."""
+        mapping, error = self._read(model)
+        if mapping is None:
+            return None, error, {}, []
         key_col = self.options["account_key_column"]
         tracer = FactTracer(model)
         backing = category_backing(model, mapping, self.options["axis_globs"],
                                    self.options["non_attributing_group_ids"], tracer)
-        has_key = {f: model.get_table(f) is not None and model.get_table(f).find_column(key_col) is not None
-                   for f in tracer.facts}
+        has_key = {f: _has_column(model, f, key_col) for f in tracer.facts}
         removed = self._removed()
         keys = list(self.options["required_keys"])
         missing: dict[str, list[str]] = {}
@@ -173,54 +189,49 @@ class MappingCategoryRequiredKeysRule(Rule):
             facts = backing.get(cat)
             groups = mapping.groups_of(cat)
             if facts and not any(has_key.get(f) for f in facts):
-                listed = [k for k in keys if k in groups]
-                tail = (f" yet it lists {', '.join(listed)}, so that filter returns "
-                        f"unfiltered data" if listed else "")
                 warnings.append((cat, (
-                    f"category {cat} is not account-filterable: none of its fact tables "
-                    f"({', '.join(sorted(facts))}) has {key_col}{tail}. Backfill the key "
-                    f"column if the category should filter by account.")))
+                    f"[{cat}] account-UNSUPPORTED — backing fact table(s) lack "
+                    f"'{key_col}': {sorted(facts)}. Not adding account dims; backfill "
+                    f"'{key_col}' to enable account filtering.")))
                 continue
             if facts:
                 lacking = sorted(f for f in facts if not has_key.get(f))
                 if lacking:
                     warnings.append((cat, (
-                        f"category {cat} is only partly account-filterable: "
-                        f"{', '.join(lacking)} has no {key_col}; an account filter leaves "
-                        f"those rows unfiltered.")))
+                        f"[{cat}] account-filterable, but these backing fact tables "
+                        f"still lack '{key_col}' (account filter will be partial until "
+                        f"backfilled): {lacking}.")))
             gaps = [k for k in keys if k not in groups and (cat, k) not in removed]
             if gaps:
                 missing[cat] = gaps
-        return mapping, missing, warnings
+        return mapping, None, missing, warnings
 
     def check(self, ctx: Context) -> list[Violation]:
         out: list[Violation] = []
+        keys = list(self.options["required_keys"])
+        both = " and ".join(keys[:2])
         for model in ctx.models:
-            result = self._analyse(model)
-            if result is None:
+            mapping, error, missing, warnings = self._analyse(model)
+            if error is not None:
+                out.append(self.violation(
+                    error, file=model.get_table(self.options["mapping_table"]).file))
                 continue
-            mapping, missing, warnings = result
             for cat in sorted(missing):
                 out.append(self.violation(
-                    f"category {cat} can be filtered by account but its mapping rows "
-                    f"lack {', '.join(missing[cat])}; account-filtered requests for it "
-                    f"fail. Add the rows (the auto-fix appends them).",
+                    f"[{cat}] missing {missing[cat]} Each must assign both {both}.",
                     file=mapping.table.file, obj=f"{mapping.table.name}[{cat}]",
                 ))
             for cat, text in warnings:
                 out.append(self.violation(text, file=mapping.table.file,
                                           obj=f"{mapping.table.name}[{cat}]",
-                                          severity=Severity.WARNING))
+                                          severity=Severity.WARNING, fixable=False))
         return out
 
     def fix(self, ctx: Context) -> list[str]:
         applied: list[str] = []
         for model in ctx.models:
-            result = self._analyse(model)
-            if result is None:
-                continue
-            mapping, missing, _w = result
-            if not missing:
+            mapping, error, missing, _w = self._analyse(model)
+            if mapping is None or not missing:
                 continue
             width = mapping.width
             added = []
@@ -238,15 +249,14 @@ class MappingCategoryRequiredKeysRule(Rule):
                 if old[: mapping.blob_start] != new[: mapping.blob_start]:
                     raise EditRefused("text before the payload changed")
                 m = list(_BLOB_RE.finditer(new))
-                if len(m) != 1 or decode_rows(m[0].group("blob")) != new_rows:
+                if not m or decode_rows(m[0].group("blob")) != new_rows:
                     raise EditRefused("payload does not round-trip")
 
             try:
                 verified_write(mapping.file, new_text, verify)
             except EditRefused:
                 continue
-            applied.append(f"{mapping.table.file.name}: appended {len(added)} mapping row(s) "
-                           f"({', '.join(f'{r[0]}/{r[-1]}' for r in added)})")
+            applied.extend(f"   wrote [{r[0]}] += {r[-1]}" for r in added)
         return applied
 
 
