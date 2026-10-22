@@ -164,3 +164,91 @@ class TestBPAIntegration:
         for v in bpa_report.violations:
             categories[v.category] = categories.get(v.category, 0) + 1
         assert categories == {"DAX Expressions": 2, "Performance": 1, "Naming Conventions": 1}
+
+
+class TestBPACatalogue:
+    def test_the_catalogue_order_and_fields(self):
+        from tmdl_preflight import live
+
+        assert [r["id"] for r in live.BPA_RULES] == [
+            "DAX_DIVISION_USAGE", "DAX_FULLY_QUALIFIED_COLUMNS", "PERF_CALCULATED_COLUMNS",
+            "META_HIDDEN_FOREIGN_KEYS", "NAME_MEASURE_DESCRIPTIONS"]
+        first = live.BPA_RULES[0]
+        assert first["name"] == "Avoid division operator (use DIVIDE function)"
+        assert first["category"] == "DAX Expressions"
+        assert first["severity"] == 3
+        assert first["scope"] == "Measure"
+        assert first["description"] == ("Measures should use DIVIDE() instead of / for better "
+                                        "error handling")
+        assert live.BPA_RULES[1]["description"] == "Use Table[Column] instead of [Column] for clarity"
+        assert live.BPA_RULES[2]["description"] == "Calculated columns can impact refresh performance"
+        assert live.BPA_RULES[3]["description"] == "Foreign keys should be hidden from end users"
+        assert live.BPA_RULES[4]["description"] == ("Measures visible to users should include "
+                                                    "descriptions")
+
+    def test_the_violation_messages(self, bpa_report):
+        division = [v for v in bpa_report.violations if v.rule_id == "DAX_DIVISION_USAGE"]
+        assert division[0].object_type == "Measure"
+        assert division[0].message == ("Measure '!Revenue' uses / operator instead of "
+                                       "DIVIDE() function")
+        assert division[0].fix_suggestion == ("Replace / with DIVIDE(numerator, denominator) "
+                                               "for better error handling")
+        column = [v for v in bpa_report.violations if v.rule_id == "PERF_CALCULATED_COLUMNS"][0]
+        assert column.object_type == "CalculatedColumn"
+        assert column.message == ("Calculated column 'Band' in table 'Sales' may impact "
+                                  "performance")
+        assert column.fix_suggestion == ("Consider moving logic to M (Power Query) or creating "
+                                         "a measure instead")
+        named = [v for v in bpa_report.violations
+                 if v.rule_id == "NAME_MEASURE_DESCRIPTIONS"][0]
+        assert named.object_type == "Measure"
+        assert named.message == ("User-facing measure '!Revenue' in table 'Coffee Measures' "
+                                 "lacks description")
+        assert named.fix_suggestion == "Add a description explaining what this measure calculates"
+
+    def test_a_column_without_a_table_name_is_unknown(self):
+        client = ReplayClient(LIVE / "bpa-no-table-name")
+        report = LiveBPA(client).analyze_model()
+        found = [v for v in report.violations if v.rule_id == "PERF_CALCULATED_COLUMNS"]
+        assert [v.object_name for v in found] == ["Sales[Band]", "Unknown[Bucket]"]
+
+    def test_the_timestamps_carry_no_offset(self, bpa_report):
+        from datetime import datetime
+
+        assert bpa_report.timestamp.tzinfo is None
+        for violation in bpa_report.violations:
+            stamp = datetime.fromisoformat(violation.timestamp)
+            assert stamp.tzinfo is None
+
+    def test_the_object_count_is_all_or_nothing(self):
+        client = ReplayClient(LIVE / "bpa-count-error")
+        report = LiveBPA(client).analyze_model()
+        assert report.total_objects_analyzed == 0
+        code, out, _ = run_cli("live", MODEL, "--workspace", "ws-coffee", "--dataset", "ds-coffee",
+                               "--replay", LIVE / "bpa-count-error", "--checks", "live-bpa", "--json")
+        result = [c for c in json.loads(out)["checks"] if c["id"] == "live-bpa"][0]
+        assert result["outcome"] == "fail"
+        assert code == 1
+
+    def test_the_health_check_gates_the_analysis(self):
+        code, out, _ = run_cli("live", MODEL, "--workspace", "ws-coffee", "--dataset", "ds-coffee",
+                               "--replay", LIVE / "bpa-health-error", "--checks", "live-bpa",
+                               "--json")
+        result = [c for c in json.loads(out)["checks"] if c["id"] == "live-bpa"][0]
+        assert result["outcome"] == "fail"
+        assert result["message"] == "health check unhealthy: The dataset is not reachable"
+        assert code == 1
+
+    def test_the_health_check_reports_its_parts(self):
+        client = ReplayClient(LIVE / "bpa")
+        health = client.health_check()
+        assert health["status"] == "healthy"
+        assert set(health["checks"]) == {"authentication", "dataset_access", "query_execution"}
+        for part in health["checks"].values():
+            assert part["status"] == "ok"
+            assert "time_ms" in part
+        assert "token_remaining_seconds" in health["checks"]["authentication"]
+        assert health["checks"]["dataset_access"]["dataset_name"] == "Coffee"
+        assert health["checks"]["query_execution"]["rows_returned"] == 1
+        assert "total_time_ms" in health
+        assert "error" not in health

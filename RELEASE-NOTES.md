@@ -286,6 +286,22 @@ until configured.
 
 ### Changed
 
+- **The best-practice analysis uses the original's catalogue and prints its
+  reports.** The five rules carry their name, category, severity, scope and
+  description, and a finding carries the original's message: `Measure
+  '!Revenue' uses / operator instead of DIVIDE() function`, `Calculated
+  column 'Band' in table 'Sales' may impact performance`, `User-facing
+  measure '!Revenue' in table 'Coffee Measures' lacks description`. The
+  command prints the analysis report, the results summary and the audit
+  report, and the times are local and carry no offset. A column whose
+  table name the service does not return is `Unknown`, not a table id.
+  BUGFIX.
+- **The best-practice analysis needs a healthy connection.** The client's
+  health check now reports its three steps - sign in, read the dataset and
+  run `EVALUATE { 1 }` - with the time each took, and the analysis fails
+  when the check is not healthy: `health check unhealthy: <reason>`. The
+  number of objects analysed is all or nothing: when a count query fails
+  the number is zero and the gate fails. BUGFIX.
 - **The live diagnostics print the original's blocks.** The calendar scan
   prints the full-scan block, the sample dates and the assessment (a
   calendar that holds one row is a critical finding); the identity check
@@ -466,6 +482,10 @@ and rule wins; DESKTOP: Power BI Desktop evidence).
   with an empty expression (M020).
 - BUGFIX: `test_connection_parameters::test_generate_connection_parameter_audit_report[limit-100]`:
   only `LIMIT 1` itself is CRITICAL; `LIMIT 10` and `LIMIT 100` are warnings.
+- BUGFIX: `test_fabric_bpa_validation::TestBPACatalogue` expects the rule
+  catalogue in the original's order and the findings with the original's
+  messages; `test_data_quality_smoke_tests::test_refresh_status` expects
+  the detail keys `end_time` and `request_id` (the original's names).
 - BUGFIX: `test_fabric_bpa_validation::TestBPAPerformanceRules::test_calculated_columns_detected`:
   calculated columns are found by the integer column type (the text
   comparison found none).

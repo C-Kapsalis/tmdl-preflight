@@ -121,15 +121,38 @@ class _Client:
         """The local date (a replay answers with its own clock)."""
         return _dt.date.today()
 
+    def token_remaining_seconds(self) -> float:
+        return 0.0
+
     def health_check(self) -> dict:
+        """Sign in, read the dataset and run a query; each step is reported."""
+        start = time.perf_counter()
+        checks: dict[str, dict] = {}
+        status, error = "healthy", None
         try:
-            self.dataset()
+            auth_start = time.perf_counter()
+            checks["authentication"] = {
+                "status": "ok", "time_ms": (time.perf_counter() - auth_start) * 1000,
+                "token_remaining_seconds": self.token_remaining_seconds()}
+            ds_start = time.perf_counter()
+            props = self.dataset()
+            checks["dataset_access"] = {
+                "status": "ok", "time_ms": (time.perf_counter() - ds_start) * 1000,
+                "dataset_name": props.get("name")}
+            q_start = time.perf_counter()
             result = self.execute("EVALUATE { 1 }")
             if result.error:
                 raise LiveError(result.error)
-            return {"status": "healthy"}
+            checks["query_execution"] = {
+                "status": "ok", "time_ms": (time.perf_counter() - q_start) * 1000,
+                "rows_returned": len(result.rows)}
         except Exception as exc:  # noqa: BLE001 - reported, not raised
-            return {"status": "unhealthy", "error": str(exc)}
+            status, error = "unhealthy", str(exc)
+        out = {"status": status, "checks": checks,
+               "total_time_ms": (time.perf_counter() - start) * 1000}
+        if error is not None:
+            out["error"] = error
+        return out
 
 
 class ReplayClient(_Client):
@@ -259,6 +282,10 @@ class RestClient(_Client):
             out.update({"workspaceId": self.workspace, "workspaceName": ws.get("name")})
             return out
         return self._cached("dataset", load)
+
+    def token_remaining_seconds(self) -> float:
+        remaining = getattr(self._token, "remaining_seconds", None)
+        return float(remaining()) if callable(remaining) else 0.0
 
 
 class RecordingClient(_Client):
@@ -1241,17 +1268,34 @@ def check_filter_diagnostic(c: LiveContext) -> CheckResult:
 # ---------------------------------------------------------------------------
 
 BPA_RULES = [
-    {"id": "DAX_DIVISION_USAGE", "name": "Use DIVIDE instead of /", "category": "DAX Expressions",
-     "severity": 3, "fix": "Use DIVIDE(numerator, denominator) so a zero denominator returns BLANK."},
-    {"id": "PERF_CALCULATED_COLUMNS", "name": "Calculated columns", "category": "Performance",
-     "severity": 2, "fix": "Move the column logic to Power Query or into a measure."},
-    {"id": "NAME_MEASURE_DESCRIPTIONS", "name": "User-facing measures have descriptions",
-     "category": "Naming Conventions", "severity": 2, "fix": "Add a description."},
-    {"id": "DAX_FULLY_QUALIFIED_COLUMNS", "name": "Fully qualified column references",
-     "category": "DAX Expressions", "severity": 2, "fix": "Write Table[Column]."},
-    {"id": "META_HIDDEN_FOREIGN_KEYS", "name": "Hide foreign keys", "category": "Metadata",
-     "severity": 2, "fix": "Hide key columns used only by relationships."},
+    {"id": "DAX_DIVISION_USAGE", "name": "Avoid division operator (use DIVIDE function)",
+     "category": "DAX Expressions", "severity": 3, "scope": "Measure",
+     "description": "Measures should use DIVIDE() instead of / for better error handling",
+     "fix": "Replace / with DIVIDE(numerator, denominator) for better error handling"},
+    {"id": "DAX_FULLY_QUALIFIED_COLUMNS", "name": "Column references should be fully qualified",
+     "category": "DAX Expressions", "severity": 2, "scope": "Measure",
+     "description": "Use Table[Column] instead of [Column] for clarity",
+     "fix": "Qualify every column reference with its table"},
+    {"id": "PERF_CALCULATED_COLUMNS", "name": "Avoid calculated columns where possible",
+     "category": "Performance", "severity": 2, "scope": "Column",
+     "description": "Calculated columns can impact refresh performance",
+     "fix": "Consider moving logic to M (Power Query) or creating a measure instead"},
+    {"id": "META_HIDDEN_FOREIGN_KEYS", "name": "Hide foreign key columns from report view",
+     "category": "Metadata", "severity": 2, "scope": "Column",
+     "description": "Foreign keys should be hidden from end users",
+     "fix": "Hide the key column used only by a relationship"},
+    {"id": "NAME_MEASURE_DESCRIPTIONS", "name": "User-facing measures should have descriptions",
+     "category": "Naming Conventions", "severity": 2, "scope": "Measure",
+     "description": "Measures visible to users should include descriptions",
+     "fix": "Add a description explaining what this measure calculates"},
 ]
+
+BPA_ANALYSIS_FAILED = {
+    "id": "BPA_ANALYSIS_FAILED", "name": "BPA Analysis Failed", "category": "System",
+    "severity": 5, "scope": "Model",
+    "description": "The analysis could not read the model's metadata",
+    "fix": "Check model connectivity and permissions",
+}
 
 
 @dataclass
@@ -1317,15 +1361,16 @@ class LiveBPA:
     def _rule(self, rid: str) -> dict:
         return next(r for r in self.rules if r["id"] == rid)
 
-    def _violation(self, rid: str, obj: str, otype: str, message: str) -> BPAViolation:
-        r = self._rule(rid) if rid != "BPA_ANALYSIS_FAILED" else {
-            "id": rid, "name": "Analysis failed", "category": "System", "severity": 5,
-            "fix": "Check the connection and permissions."}
+    def _violation(self, rid: str, obj: str, otype: str, message: str,
+                   fix: Optional[str] = None) -> BPAViolation:
+        r = self._rule(rid) if rid != "BPA_ANALYSIS_FAILED" else BPA_ANALYSIS_FAILED
         return BPAViolation(rid, r["name"], r["category"], r["severity"], obj, otype, message,
-                            r["fix"], _dt.datetime.now(_dt.timezone.utc).isoformat())
+                            fix if fix is not None else r["fix"],
+                            _dt.datetime.now().isoformat())
 
     def analyze_model(self) -> BPAReport:
-        start = time.perf_counter()
+        start = _dt.datetime.now()
+        clock = time.perf_counter()
         out: list[BPAViolation] = []
         objects = 0
         try:
@@ -1335,49 +1380,163 @@ class LiveBPA:
             for row in [] if m.error else m.rows:
                 expr = str(scalar(row, "Expression") or "")
                 if "/" in expr and "divide" not in expr.lower():
-                    name = str(scalar(row, "Name"))
-                    out.append(self._violation("DAX_DIVISION_USAGE", name, "Measure",
-                                               f"{name} divides with '/'; use DIVIDE"))
+                    name = str(row.get("[Name]", "Unknown"))
+                    out.append(self._violation(
+                        "DAX_DIVISION_USAGE", name, "Measure",
+                        f"Measure '{name}' uses / operator instead of DIVIDE() function"))
             cols = self.client.execute("EVALUATE FILTER( INFO.COLUMNS(), [Type] = 2 )")
             for row in [] if cols.error else cols.rows:
-                table = scalar(row, "TableName") or scalar(row, "TableID")
-                obj = f"{table}[{scalar(row, 'Name')}]"
-                out.append(self._violation("PERF_CALCULATED_COLUMNS", obj, "Column",
-                                           f"{obj} is a calculated column"))
+                table = str(row.get("[TableName]", "Unknown"))
+                column = str(row.get("[Name]", "Unknown"))
+                out.append(self._violation(
+                    "PERF_CALCULATED_COLUMNS", f"{table}[{column}]", "CalculatedColumn",
+                    f"Calculated column '{column}' in table '{table}' may impact performance"))
             desc = self.client.execute('EVALUATE FILTER( INFO.MEASURES(), ISBLANK([Description]) '
                                        '|| [Description] = "" )')
             prefix = self.options["user_facing_prefix"]
             for row in [] if desc.error else desc.rows:
-                name = str(scalar(row, "Name"))
+                name = str(row.get("[Name]", "Unknown"))
+                table = str(row.get("[TableName]", "Unknown"))
                 if name.startswith(prefix):
-                    out.append(self._violation("NAME_MEASURE_DESCRIPTIONS", name, "Measure",
-                                               f"user-facing measure {name} has no description"))
+                    out.append(self._violation(
+                        "NAME_MEASURE_DESCRIPTIONS", name, "Measure",
+                        f"User-facing measure '{name}' in table '{table}' lacks description"))
             mc = self.client.execute('EVALUATE ROW("MeasureCount", COUNTROWS(INFO.MEASURES()))')
             cc = self.client.execute('EVALUATE ROW("ColumnCount", COUNTROWS(INFO.COLUMNS()))')
-            objects = (0 if mc.error else count(mc.first, "MeasureCount")) + \
-                      (0 if cc.error else count(cc.first, "ColumnCount"))
+            if mc.error or cc.error:
+                objects = 0
+            else:
+                objects = count(mc.first, "MeasureCount") + count(cc.first, "ColumnCount")
         except Exception as exc:  # noqa: BLE001 - one system finding instead of a crash
-            out.append(self._violation("BPA_ANALYSIS_FAILED", "model", "Model", str(exc)))
-        ms = max((time.perf_counter() - start) * 1000, 0.001)
-        return BPAReport(out, objects, ms, _dt.datetime.now(_dt.timezone.utc))
+            out.append(self._violation("BPA_ANALYSIS_FAILED", "ModelAnalysis", "System",
+                                       f"BPA analysis encountered an error: {exc}"))
+        ms = max((time.perf_counter() - clock) * 1000, 0.001)
+        return BPAReport(out, objects, ms, start)
+
+
+def _severity_icon(severity: int) -> str:
+    if severity >= 4:
+        return "🔴"
+    if severity == 3:
+        return "🟠"
+    if severity == 2:
+        return "🟡"
+    return "ℹ️"
+
+
+def _bpa_report_lines(report: BPAReport, model: str) -> list[str]:
+    lines = ["", "🔍 Running Fabric BPA analysis...",
+             "", "=" * 80, "FABRIC BPA ANALYSIS REPORT", "=" * 80,
+             f"Analysis completed: {report.timestamp}",
+             f"Duration: {report.analysis_duration_ms:.2f}ms",
+             f"Objects analyzed: {report.total_objects_analyzed}",
+             "", "VIOLATION SUMMARY:",
+             f"  🔴 Critical (4-5): {report.critical_count}",
+             f"  🟠 Errors (3):     {report.error_count}",
+             f"  🟡 Warnings (2):   {report.warning_count}",
+             f"  ℹ️  Info (1):       {report.info_count}",
+             f"  📊 Total:          {len(report.violations)}",
+             ""]
+    by_category: dict[str, list[BPAViolation]] = {}
+    for v in report.violations:
+        by_category.setdefault(v.category, []).append(v)
+    if by_category:
+        lines.append("VIOLATIONS BY CATEGORY:")
+        for category in sorted(by_category):
+            violations = by_category[category]
+            lines += ["", f"{category}: {len(violations)} violations"]
+            lines += [f"  {_severity_icon(v.severity)} {v.rule_name}: {v.object_name}"
+                      for v in violations]
+    else:
+        lines.append("✅ No violations found!")
+    lines += ["", "=" * 80]
+    if by_category:
+        lines += ["", f"📋 BPA Results Summary ({len(report.violations)} total violations):"]
+        for category in sorted(by_category):
+            violations = by_category[category]
+            critical = sum(1 for v in violations if v.severity >= 4)
+            errors = sum(1 for v in violations if v.severity == 3)
+            warnings = sum(1 for v in violations if v.severity == 2)
+            lines.append(f"  {category}: {len(violations)} violations ({critical} critical, "
+                         f"{errors} errors, {warnings} warnings)")
+    else:
+        lines += ["", "✅ BPA Analysis: No violations found!"]
+    lines += ["", "=" * 80, "FABRIC BPA AUDIT REPORT", "=" * 80,
+              f"Generated: {_dt.datetime.now()}",
+              f"Model: {model}",
+              "", "1. ANALYSIS SUMMARY",
+              f"   Duration: {report.analysis_duration_ms:.2f}ms",
+              f"   Objects analyzed: {report.total_objects_analyzed}",
+              f"   Rules evaluated: {len(BPA_RULES)}",
+              "", "2. VIOLATION SUMMARY",
+              f"   🔴 Critical (4-5): {report.critical_count}",
+              f"   🟠 Errors (3):     {report.error_count}",
+              f"   🟡 Warnings (2):   {report.warning_count}",
+              f"   ℹ️  Info (1):       {report.info_count}",
+              f"   📊 Total:          {len(report.violations)}",
+              ""]
+    if report.violations:
+        lines.append("3. RULES TRIGGERED")
+        counts: dict[str, int] = {}
+        for v in report.violations:
+            counts[v.rule_id] = counts.get(v.rule_id, 0) + 1
+        for rule_id, count_ in sorted(counts.items(), key=lambda item: item[1], reverse=True):
+            sample = next(v for v in report.violations if v.rule_id == rule_id)
+            lines += [f"   {rule_id}: {count_} violations",
+                      f"      Rule: {sample.rule_name}",
+                      f"      Category: {sample.category}",
+                      f"      Severity: {sample.severity}",
+                      ""]
+    lines.append("4. RECOMMENDATIONS")
+    if report.critical_count:
+        lines += ["   🚫 IMMEDIATE ACTION REQUIRED:",
+                  "      Fix critical violations before deployment"]
+    else:
+        lines.append("   ✅ No critical violations - deployment ready")
+    if report.error_count:
+        lines.append(f"   🟠 Address {report.error_count} error-level violations")
+    if report.warning_count:
+        lines.append(f"   🟡 Consider fixing {report.warning_count} warning-level violations")
+    lines += ["", "=" * 80]
+    return lines
 
 
 def check_bpa(c: LiveContext) -> CheckResult:
+    cid = "live-bpa"
+    health = c.client.health_check()
+    if health.get("status") != "healthy":
+        return CheckResult(cid, "fail", f"health check unhealthy: {health.get('error')}",
+                           {"health": health})
     report = LiveBPA(c.client, c.cfg.get("bpa")).analyze_model()
+    lines = _bpa_report_lines(report, str(c.client.dataset().get("workspaceName") or ""))
     cats: dict[str, int] = {}
     for v in report.violations:
         cats[v.category] = cats.get(v.category, 0) + 1
     details = {"by_category": cats, "objects": report.total_objects_analyzed,
-               "duration_ms": report.analysis_duration_ms,
+               "duration_ms": report.analysis_duration_ms, "health": health,
                "violations": [asdict(v) for v in report.violations]}
-    if report.critical_count:
-        return CheckResult("live-bpa", "fail", f"{report.critical_count} critical finding(s)", details)
+    failures = [v for v in report.violations if v.rule_id == "BPA_ANALYSIS_FAILED"]
+    if failures:
+        failure = failures[0]
+        return CheckResult(cid, "fail",
+                           f"🚫 BPA analysis failed: {failure.message}\n"
+                           f"Fix suggestion: {failure.fix_suggestion}\n\n"
+                           "This indicates a problem with model connectivity or permissions.",
+                           details, lines)
+    critical = report.get_violations_by_severity(4)
+    if critical:
+        listed = "\n".join(f"  🔴 {v.rule_name}: {v.object_name} ({v.message})"
+                           for v in critical)
+        return CheckResult(cid, "fail",
+                           f"🚫 {len(critical)} critical BPA violations found:\n{listed}\n\n"
+                           "These violations must be fixed before deployment. "
+                           "See BPA report for details and fix suggestions.", details, lines)
     if report.total_objects_analyzed == 0:
-        return CheckResult("live-bpa", "fail", "no objects could be analysed", details)
+        return CheckResult(cid, "fail", "no objects could be analysed", details, lines)
     if report.analysis_duration_ms >= (c.cfg.get("bpa") or {}).get("max_duration_ms", 30000):
-        return CheckResult("live-bpa", "fail", "the analysis took too long", details)
-    return CheckResult("live-bpa", "pass", f"{len(report.violations)} finding(s), none critical",
-                       details)
+        return CheckResult(cid, "fail", "the analysis took too long", details, lines)
+    return CheckResult(cid, "pass", f"{len(report.violations)} finding(s), none critical",
+                       details, lines)
 
 
 CHECKS: dict[str, Callable[[LiveContext], CheckResult]] = {

@@ -691,3 +691,56 @@ def test_the_diagnostic_keeps_the_json_keys():
     assert [f["name"] for f in findings] == ["User Identity", "Calendar Rows", "Filter Context",
                                               "Refresh Status"]
     assert [f["level"] for f in findings] == ["INFO", "CRITICAL", "OK", "OK"]
+
+
+# ---------------------------------------------------------------------------
+# PB166: the best-practice analysis report
+# ---------------------------------------------------------------------------
+
+def test_the_bpa_report():
+    code, out = live_text("bpa", "live-bpa")
+    assert code == 0
+    lines = out.splitlines()
+    assert lines[1:4] == ["", "🔍 Running Fabric BPA analysis...", ""]
+    assert lines[4] == "=" * 80
+    assert lines[5] == "FABRIC BPA ANALYSIS REPORT"
+    assert lines[6] == "=" * 80
+    assert lines[7].startswith("Analysis completed: 20")
+    assert lines[8].endswith("ms")
+    assert lines[9] == "Objects analyzed: 15"
+    assert lines[11:16] == [
+        "VIOLATION SUMMARY:",
+        "  🔴 Critical (4-5): 0",
+        "  🟠 Errors (3):     2",
+        "  🟡 Warnings (2):   2",
+        "  ℹ️  Info (1):       0",
+    ]
+    assert lines[16] == "  📊 Total:          4"
+    assert "VIOLATIONS BY CATEGORY:" in lines
+    assert "DAX Expressions: 2 violations" in lines
+    assert "  🟠 Avoid division operator (use DIVIDE function): !Revenue" in lines
+    assert "📋 BPA Results Summary (4 total violations):" in lines
+    assert "  DAX Expressions: 2 violations (0 critical, 2 errors, 0 warnings)" in lines
+    assert "FABRIC BPA AUDIT REPORT" in lines
+    assert "Model: Coffee Roastery" in lines
+    assert "   Rules evaluated: 5" in lines
+    assert "3. RULES TRIGGERED" in lines
+    assert "   DAX_DIVISION_USAGE: 2 violations" in lines
+    assert "      Rule: Avoid division operator (use DIVIDE function)" in lines
+    assert "      Category: DAX Expressions" in lines
+    assert "      Severity: 3" in lines
+    assert "   PERF_CALCULATED_COLUMNS: 1 violations" in lines
+    assert "   NAME_MEASURE_DESCRIPTIONS: 1 violations" in lines
+    assert "4. RECOMMENDATIONS" in lines
+    assert "   ✅ No critical violations - deployment ready" in lines
+    assert "   🟠 Address 2 error-level violations" in lines
+    assert "   🟡 Consider fixing 2 warning-level violations" in lines
+
+
+def test_the_bpa_report_is_empty_when_nothing_is_wrong():
+    code, out, err = run_cli("live", str(MODEL), "--workspace", "ws-coffee", "--dataset",
+                             "ds-coffee", "--replay", str(LIVE / "bpa-clean"),
+                             "--checks", "live-bpa")
+    assert code == 0
+    assert "✅ No violations found!" in out
+    assert "✅ BPA Analysis: No violations found!" in out
