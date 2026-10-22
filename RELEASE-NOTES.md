@@ -246,10 +246,11 @@ until configured.
   type pairs are informational); the result is written next to the
   manifest as `<name>.bq.json` and says what was checked against, what
   the warehouse has and how the model's columns differ from it;
-  `schema-check --sql-dir DIR --entries FILE [--write-holdbacks]` proves
-  view-column exposure from SQL files (exit 3 when an entry is held).
+  `schema-check --sql-dir DIR --entries FILE [--write-holdbacks]
+  [--clear-ready]` proves view-column exposure from SQL files (exit 3
+  when an entry is held).
   Python API: `tmdl_preflight.reconcile`.
-- `refs NAME [PATH ...] [--files] [--include-history] [--loose]` counts
+- `refs NAME [PATH ...] [--files] [--include-nonlive] [--loose]` counts
   the anchored references to a name, model side and report side, live and
   archived.
 - `live <MODEL> --workspace ID --dataset ID [--checks ...] [--strict]
@@ -356,8 +357,34 @@ until configured.
   `--project` and `--dataset` replace the target the manifest declares,
   in the recorded `checked_against` and in the summary.
 
+- **`schema-check --sql-dir` reads the registry shape of the entries
+  file.** An entry may name its view `client_view` and its universal
+  source `universal_view`, and a column may be an object with a
+  `sourceColumn`; the flat spelling is accepted as well. A missing
+  entries file is an empty registry: nothing to hold, exit 0.
+- **`schema-check --sql-dir` prints the state it checked.** The first
+  line names the SQL project and the commit it is at, then every entry
+  in the order the registry lists it, with the file that proves it and
+  the reason, and the clients that are ready to deploy and the ones
+  that are held.
+- **The holdbacks file is built from the whole registry.** It lists every
+  client in the entries file, with the work that holds its deploy, and a
+  client that is ready is still outstanding work until `--clear-ready`
+  removes it.
+- **`schema-check --sql-dir --clear-ready` clears the registry.** The
+  entries of a client whose every entry is READY are removed and the
+  file is rewritten; the run says how many entries went and that the
+  registry is a committed receipt.
+
 ### Bug fixes
 
+- **A star select is a star select.** `select distinct *` is not one, and
+  a `source()` or `ref()` outside the jinja braces does not count as a
+  relation the view reads. BUGFIX.
+- **A client the owner pattern does not match is held.** It was looked up
+  in a folder named after the whole client key, so the view was never
+  found and the reason was misleading; the client is now held with the
+  reason that its folder could not be derived. BUGFIX.
 - **The schema check never talks to a warehouse.** The live schema
   lookup, the credential setup message, `--env-file` and `--key-file`
   stay out: the tool reads a snapshot the user exported. BUGFIX.

@@ -113,10 +113,11 @@ def test_schema_check_sql_dir(tmp_path):
     code, out, _ = run_cli("schema-check", "--sql-dir", root, "--entries", entries,
                            "--holdbacks", hb, "--write-holdbacks")
     assert code == 3
-    lines = {ln.split()[1]: ln for ln in out.splitlines() if ln.startswith("spinout-05")}
-    assert "READY" in lines["Orders"] and "READY" in lines["Visits"]
-    assert "HELD" in lines["Refunds"] and "amt" in lines["Refunds"]
-    assert "not found" in lines["Gone"]
+    assert "✓ READY spinout-05 · Orders · orders_v" in out
+    assert "✓ READY spinout-05 · Visits · visits_v" in out
+    assert "✗ HELD  spinout-05 · Refunds · refunds_v" in out
+    assert "amt" in out
+    assert "view not in DBT" in out
     first = hb.read_bytes()
     run_cli("schema-check", "--sql-dir", root, "--entries", entries, "--holdbacks", hb,
             "--write-holdbacks")

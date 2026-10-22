@@ -277,11 +277,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_sc.add_argument("--dataset", help="the warehouse dataset to check against "
                                         "(default: the manifest's own target)")
     p_sc.add_argument("--sql-dir", help="SQL project root (view-column exposure mode)")
-    p_sc.add_argument("--entries", help="with --sql-dir: JSON list of {client, table, view, "
-                                        "shared_view, columns}")
+    p_sc.add_argument("--entries", help="with --sql-dir: JSON file of {client, table, view, "
+                                        "columns} entries")
     p_sc.add_argument("--holdbacks", help="with --sql-dir: holdbacks file path")
     p_sc.add_argument("--write-holdbacks", action="store_true",
                       help="with --sql-dir: write the holdbacks file")
+    p_sc.add_argument("--clear-ready", action="store_true",
+                      help="with --sql-dir: remove the entries of the clients whose every entry "
+                           "is READY")
     p_sc.add_argument("--owner-folder-pattern",
                       help="with --sql-dir: regex whose first group turns an owner id into the "
                            "SQL folder segment that holds its views")
@@ -809,7 +812,8 @@ def _cmd_manifest(args) -> int:
 
 def _cmd_schema_check(args) -> int:
     if args.sql_dir:
-        from .sqlviews import holdbacks_yaml, judge, load_entries, previous_since
+        from .sqlviews import (clear_ready, git_head, holdbacks_yaml, judge, load_entries,
+                               load_registry, previous_since)
 
         root = Path(args.sql_dir)
         if not root.is_dir():
@@ -818,17 +822,40 @@ def _cmd_schema_check(args) -> int:
             raise UsageError("--sql-dir needs --entries FILE")
         try:
             entries = load_entries(Path(args.entries))
-        except (OSError, ValueError) as exc:
+            registry = load_registry(Path(args.entries))
+        except ValueError as exc:
             raise UsageError(f"cannot read the entries file: {exc}") from exc
-        verdicts = sorted((judge(e, root, args.owner_folder_pattern) for e in entries),
-                          key=lambda v: (v.owner, v.table))
+        hb = Path(args.holdbacks) if args.holdbacks else (
+            Path(args.entries).parent / "deploy_holdbacks.yml")
+        if not entries:
+            print("outstanding-enrichment registry is empty — nothing to hold.")
+            if args.write_holdbacks:
+                hb.write_text(holdbacks_yaml([], previous_since(hb)), encoding="utf-8")
+                print(f"  holdbacks written: {hb} (0 client(s)) — commit it with the registry")
+            return 0
+        print(f"SQL state: {root} @ {git_head(root)}")
+        verdicts = [judge(e, root, args.owner_folder_pattern) for e in entries]
         for v in verdicts:
-            print(f"{v.owner}  {v.table}  {v.view}  {'READY' if v.ready else 'HELD'}  {v.reason}")
-        held = sum(1 for v in verdicts if not v.ready)
-        print(f"{len(verdicts) - held} ready, {held} held")
+            tag = "READY" if v.ready else "HELD "
+            print(f"{'✓' if v.ready else '✗'} {tag} {v.owner} · {v.table} · {v.view}")
+            print(f"         {v.reason}")
+        held = {v.owner for v in verdicts if not v.ready}
+        ready = {v.owner for v in verdicts if v.ready} - held
+        print()
+        print(f"READY to /deploy: {sorted(ready) or '—'}")
+        print(f"HELD (view enrichment pending): {sorted(held) or '—'}")
+        if args.clear_ready:
+            removed = clear_ready(Path(args.entries), registry, ready)
+            if removed:
+                print(f"\n--clear-ready: removed {removed} READY entr(ies) from {args.entries}")
+                print("  ⚠ REMEMBER TO COMMIT the updated registry (it is a committed receipt).")
+            else:
+                print("\n--clear-ready: nothing to clear (no fully-READY client).")
         if args.write_holdbacks:
-            hb = Path(args.holdbacks) if args.holdbacks else Path(args.entries).parent / "deploy_holdbacks.yml"
-            hb.write_text(holdbacks_yaml(verdicts, entries, previous_since(hb)), encoding="utf-8")
+            hb.write_text(holdbacks_yaml(entries, previous_since(hb)), encoding="utf-8")
+            clients = {str(e.get("client", "")) for e in entries}
+            print(f"  holdbacks written: {hb} ({len(clients)} client(s)) — commit it with the "
+                  f"registry")
         return 3 if held else 0
     from .reconcile import coverage_gap, failing, load_ignore_columns, reconcile
 
