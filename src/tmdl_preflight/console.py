@@ -39,8 +39,12 @@ def _rule_context(lines: list[str], line_no: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-def lineage_report(ctx: Context, rule: Rule, dry_run: bool) -> list[str]:
-    """The lineage repair's own report, in the reference's layout."""
+def lineage_report(ctx: Context, rule: Rule, dry_run: bool,
+                   checking: bool = False) -> list[str]:
+    """The lineage repair's own report, in the reference's layout.
+
+    A check run (``checking``) changes no file, so it lists the duplicates
+    and where they are, and says nothing about repairing them."""
     models = list(ctx.models)
     out: list[str] = []
     if len(models) > 1:
@@ -59,7 +63,7 @@ def lineage_report(ctx: Context, rule: Rule, dry_run: bool) -> list[str]:
             out.append(f"Checking: {model.definition_path.parent.name}")
             out.append(RULE)
             out.append("")
-        block, fixed = _lineage_model_block(model, plan_for_model, dry_run)
+        block, fixed = _lineage_model_block(model, plan_for_model, dry_run, checking)
         out.extend(block)
         total_fixes += fixed
     if len(models) > 1:
@@ -68,15 +72,20 @@ def lineage_report(ctx: Context, rule: Rule, dry_run: bool) -> list[str]:
         out.append("SUMMARY")
         out.append(RULE)
         out.append(f"Total models checked: {len(models)}")
-        out.append(f"Total fixes applied: {total_fixes}")
+        if checking:
+            out.append(f"Total duplicate occurrences: {total_fixes}")
+        else:
+            out.append(f"Total fixes applied: {total_fixes}")
         out.append("")
     return out
 
 
-def _lineage_model_block(model, plan_for_model: dict, dry_run: bool) -> tuple[list[str], int]:
+def _lineage_model_block(model, plan_for_model: dict, dry_run: bool,
+                         checking: bool = False) -> tuple[list[str], int]:
+    mode = "CHECK" if checking else ("DRY RUN" if dry_run else "LIVE")
     out = [RULE, "FIX DUPLICATE LINEAGE TAGS", RULE,
            f"Model: {model.definition_path}",
-           f"Mode: {'DRY RUN' if dry_run else 'LIVE'}", ""]
+           f"Mode: {mode}", ""]
     if not plan_for_model:
         out.append("✅ No duplicate lineage tags found!")
         out.append("")
@@ -97,12 +106,16 @@ def _lineage_model_block(model, plan_for_model: dict, dry_run: bool) -> tuple[li
                 out.append(f"      Line {occ.line}: "
                            f"{_lineage_context(lines_cache, file, occ.line)}")
         for index, (occ, new_tag) in enumerate(entries[1:], start=2):
+            fixed += 1
+            if checking:
+                continue
             out.append(f"  → Fixing occurrence {index}: {occ.file.name}")
             out.append(f"    Old tag: {tag}")
             out.append(f"    New tag: {new_tag}")
-            fixed += 1
         out.append("")
-    if dry_run:
+    if checking:
+        pass
+    elif dry_run:
         out.append(f"DRY RUN: Would fix {len(plan_for_model)} duplicate lineage tag(s)")
     else:
         out.append(f"✅ Fixed {fixed} duplicate lineage tag occurrence(s)")
@@ -125,9 +138,12 @@ def _lineage_context(cache: dict[Path, list[str]], file: Path, line_no: int) -> 
 # ---------------------------------------------------------------------------
 
 
-def misordered_report(ctx: Context, violations: list[Violation], dry_run: bool) -> list[str]:
-    """The misordered-property repair's own report, in the reference's layout."""
-    verb = "would fix" if dry_run else "fixed"
+def misordered_report(ctx: Context, violations: list[Violation], dry_run: bool,
+                      checking: bool = False) -> list[str]:
+    """The misordered-property repair's own report, in the reference's layout.
+
+    A check run says what it found; only a fix says what it repaired."""
+    verb = "found" if checking else ("would fix" if dry_run else "fixed")
     by_file: dict[str, list[Violation]] = {}
     for v in violations:
         by_file.setdefault(_relative(ctx, v.file), []).append(v)
@@ -141,8 +157,8 @@ def misordered_report(ctx: Context, violations: list[Violation], dry_run: bool) 
             out.append(f"    [{token}] in {owner}")
         total += len(found)
     out.append("")
-    out.append(f"{'Would fix' if dry_run else 'Fixed'} {total} issue(s) across "
-               f"{len(by_file)} file(s).")
+    lead = "Found" if checking else ("Would fix" if dry_run else "Fixed")
+    out.append(f"{lead} {total} issue(s) across {len(by_file)} file(s).")
     return out
 
 
@@ -185,15 +201,28 @@ def dangling_report(ctx: Context, violations: list[Violation],
 # ---------------------------------------------------------------------------
 
 
-def attach_report(ctx: Context, rule: Rule, dry_run: bool, verbose: bool) -> list[str]:
+def attach_report(ctx: Context, rule: Rule, dry_run: bool, verbose: bool,
+                  checking: bool = False) -> list[str]:
     """The comment-spacing cleanup's own report, in the reference's layout.
 
     A dry run counts the occurrences (a description line followed by at
     least one blank line); a live run counts the blank lines it removed.
+    A check run counts the occurrences too, and says nothing of a repair.
     """
     model = ctx.models[0] if ctx.models else None
     table_files = sorted((model.definition_path / "tables").glob("*.tmdl")) if model else []
     out = [RULE, "CLEANUP TMDL COMMENT SPACING", RULE, ""]
+    if checking:
+        found = _attach_occurrences(table_files)
+        out.append(f"Scanned {len(table_files)} tables")
+        if not found:
+            out.append("✓ No issues found - all tables are clean")
+            return out
+        out.append(f"Found {len(found)} tables with a description followed by "
+                   f"a blank line")
+        for name, count in found:
+            out.append(f"  - {name}: {count} occurrence(s)")
+        return out
     if dry_run:
         out.append("🔍 DRY RUN MODE - No changes will be written")
         out.append("")

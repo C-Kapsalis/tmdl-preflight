@@ -1,5 +1,21 @@
 # Release notes
 
+## Unreleased
+
+### Fixed
+
+- BUGFIX (kept): `check` never prints repair language. With M003 among
+  the selected rules, `check` printed the lineage repair's live report
+  ("Mode: LIVE", "→ Fixing occurrence", "New tag: …", "✅ Fixed 1
+  duplicate lineage tag occurrence(s)") though it changed no file, and
+  `check --select M011` printed "Fixed 0 issue(s)". The console report
+  was told it was not a dry run, and a check is not a fix. A check now
+  prints "Mode: CHECK" and the duplicates with their locations, and the
+  M011 report says "found" and "Found N issue(s)". The M013 attach-mode
+  report under `check` counted nothing and said "No issues found" beside
+  an M013 finding; it now counts the occurrences. `fix` and
+  `fix --dry-run` print what they did before.
+
 ## 1.2.1 (2026-10-22)
 
 ### Fixed

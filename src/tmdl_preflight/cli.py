@@ -528,14 +528,15 @@ def _console_report(args, report: PreflightReport, ruleset: RuleSet,
         if rule.id.lower() not in selected and rule.name.lower() not in selected:
             continue
         if rule.id == "M003":
-            lines.extend(console.lineage_report(ctx, rule, dry_run))
+            lines.extend(console.lineage_report(ctx, rule, dry_run, checking))
         elif rule.id == "M011":
             lines.extend(console.misordered_report(
-                ctx, _found(report, "M011"), dry_run))
+                ctx, _found(report, "M011"), dry_run, checking))
         elif rule.id == "M013":
             if rule.options.get("fix_mode") == "attach":
                 lines.extend(console.attach_report(
-                    ctx, rule, dry_run, bool(getattr(args, "verbose", False))))
+                    ctx, rule, dry_run, bool(getattr(args, "verbose", False)),
+                    checking))
             else:
                 lines.extend(console.dangling_report(
                     ctx, _found(report, "M013"), not dry_run and not checking))
