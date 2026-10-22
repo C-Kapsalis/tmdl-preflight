@@ -536,7 +536,7 @@ class FieldParameterNoMeasuresRule(Rule):
                 out.append(self.violation(
                     f"{table.name} unexpectedly contains {len(table.measure_list)} measures. "
                     f"{family} tables should be dimension tables with columns only.",
-                    file=table.file, line=table.measure_list[0].line, obj=table.name,
+                    file=table.file, line=table.measure_list[0].line,
                 ))
         return out
 
@@ -650,7 +650,7 @@ class SelectorBranchResolutionRule(Rule):
                 out.append(self.violation(
                     f"{summary}: {table.file.name}:{idx + 1}  "
                     + " ".join(f"[{n}]" for n in names),
-                    file=table.file, line=idx + 1, obj=f"{table.name}:[{names[0]}]",
+                    file=table.file, line=idx + 1,
                 ))
         return out
 
