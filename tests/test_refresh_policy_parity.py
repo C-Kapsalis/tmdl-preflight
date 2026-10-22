@@ -188,6 +188,33 @@ def test_the_backlog_declares_a_gap(stand_in):
     assert not [v for v in violations(payload, "P002") if v["object"] == "Stamp"]
 
 
+def test_a_hand_written_source_is_undecidable_with_the_parity_markers(stand_in):
+    """The original's windowed test names the window variable of its own
+    template; the parity setting reproduces it."""
+    root = stand_in(ROOT)
+    model = _model(root, "ir_hand_db")
+    cfg = dict(CONFIG)
+    cfg["refresh_policy"] = dict(CONFIG["refresh_policy"], window_markers=["ir_dfilter"])
+    code, payload = run_check(model, COVER, config=cfg)
+    found = [v for v in violations(payload, "P002") if v["severity"] == "info"]
+    assert len(found) == 1
+    assert found[0]["message"].endswith(
+        "need a HAND-WRITTEN refreshPolicy (M source is not a source_filter_dates call): "
+        "Handwritten")
+
+
+def test_the_default_markers_call_the_same_source_windowed(stand_in):
+    root = stand_in(ROOT)
+    model = _model(root, "ir_hand_db")
+    cfg = dict(CONFIG)
+    cfg["refresh_policy"] = dict(CONFIG["refresh_policy"])
+    del cfg["refresh_policy"]["window_markers"]
+    code, payload = run_check(model, COVER, config=cfg)
+    assert [v for v in violations(payload, "P002") if v["severity"] == "info"] == []
+    assert [v["object"] for v in violations(payload, "P002")
+            if v["severity"] == "warning"] == ["Handwritten"]
+
+
 # ---------------------------------------------------------------------------
 # fix --check
 # ---------------------------------------------------------------------------
