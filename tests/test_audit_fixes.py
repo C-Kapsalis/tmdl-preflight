@@ -366,3 +366,15 @@ def test_r003_names_an_autodetected_relationship_readably(tmp_path):
     assert "[relationship AutoDetected_5c1d2e3f]" in out, out
     assert "duplicate of relationship 1f6f2b3a:" in out, out
     assert "AutoDete]" not in out, out
+
+
+def test_format_resolve_names_a_missing_calculation_group(project):
+    code, out, err = run_cli("format-resolve", project, "--name", "Revenue")
+    assert code == 2, (code, out, err)
+    assert "z-Selector Format" in err and "--table" in err, err
+
+
+def test_grain_check_without_guard_table_is_a_usage_error(project):
+    code, out, err = run_cli("grain", project, "--check")
+    assert code == 2, (code, out, err)
+    assert "--check needs --guard-table" in err, err

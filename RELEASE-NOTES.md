@@ -62,6 +62,16 @@
   (`relationship AutoDetected_5c1d2e3f`); a bare GUID reads as before,
   and an id with no GUID is kept whole. A baseline entry for such a
   finding names the new object, so it is reported once as new.
+- BUGFIX (changed from the original): `format-resolve` says when there is
+  nothing to resolve. When no model under the path had the calculation
+  group (`--table`, default `z-Selector Format`), it printed nothing and
+  exited 0. It now prints `no table '<table>' in any model under <path>:
+  nothing to resolve` and exits 2, the usage-error code. A model without
+  the group is still skipped silently when another model has it.
+- BUGFIX (changed from the original): `grain --check` without
+  `--guard-table` exits 2, the usage-error code, instead of 1, which
+  reads as a coverage gap. It still prints the table first and
+  `--check needs --guard-table` on standard error.
 
 ## 1.2.1 (2026-10-22)
 

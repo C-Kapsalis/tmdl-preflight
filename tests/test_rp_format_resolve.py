@@ -79,9 +79,12 @@ def test_a_model_without_the_calculation_group_is_skipped(tmp_path):
         "table 'Sales'\n\tlineageTag: 00000000-0000-0000-0000-000000000001\n\n"
         "\tcolumn amount\n\t\tdataType: double\n\t\tsourceColumn: amount\n",
         encoding="utf-8")
-    code, out, _err = run_cli("format-resolve", str(tmp_path), "--name", "Cost/ Conversion")
-    assert code == 0
+    code, out, err = run_cli("format-resolve", str(tmp_path), "--name", "Cost/ Conversion")
+    # BUGFIX: when no model has the calculation group, the run says so
+    # (a usage error) instead of printing nothing and exiting 0
+    assert code == 2
     assert out.strip() == ""
+    assert "no table 'z-Selector Format' in any model" in err
 
 
 # ---------------------------------------------------------------------------

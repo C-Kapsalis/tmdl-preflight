@@ -909,6 +909,12 @@ def _cmd_format_resolve(args) -> int:
                 row["compare_decimals"] = decimals(other)
                 row["decimals_differ"] = decimals(other) != decimals(fmt)
             rows.append(row)
+    if not any(model.get_table(args.table) is not None for model in ctx.models):
+        # a model without the calculation group is skipped; when no model
+        # has it, there is nothing to resolve, and the run says so
+        raise UsageError(
+            f"no table '{args.table}' in any model under {args.path}: nothing to "
+            f"resolve. Name the format calculation group with --table.")
     if args.json:
         print(json.dumps({"name": args.name, "compare": args.compare, "results": rows}, indent=2))
         return 0
@@ -946,6 +952,8 @@ def _cmd_grain(args) -> int:
             error, gaps = grain_gaps(model, rows, args.guard_table, args.guard_measure)
         payload.update({"error": error, "gaps": gaps})
         code = 1 if (error or gaps) else 0
+        if not args.guard_table:
+            code = 2  # a usage error: the flag --check needs is missing
     if args.emit_config:
         payload["config"] = {
             "blocked_tables": [r["dimension"] for r in rows
