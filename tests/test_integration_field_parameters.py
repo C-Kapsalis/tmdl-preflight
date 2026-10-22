@@ -117,6 +117,26 @@ class TestCategoryRequired:
         assert code == 0, payload
         assert violations(payload, "F011") == []
 
+    def test_a_row_whose_last_value_is_no_order_is_not_a_finding(self, tmp_path):
+        """The rule judges the three-value shape: label, NAMEOF, order."""
+        tables = tmp_path / "Shop.SemanticModel" / "definition" / "tables"
+        tables.mkdir(parents=True)
+        (tables / "y-Selector 1.tmdl").write_text(
+            "table 'y-Selector 1'\n"
+            "\tcolumn 'y-Selector 1'\n"
+            "\t\tsourceColumn: [Value1]\n"
+            "\n"
+            "\tpartition 'p' = calculated\n"
+            "\t\tmode: import\n"
+            "\t\tsource = ```\n"
+            "\t\t\t\t{\n"
+            "\t\t\t\t\t(\"Odd\", NAMEOF('_Stores'[Odd]), \"later\")\n"
+            "\t\t\t\t}\n"
+            "\t\t\t\t```\n", encoding="utf-8")
+        code, payload = run_check(tmp_path / "Shop.SemanticModel", RULE)
+        assert code == 0, payload
+        assert violations(payload, "F011") == []
+
 
 class TestFieldParameterCoverage:
     RULE = "fieldparam-coverage"
@@ -184,3 +204,26 @@ class TestFieldParameterCoverage:
         assert code == 0, payload
         summary = violations(payload)[0]["message"]
         assert "Covered in x-Selector:                     1 (16.7%)" in summary
+
+    def test_the_summary_is_printed_even_when_nothing_is_found(self, tmp_path):
+        tables = tmp_path / "Shop.SemanticModel" / "definition" / "tables"
+        tables.mkdir(parents=True)
+        (tables / "Shop.tmdl").write_text(
+            "table Shop\n"
+            "\tcolumn shop_name\n"
+            "\t\tdataType: string\n"
+            "\n"
+            "\tpartition Shop = m\n"
+            "\t\tmode: import\n"
+            "\t\tsource =\n"
+            "\t\t\t\tlet\n"
+            "\t\t\t\t    Source = Sql.Database(\"example-server\", \"roastery\")\n"
+            "\t\t\t\tin\n"
+            "\t\t\t\t    Source\n", encoding="utf-8")
+        code, payload = run_check(tmp_path / "Shop.SemanticModel", self.RULE)
+        assert code == 0, payload
+        found = violations(payload)
+        assert len(found) == 1
+        assert found[0]["message"].startswith("x-Selector — measure level:")
+        assert "  x-Selector measure count:                  0" in found[0]["message"]
+        assert "  y-Selector refs to missing tables:         0" in found[0]["message"]
