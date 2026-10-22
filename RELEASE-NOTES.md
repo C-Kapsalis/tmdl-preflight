@@ -682,13 +682,17 @@ unchanged.
   and writes nothing. Config section `manifest` (`sources`, `target`,
   `domains`, ...). Python API: `tmdl_preflight.manifest`.
 - `schema-check --manifest M --schema SNAPSHOT [--ignore-columns FILE]
-  [--strict]` reconciles a manifest with an exported schema snapshot
-  (`missing_in_source` fails, `needs_review` for programmatically renamed
-  tables, `not_imported` and suspicious type pairs are informational);
-  `schema-check --sql-dir DIR --entries FILE [--write-holdbacks]` proves
-  view-column exposure from SQL files (exit 3 when an entry is held).
+  [--strict] [--project P] [--dataset D]` reconciles a manifest with an
+  exported schema snapshot (`missing_in_bq` fails, `needs_review` for
+  programmatically renamed tables, `not_surfaced_in_pbi` and suspicious
+  type pairs are informational); the result is written next to the
+  manifest as `<name>.bq.json` and says what was checked against, what
+  the warehouse has and how the model's columns differ from it;
+  `schema-check --sql-dir DIR --entries FILE [--write-holdbacks]
+  [--clear-ready]` proves view-column exposure from SQL files (exit 3
+  when an entry is held).
   Python API: `tmdl_preflight.reconcile`.
-- `refs NAME [PATH ...] [--files] [--include-history] [--loose]` counts
+- `refs NAME [PATH ...] [--files] [--include-nonlive] [--loose]` counts
   the anchored references to a name, model side and report side, live and
   archived.
 - `live <MODEL> --workspace ID --dataset ID [--checks ...] [--strict]
@@ -984,6 +988,37 @@ unchanged.
 - **A relationship declaration may be followed by any whitespace.** A tab
   after the keyword starts the block, as a space does.
 - **`stats --measures** prints one summary per model.** A folder with two
+- **The manifest names its target block `bigquery` and keeps its key
+  order.** The block that describes the warehouse target is `bigquery`
+  (the `block_key` setting still renames it) and its keys keep the order
+  the contract reads them in: `model_project`, `model_dataset`,
+  `model_billing_project`, `project`, `dataset`, `billing_project`, then
+  `client_id`, `registry_project` and `registry_dataset` when a targets
+  entry matched, then `warehouse` and `note`.
+- **A table's `fqtn_default` lives in its `bq_source` object.** It is the
+  last key there and every table that reads the warehouse carries one,
+  whatever its classification: a `z-` selector that reads the warehouse
+  is checked like any fact.
+- **A table record lists its keys in one order.** `name`,
+  `classification`, `column_count`, `domain` (for a fact, a dimension or
+  a calendar), `bq_source`, `programmatic_renames`, `m_type_changes` (or
+  `unresolved_source`), `columns`, `measures`. The domain rules ship with
+  the tool: the shared tables are `Core / Shared`, and the first rule
+  whose word appears in the table name wins.
+- **A relationship record carries no `name`.** Its keys are `fromTable`,
+  `fromColumn`, `toTable`, `toColumn`, `isActive`,
+  `crossFilteringBehavior`, `fromCardinality` and `toCardinality`. A
+  type step keeps the spaces it was written with.
+- **The manifest reads the registry shape of the targets file.** A
+  `clients:` mapping whose entries carry `bq_project`, `bq_billing_project`
+  and `bq_dataset` is accepted next to the flat shape; a secondary model
+  row overrides any of the three target fields, and an explicit null
+  removes one. The billing project is the declared one when the key is
+  there, else the project.
+- **The manifest command prints the summary the pipelines read.** `Wrote
+  <path>`, the model and the warehouse target it resolved to, the table
+  and relationship counts, the classification map and the domains.
+- **`stats --measures` prints one summary per model.** A folder with two
   models prints two summaries, each with its own totals, in the layout a
   reviewer reads: the totals, the user-facing and helper split, the
   field-parameter surfacing, the helper subcategories, the top tables and
@@ -1076,6 +1111,61 @@ unchanged.
   measure that fits no known shape) is a warning. A plain run fails on the
   P0 checks, `--strict` is the full run and fails on the P1 checks too.
   The mapping is in the rule descriptions and in the README.
+
+- **The schema check names its drift the way the contract names it.** The
+  keys are `missing_in_bq` (the failure), `needs_review`,
+  `not_surfaced_in_pbi` (the information), `ignored_bookkeeping` and
+  `type_mismatch`, in that order. A column the warehouse does not import
+  is listed with the snapshot's own spelling, and a type difference says
+  whether an M Changed Type confirms it.
+- **The schema check writes its result into the manifest.** Each table's
+  source object carries `checked_against`, the snapshot's `bq_columns` and
+  its `drift`; a table the snapshot does not hold carries a `check_error`
+  instead. The run summary is the `bq_schema_check` block: the project,
+  the dataset, the warehouse, the authentication, the unresolved and the
+  skipped tables, the time of the check and the table counts.
+- **The schema check prints the report the contract describes.** The
+  authentication, the tables checked, the failing, needs-review,
+  informational and type-mismatch counts, the ignored bookkeeping
+  columns, the unreachable and the unresolved tables, the tables that were
+  skipped, and — when anything failed — the read-only routing block.
+- **`schema-check` can be pointed at another project or dataset.**
+  `--project` and `--dataset` replace the target the manifest declares,
+  in the recorded `checked_against` and in the summary.
+
+- **`schema-check --sql-dir` reads the registry shape of the entries
+  file.** An entry may name its view `client_view` and its universal
+  source `universal_view`, and a column may be an object with a
+  `sourceColumn`; the flat spelling is accepted as well. A missing
+  entries file is an empty registry: nothing to hold, exit 0.
+- **`schema-check --sql-dir` prints the state it checked.** The first
+  line names the SQL project and the commit it is at, then every entry
+  in the order the registry lists it, with the file that proves it and
+  the reason, and the clients that are ready to deploy and the ones
+  that are held.
+- **The holdbacks file is built from the whole registry.** It lists every
+  client in the entries file, with the work that holds its deploy, and a
+  client that is ready is still outstanding work until `--clear-ready`
+  removes it.
+- **`schema-check --sql-dir --clear-ready` clears the registry.** The
+  entries of a client whose every entry is READY are removed and the
+  file is rewritten; the run says how many entries went and that the
+  registry is a committed receipt.
+
+- **The reference census prints the report the contract describes.** The
+  live and the non-live counts, per layer, the number of files, the live
+  blast radius and the warning that report bindings are not covered by a
+  model-side test. With `--files` the matching files are listed, sorted by
+  how often they name the object, with the non-live ones hidden unless
+  they are asked for.
+- **A quoted reference may carry any dotted prefix.** `"a.b.Margin"` and
+  `".Margin"` count for `Margin`, the way a report binding writes it.
+- **A targets file defines the live set of the census.** The live set is
+  the first path segment of every registered model path; without a
+  targets file the archived-folder globs decide. `--include-nonlive`
+  shows the non-live files (`--include-history` still works).
+- **The census lists the files relative to the folder it scanned**, so
+  the same tree gives the same report wherever it is checked out.
 
 ### Bug fixes
 
@@ -1237,6 +1327,42 @@ unchanged.
   are removed from that model's backlog in the configuration file, line by
   line, so every other line of the file stays byte-identical, and the run
   says how many entries it pruned. `--no-prune` keeps them.
+- **A star select is a star select.** `select distinct *` is not one, and
+  a `source()` or `ref()` outside the jinja braces does not count as a
+  relation the view reads. BUGFIX.
+- **A client the owner pattern does not match is held.** It was looked up
+  in a folder named after the whole client key, so the view was never
+  found and the reason was misleading; the client is now held with the
+  reason that its folder could not be derived. BUGFIX.
+- **The schema check never talks to a warehouse.** The live schema
+  lookup, the credential setup message, `--env-file` and `--key-file`
+  stay out: the tool reads a snapshot the user exported. BUGFIX.
+- **The read-only routing block names the issue to open.** It said which
+  private repository and which person owned the warehouse side; it now
+  says to open an issue with the warehouse owners, which is the part a
+  reader can act on. BUGFIX.
+- **The manifest names the tool that wrote it.** `generated_by` says
+  `tmdl-preflight manifest`; naming a script the tool does not ship is
+  meaningless to whoever reads the file. BUGFIX.
+- **The manifest is written with unix line endings.** The original wrote
+  in text mode, so a Windows run produced CRLF endings; the file is
+  written with LF everywhere, and the `--check` comparison normalises
+  line endings so a copy with CRLF endings is not stale. BUGFIX.
+- **The manifest command keeps the tool's usage-error exit code.** A
+  model that is neither a registry client id nor a model directory, and a
+  registry entry without a model path, exit 2 — the tool-wide usage-error
+  code — with the wording the contract uses. BUGFIX.
+- **The unregistered-model warning appears only when a targets file is in
+  use.** With no registry file there is nothing to be missing from, so
+  the warning is noise. BUGFIX.
+- **The manifest reads a pair list and a property line leniently.** A
+  rename or type pair may carry spaces around the braces, a column
+  property is read from any line that starts with two tabs, and a file
+  with a byte-order mark is read as UTF-8. BUGFIX.
+- **The `manifest` section of the configuration file is read again.** The
+  section was listed in the documentation, but the configuration
+  validator rejected it as an unknown key, so `sources`, `target` and
+  `domains` never reached the command. BUGFIX.
 - **A fact is matched only when the reference names it.** The reference
   counted a fact `Sales` as read whenever the text `Sales[` appeared, even
   inside `MySales[`. The tool requires a non-word character before the

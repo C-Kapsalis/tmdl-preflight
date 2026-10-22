@@ -23,7 +23,7 @@ H-manifest-warehouse-target, H-source-schema-reconcile):
     entry_for_model, load_targets
   tmdl_preflight.reconcile: classify_drift, suspicious_type_pair,
     load_ignore_columns
-Drift classes `missing_in_source` and `not_imported`; targets-file fields `project`,
+Drift classes `missing_in_bq` and `not_surfaced_in_pbi`; targets-file fields `project`,
 `billing_project`, `dataset` (entry key kept as `client_id`).
 """
 from __future__ import annotations
@@ -511,7 +511,7 @@ def test_universal_ads_ir_fact_resolves_ads_n():
 # ---------------------------------------------------------------------------
 
 def test_classify_drift_three_way_split_and_trash_suppression():
-    """missing_in_source is FAILING, not_imported is informational, ignored
+    """missing_in_bq is FAILING, not_surfaced_in_pbi is informational, ignored
     columns land in ignored_bookkeeping - and per-table exceptions re-admit a
     column."""
     bq_cols = [{"name": "date", "type": "DATE"},
@@ -524,27 +524,27 @@ def test_classify_drift_three_way_split_and_trash_suppression():
 
     drift, resolved = classify_drift(["date", "clicks", "ghost_col"], bq_cols,
                                      "Ads", trash, exceptions)
-    assert drift["missing_in_source"] == ["ghost_col"]
-    assert drift["not_imported"] == ["extra_metric"]
+    assert drift["missing_in_bq"] == ["ghost_col"]
+    assert drift["not_surfaced_in_pbi"] == ["extra_metric"]
     assert drift["ignored_bookkeeping"] == ["partition_date", "updated_at_db"]
     assert resolved == {"date": "DATE", "clicks": "INTEGER"}
 
     drift_s, _ = classify_drift(["date"], bq_cols, "Sitemap", trash, exceptions)
-    assert "updated_at_db" in drift_s["not_imported"]
+    assert "updated_at_db" in drift_s["not_surfaced_in_pbi"]
     assert drift_s.get("ignored_bookkeeping") == ["partition_date"]
 
 
 def test_classify_drift_struct_base_and_leaf_matching():
     bq_struct = [{"name": "comment", "type": "RECORD"}]
     drift, resolved = classify_drift(["comment.attachment"], bq_struct, "T")
-    assert not drift.get("missing_in_source") and resolved["comment.attachment"] == "RECORD"
+    assert not drift.get("missing_in_bq") and resolved["comment.attachment"] == "RECORD"
 
     bq_flat = [{"name": "attachment", "type": "STRING"}]
     drift, resolved = classify_drift(["comment.attachment"], bq_flat, "T")
-    assert not drift.get("missing_in_source") and resolved["comment.attachment"] == "STRING"
+    assert not drift.get("missing_in_bq") and resolved["comment.attachment"] == "STRING"
 
     drift, _ = classify_drift(["comment.attachment"], [{"name": "other", "type": "X"}], "T")
-    assert drift["missing_in_source"] == ["comment.attachment"]
+    assert drift["missing_in_bq"] == ["comment.attachment"]
 
 
 def test_programmatic_renames_downgrade_missing_to_needs_review(tmp_path):
@@ -570,7 +570,7 @@ def test_programmatic_renames_downgrade_missing_to_needs_review(tmp_path):
                               [{"name": "calendar_date", "type": "DATE"}],
                               "__Anyfirst Cohort Calendar",
                               programmatic_renames=True)
-    assert "missing_in_source" not in drift
+    assert "missing_in_bq" not in drift
     assert drift["needs_review"] == ["anyfirst_cohort_date"]
 
 
@@ -587,7 +587,7 @@ def test_type_mismatch_is_informational_with_m_confirmation_note(tmp_path):
         ["clicks", "flag"], bq_cols, "T",
         declared_types={"clicks": "int64", "flag": "string"},
         m_type_changed={"clicks"})
-    assert "missing_in_source" not in drift
+    assert "missing_in_bq" not in drift
     tm = drift["type_mismatch"]
     assert any(e.startswith("clicks:") and "M Changed Type confirmed" in e for e in tm)
     assert any(e.startswith("flag:") and "no M Changed Type found" in e for e in tm)

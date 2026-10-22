@@ -303,12 +303,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_sc.add_argument("--strict", action="store_true",
                       help="exit 1 on missing columns, needs-review, unreachable tables or a "
                            "coverage gap")
+    p_sc.add_argument("--project", help="the warehouse project to check against "
+                                        "(default: the manifest's own target)")
+    p_sc.add_argument("--dataset", help="the warehouse dataset to check against "
+                                        "(default: the manifest's own target)")
     p_sc.add_argument("--sql-dir", help="SQL project root (view-column exposure mode)")
-    p_sc.add_argument("--entries", help="with --sql-dir: JSON list of {client, table, view, "
-                                        "shared_view, columns}")
+    p_sc.add_argument("--entries", help="with --sql-dir: JSON file of {client, table, view, "
+                                        "columns} entries")
     p_sc.add_argument("--holdbacks", help="with --sql-dir: holdbacks file path")
     p_sc.add_argument("--write-holdbacks", action="store_true",
                       help="with --sql-dir: write the holdbacks file")
+    p_sc.add_argument("--clear-ready", action="store_true",
+                      help="with --sql-dir: remove the entries of the clients whose every entry "
+                           "is READY")
     p_sc.add_argument("--owner-folder-pattern",
                       help="with --sql-dir: regex whose first group turns an owner id into the "
                            "SQL folder segment that holds its views")
@@ -318,12 +325,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_refs2.add_argument("name", help="the object name, exact and case-sensitive")
     p_refs2.add_argument("paths", nargs="*", default=["."], help="folders to scan (default: .)")
     p_refs2.add_argument("--files", action="store_true", help="list the matching files")
-    p_refs2.add_argument("--include-history", action="store_true",
-                         help="with --files: list archived copies too")
+    p_refs2.add_argument("--include-nonlive", "--include-history", action="store_true",
+                         help="with --files: list the non-live files too")
     p_refs2.add_argument("--history", action="append", metavar="GLOB",
                          help="glob of archived paths (repeatable)")
     p_refs2.add_argument("--loose", action="store_true",
                          help="count NAME] and NAME\" (closing delimiter only; over-counts)")
+    p_refs2.add_argument("--targets", help="the target contract file: the live set is the "
+                                           "registered model paths")
 
     p_live = sub.add_parser("live", help="opt-in checks against the published dataset "
                                          "(Power BI REST; --replay answers from recordings)")
@@ -1024,17 +1033,28 @@ def _cmd_manifest(args) -> int:
             raise UsageError(f"configuration error: {exc}") from exc
         cfg_sections = cfg.sections
     opts = dict(cfg_sections.get("manifest") or {})
-    targets_path = args.targets or (opts.get("target") or {}).get("targets_file")
+    target_opts = dict(opts.get("target") or {})
+    targets_path = args.targets or target_opts.get("targets_file")
     targets = load_targets(Path(targets_path)) if targets_path else {}
+    targets_name = Path(targets_path).name if targets_path else "the targets file"
+    root = Path.cwd()
     model_arg = args.model
+    from_registry = False
     if not Path(model_arg).exists() and model_arg in targets:
+        from_registry = True
         rel = targets[model_arg].get("model_path")
         if not rel:
-            raise UsageError(f"targets entry {model_arg} declares no model path")
-        model_arg = str(Path(targets_path).parent / rel) if not Path(rel).exists() else rel
+            raise UsageError(f"registry entry '{model_arg}' declares no model_path")
+        candidate = Path(rel)
+        if not candidate.exists() and targets_path:
+            candidate = Path(targets_path).parent / rel
+        model_arg = str(candidate)
     model_dir = Path(model_arg)
     if not (model_dir / "definition").is_dir():
-        raise UsageError(f"{model_dir} has no definition/ folder; pass a *.SemanticModel folder")
+        if from_registry:
+            raise UsageError(f"model path '{model_arg}' has no definition/ directory under {root}")
+        raise UsageError(f"MODEL '{model_arg}' is neither a registry client_id nor a "
+                         f"<path>/definition model directory under {root}")
     rel = Path(model_arg).as_posix()
     entry = None
     if targets:
@@ -1042,42 +1062,47 @@ def _cmd_manifest(args) -> int:
                       (rel, f"{model_dir.parent.name}/{model_dir.name}")
                       if find_entry(targets, cand)), None)
         if entry is None:
-            print(f"tmdl-preflight: warning: {rel} is not registered in the targets file; the "
-                  f"warehouse target comes only from the model's own parameters.", file=sys.stderr)
+            print(f"WARNING: '{rel}' is not in {targets_name} — no client_id; warehouse "
+                  f"derived from the model's v-BQ_project only.", file=sys.stderr)
+    target_opts["targets_name"] = targets_name
+    opts["target"] = target_opts
     try:
         doc = build_manifest(model_dir, rel, entry, opts)
     except WarehouseTargetError as exc:
-        print(f"tmdl-preflight: {exc}", file=sys.stderr)
+        print(f"{exc}", file=sys.stderr)
         return 1
     text = render(doc)
     out = Path(args.out) if args.out else (
         model_dir / opts.get("output_dir_name", "generated")
         / f"{doc['model'].lower()}{opts.get('output_suffix', '-manifest.json')}")
-    regen = f"tmdl-preflight manifest {args.model}" + (f" --out {args.out}" if args.out else "")
+    regen = f"tmdl-preflight manifest {model_arg}" + (f" --out {args.out}" if args.out else "")
     if args.check:
         if not out.is_file():
-            print(f"MISSING: {out}; run {regen}", file=sys.stderr)
+            print(f"MISSING: {out} was never generated. Run: {regen}", file=sys.stderr)
             return 1
-        if out.read_bytes() != text.encode("utf-8"):
-            print(f"DRIFT: {out} is stale; run {regen}", file=sys.stderr)
+        existing = out.read_bytes().decode("utf-8", "replace").replace("\r\n", "\n")
+        if existing != text:
+            print(f"DRIFT: {out} is stale. Run: {regen}", file=sys.stderr)
             return 1
         print(f"OK: {out} is up to date.")
         return 0
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(text.encode("utf-8"))
-    block = doc.get((opts.get("target") or {}).get("block_key", "warehouse")) or {}
-    print(f"wrote {out}")
-    print(f"target: {block.get('project')}.{block.get('dataset')} ({block.get('warehouse')})")
-    print(f"tables: {doc['counts']['tables']}, relationships: {doc['counts']['relationships']}")
-    print("by classification: " + ", ".join(f"{k} {v}" for k, v in
-                                           doc["counts"]["by_classification"].items()))
-    print("domains: " + (", ".join(doc["domains"]) or "-"))
+    block = doc.get(target_opts.get("block_key", "bigquery")) or {}
+    counts = doc["counts"]
+    print(f"Wrote {out}")
+    print(f"  model: {doc['model']} ({rel}) -> {block.get('project')}.{block.get('dataset')} "
+          f"[{block.get('warehouse')}]")
+    print(f"  {counts['tables']} tables, {counts['relationships']} relationships")
+    print(f"  by classification: {counts['by_classification']}")
+    print(f"  domains: {', '.join(doc['domains'])}")
     return 0
 
 
 def _cmd_schema_check(args) -> int:
     if args.sql_dir:
-        from .sqlviews import holdbacks_yaml, judge, load_entries, previous_since
+        from .sqlviews import (clear_ready, git_head, holdbacks_yaml, judge, load_entries,
+                               load_registry, previous_since)
 
         root = Path(args.sql_dir)
         if not root.is_dir():
@@ -1086,19 +1111,42 @@ def _cmd_schema_check(args) -> int:
             raise UsageError("--sql-dir needs --entries FILE")
         try:
             entries = load_entries(Path(args.entries))
-        except (OSError, ValueError) as exc:
+            registry = load_registry(Path(args.entries))
+        except ValueError as exc:
             raise UsageError(f"cannot read the entries file: {exc}") from exc
-        verdicts = sorted((judge(e, root, args.owner_folder_pattern) for e in entries),
-                          key=lambda v: (v.owner, v.table))
+        hb = Path(args.holdbacks) if args.holdbacks else (
+            Path(args.entries).parent / "deploy_holdbacks.yml")
+        if not entries:
+            print("outstanding-enrichment registry is empty — nothing to hold.")
+            if args.write_holdbacks:
+                hb.write_text(holdbacks_yaml([], previous_since(hb)), encoding="utf-8")
+                print(f"  holdbacks written: {hb} (0 client(s)) — commit it with the registry")
+            return 0
+        print(f"SQL state: {root} @ {git_head(root)}")
+        verdicts = [judge(e, root, args.owner_folder_pattern) for e in entries]
         for v in verdicts:
-            print(f"{v.owner}  {v.table}  {v.view}  {'READY' if v.ready else 'HELD'}  {v.reason}")
-        held = sum(1 for v in verdicts if not v.ready)
-        print(f"{len(verdicts) - held} ready, {held} held")
+            tag = "READY" if v.ready else "HELD "
+            print(f"{'✓' if v.ready else '✗'} {tag} {v.owner} · {v.table} · {v.view}")
+            print(f"         {v.reason}")
+        held = {v.owner for v in verdicts if not v.ready}
+        ready = {v.owner for v in verdicts if v.ready} - held
+        print()
+        print(f"READY to /deploy: {sorted(ready) or '—'}")
+        print(f"HELD (view enrichment pending): {sorted(held) or '—'}")
+        if args.clear_ready:
+            removed = clear_ready(Path(args.entries), registry, ready)
+            if removed:
+                print(f"\n--clear-ready: removed {removed} READY entr(ies) from {args.entries}")
+                print("  ⚠ REMEMBER TO COMMIT the updated registry (it is a committed receipt).")
+            else:
+                print("\n--clear-ready: nothing to clear (no fully-READY client).")
         if args.write_holdbacks:
-            hb = Path(args.holdbacks) if args.holdbacks else Path(args.entries).parent / "deploy_holdbacks.yml"
-            hb.write_text(holdbacks_yaml(verdicts, entries, previous_since(hb)), encoding="utf-8")
+            hb.write_text(holdbacks_yaml(entries, previous_since(hb)), encoding="utf-8")
+            clients = {str(e.get("client", "")) for e in entries}
+            print(f"  holdbacks written: {hb} ({len(clients)} client(s)) — commit it with the "
+                  f"registry")
         return 3 if held else 0
-    from .reconcile import failing, load_ignore_columns, reconcile
+    from .reconcile import coverage_gap, failing, load_ignore_columns, reconcile
 
     if not args.manifest or not args.schema:
         raise UsageError("schema-check needs --manifest and --schema (or --sql-dir and --entries)")
@@ -1113,28 +1161,64 @@ def _cmd_schema_check(args) -> int:
                 f"the {label} is a {type(doc).__name__}, not an object; it "
                 f"cannot be read")
     ignore, exceptions = load_ignore_columns(Path(args.ignore_columns) if args.ignore_columns else None)
-    doc = reconcile(manifest, snapshot, ignore, exceptions, Path(args.schema).name)
+    doc = reconcile(manifest, snapshot, ignore, exceptions, Path(args.schema).name,
+                    args.project, args.dataset)
     mpath = Path(args.manifest)
     if args.out:
         out = Path(args.out)
-    elif mpath.name.endswith(".schema.json"):
+    elif mpath.name.endswith(".bq.json"):
         out = mpath
     else:
-        out = mpath.with_name(mpath.stem + ".schema.json")
-    out.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    c = doc["schema_check"]["counts"]
-    print(f"wrote {out}: checked {c['checked']}, failing {c['failing']}, needs review "
-          f"{c['needs_review']}, unreachable {c['unreachable']}, informational "
-          f"{c['informational']}, type mismatch {c['type_mismatch']}"
-          + (", coverage gap" if doc["schema_check"]["coverage_gap"] else ""))
+        out = mpath.with_name(mpath.stem + ".bq.json")
+    out.write_bytes((json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+    block = doc["bq_schema_check"]
+    project, dataset = block["project"], block["dataset"]
+    print(f"Auth: {block['auth']} [{block['warehouse']} warehouse]")
+    print(f"Checked {block['tables_checked']} tables against {project}.{dataset} -> {out}")
+    print(f"  FAILING       (PBI column missing in BigQuery): {block['tables_failing']} table(s)")
+    print(f"  needs review  (programmatic renames — adjudicate via the M, e.g. /model-bq-drift): "
+          f"{block['tables_needs_review']} table(s)")
+    print(f"  informational (BQ column not imported in PBI):  {block['tables_informational']} table(s)")
+    print(f"  type mismatch (suspicious PBI<->BQ type pairs, informational -- each entry notes "
+          f"whether an M Changed Type confirms it): {block['tables_type_mismatch']} table(s)")
+    if block["ignored_bookkeeping_columns"]:
+        print("  ignored bookkeeping columns (TRASH_COLUMNS):    "
+              + ", ".join(block["ignored_bookkeeping_columns"]))
+    if block["tables_unreachable"]:
+        print(f"  {block['tables_unreachable']} table(s) unreachable — check SA access to "
+              f"{project}.{dataset} or pass an accessible --project/--dataset.", file=sys.stderr)
+    if block["unresolved_sources"]:
+        print("  UNRESOLVED partition sources (extractor gap, fails --strict): "
+              + ", ".join(block["unresolved_sources"]), file=sys.stderr)
+    if not block["tables_checked"]:
+        if coverage_gap(doc):
+            print("  COVERAGE: warehouse-backed tables exist but none was checked — refusing to "
+                  "call that a pass.", file=sys.stderr)
+        else:
+            print("  note: this model reads no BigQuery — nothing to check (pass).")
+    if block["skipped_no_source"]:
+        print("  skipped (no BQ source — DAX/static tables): "
+              + ", ".join(block["skipped_no_source"]))
+    if (block["tables_failing"] or block["tables_needs_review"] or block["tables_unreachable"]
+            or block["unresolved_sources"]):
+        print()
+        print("  READ-ONLY ROUTING: this sweep never changes BigQuery objects.")
+        print("  Inspect the complete M query before classifying any apparent missing column:")
+        print("    - deliberate PBI/model change -> open a PBI issue and use the dependency graph "
+              "for cleanup")
+        print("    - unexpected production table/view regression -> open an issue with the "
+              "warehouse owners")
     return 1 if args.strict and failing(doc) else 0
 
 
 def _cmd_refs(args) -> int:
-    from .refs import census, render
+    from .manifest import load_targets
+    from .refs import census, live_roots, render
 
-    counts = census(args.name, [Path(p) for p in args.paths], args.history, args.loose)
-    print(render(args.name, counts, args.loose, args.files, args.include_history))
+    targets = load_targets(Path(args.targets)) if args.targets else {}
+    live = live_roots(targets) if targets else None
+    counts = census(args.name, [Path(p) for p in args.paths], args.history, args.loose, live)
+    print(render(args.name, counts, args.loose, args.files, args.include_nonlive))
     return 0
 
 

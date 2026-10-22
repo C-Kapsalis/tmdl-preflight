@@ -20,8 +20,8 @@ def test_manifest_writes_then_checks_then_detects_drift(stand_in):
     doc = json.loads(_manifest(model).read_text(encoding="utf-8"))
     ads = next(t for t in doc["tables"] if t["name"] == "Ads")
     assert ads["classification"] == "fact" and ads["bq_source"]["table"] == "ads_n"
-    assert ads["fqtn_default"] == "example-project-2.universal_db.ads_n"
-    assert list(doc)[:4] == ["model", "source_model_path", "generated_by", "warehouse"]
+    assert ads["bq_source"]["fqtn_default"] == "example-project-2.universal_db.ads_n"
+    assert list(doc)[:4] == ["model", "source_model_path", "generated_by", "bigquery"]
     first = _manifest(model).read_bytes()
     assert run_cli("manifest", model, "--no-config")[0] == 0
     assert _manifest(model).read_bytes() == first          # byte-stable
@@ -49,7 +49,10 @@ def test_manifest_warns_about_an_unregistered_model(stand_in, tmp_path):
     targets = tmp_path / "targets.json"
     targets.write_text(json.dumps({"other": {"model_path": "x/Y.SemanticModel"}}), encoding="utf-8")
     code, _o, err = run_cli("manifest", fleet / MODEL, "--targets", targets, "--no-config")
-    assert code == 0 and "not registered" in err
+    assert code == 0
+    assert err.startswith("WARNING: ")
+    assert "is not in targets.json — no client_id" in err
+    assert "warehouse derived from the model's v-BQ_project only." in err
 
 
 def test_manifest_rejects_a_folder_without_definition(tmp_path):
@@ -67,16 +70,16 @@ def test_schema_check_against_a_snapshot(stand_in, tmp_path):
         if src:
             snapshot[src] = [{"name": c["bqColumn"], "type": "STRING"}
                              for c in t.get("columns", []) if c.get("bqColumn")]
-            snapshot[src].append({"name": "extra_col", "type": "STRING"})
+            snapshot[src].append({"name": "Extra Col", "type": "STRING"})
     schema = tmp_path / "schema.json"
     schema.write_text(json.dumps(snapshot), encoding="utf-8")
     code, out, _ = run_cli("schema-check", "--manifest", _manifest(model), "--schema", schema,
                            "--strict")
     assert code == 0, out
-    result = json.loads(_manifest(model).with_name("performance-manifest.schema.json")
+    result = json.loads(_manifest(model).with_name("performance-manifest.bq.json")
                         .read_text(encoding="utf-8"))
     ads = next(t for t in result["tables"] if t["name"] == "Ads")
-    assert ads["drift"]["not_imported"] == ["extra_col"]
+    assert ads["bq_source"]["drift"]["not_surfaced_in_pbi"] == ["Extra Col"]
     # drop a column from the warehouse: strict fails
     first = next(iter(snapshot))
     snapshot[first] = snapshot[first][1:]
@@ -110,10 +113,11 @@ def test_schema_check_sql_dir(tmp_path):
     code, out, _ = run_cli("schema-check", "--sql-dir", root, "--entries", entries,
                            "--holdbacks", hb, "--write-holdbacks")
     assert code == 3
-    lines = {ln.split()[1]: ln for ln in out.splitlines() if ln.startswith("spinout-05")}
-    assert "READY" in lines["Orders"] and "READY" in lines["Visits"]
-    assert "HELD" in lines["Refunds"] and "amt" in lines["Refunds"]
-    assert "not found" in lines["Gone"]
+    assert "✓ READY spinout-05 · Orders · orders_v" in out
+    assert "✓ READY spinout-05 · Visits · visits_v" in out
+    assert "✗ HELD  spinout-05 · Refunds · refunds_v" in out
+    assert "amt" in out
+    assert "view not in DBT" in out
     first = hb.read_bytes()
     run_cli("schema-check", "--sql-dir", root, "--entries", entries, "--holdbacks", hb,
             "--write-holdbacks")
@@ -135,9 +139,9 @@ def test_refs_counts_anchored_shapes_by_layer(tmp_path):
     (old / "x.tmdl").write_text("[Margin]", encoding="utf-8")
     code, out, _ = run_cli("refs", "Margin", tmp_path, "--files")
     assert code == 0
-    assert "live: model 1, report 2, total 3 in 2 file(s)" in out
-    assert "history: model 1" in out
-    assert "report reference(s)" in out
-    assert "history file(s) hidden" in out
+    assert "  LIVE      model     1   report     2   total     3   files 2" in out
+    assert "  non-live  model     1   report     0   total     1   files 1" in out
+    assert "report bindings no model-side test checks" in out
+    assert "non-live file(s) hidden" in out
     code, out, _ = run_cli("refs", "Nothing", tmp_path)
-    assert code == 0 and "exact spelling" in out
+    assert code == 0 and "no references found" in out
