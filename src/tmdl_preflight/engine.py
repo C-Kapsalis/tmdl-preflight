@@ -200,7 +200,11 @@ def fix(ctx: Context, ruleset: RuleSet, explicit: Optional[set[str]] = None) -> 
             continue
         if not rule.safe and not ({rule.id.lower(), rule.name.lower()} & chosen) \
                 and not rule.unsafe_fix_enabled():
-            report.skipped_fixers.append(rule.id)
+            # name the skipped fixer only when this run reported findings it
+            # repairs; a fixer that runs whenever it is selected (R007) has
+            # nothing to skip on a model without them
+            if dirty_rule_ids & rule.repaired_rule_ids():
+                report.skipped_fixers.append(rule.id)
             continue
         applied = rule.fix(ctx)
         if applied:

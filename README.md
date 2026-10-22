@@ -188,7 +188,7 @@ commit.
 | F013 | a measure parked on a field-parameter table | error | no |
 | F014 | a selector SWITCH branch that calls a measure that no longer exists | error | yes |
 | F015 | an axis table that is not an import-mode `("label", NAMEOF(...))` field parameter (opt-in) | info | no |
-| F016 | a field-parameter row that carries `//` (the repair is opt-in) | info | yes |
+| F016 | a field-parameter row that carries `//` | info | yes (unsafe: only when selected; deletes the rows) |
 | F017 | a fenced field-parameter source that drifted from its canonical form | info | yes |
 | A001 | the category-mapping table or one of its key columns is missing (opt-in) | warning | no |
 | A002 | inventory of axis group ids and mapping-table relationships (opt-in) | info | no |

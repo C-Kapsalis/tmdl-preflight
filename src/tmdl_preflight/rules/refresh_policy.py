@@ -166,6 +166,10 @@ class RefreshPolicyRepairRule(Rule):
         "refresh is then required). Other problems need a human."
     )
 
+    def repaired_rule_ids(self) -> set[str]:
+        """The fixer also adds the policies P002 reports missing."""
+        return {self.id, RefreshPolicyCoverageRule.id}
+
     def pending_repairs(self, ctx: Context) -> bool:
         if _fix_only(ctx) not in (None, "missing"):
             return False

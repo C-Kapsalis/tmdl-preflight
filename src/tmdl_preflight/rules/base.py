@@ -277,6 +277,11 @@ class Rule:
         nothing (a fixer that also repairs another rule's findings)."""
         return False
 
+    def repaired_rule_ids(self) -> set[str]:
+        """The rules whose findings this rule's fixer repairs. A blanket fix
+        that skips an unsafe fixer names it only when one of them reported."""
+        return {self.id}
+
     def pending_fix_objects(self, ctx: Context, violations: list[Violation]) -> set[str]:
         """The objects this rule's fixer would act on.
 
